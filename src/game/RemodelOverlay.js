@@ -12,6 +12,7 @@ const CATEGORY_COLORS = {
   service: 0x78e0c1,
   created: 0x78e0c1,
   hitbox: 0xff5f7d,
+  building: 0x9fb9c8,
   default: 0x9ed8ff,
 };
 

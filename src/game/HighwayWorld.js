@@ -12,6 +12,7 @@ const REMODEL_CREATED_GROUP = "RemodelCreatedPieces";
 const REMODEL_HITBOX_GROUP = "RemodelHitboxTemplates";
 const REMODEL_ROOT_NAMES = new Set([
   "StaticHighwayLoop",
+  "FixedRoadsideCityscape",
   "SpawnServiceLot",
   "GarageDoor",
   REMODEL_CREATED_GROUP,
@@ -123,16 +124,17 @@ const CITY_FACADE_PALETTE = [
   0x8d8172,
 ];
 const CITY_BLOCK_ROWS = [
-  { spacing: 40, lateral: 10, lateralJitter: 3, forwardJitter: 12, height: [22, 58], width: [13, 27], depth: [16, 30], skip: 0.0, serviceClearance: 78 },
-  { spacing: 56, lateral: 28, lateralJitter: 6, forwardJitter: 17, height: [30, 82], width: [16, 34], depth: [18, 34], skip: 0.0, serviceClearance: 112 },
-  { spacing: 76, lateral: 52, lateralJitter: 10, forwardJitter: 22, height: [42, 108], width: [18, 42], depth: [20, 40], skip: 0.0, serviceClearance: 152 },
-  { spacing: 102, lateral: 82, lateralJitter: 15, forwardJitter: 28, height: [54, 138], width: [22, 52], depth: [24, 48], skip: 0.005, serviceClearance: 202 },
-  { spacing: 132, lateral: 118, lateralJitter: 22, forwardJitter: 36, height: [64, 164], width: [26, 62], depth: [28, 56], skip: 0.01, serviceClearance: 258 },
-  { spacing: 166, lateral: 160, lateralJitter: 28, forwardJitter: 43, height: [78, 184], width: [28, 70], depth: [30, 62], skip: 0.015, serviceClearance: 318 },
-  { spacing: 208, lateral: 205, lateralJitter: 34, forwardJitter: 50, height: [88, 210], width: [32, 78], depth: [34, 68], skip: 0.02, serviceClearance: 380 },
+  { spacing: 36, lateral: 8, lateralJitter: 3, forwardJitter: 13, height: [26, 70], width: [14, 30], depth: [18, 34], skip: 0.0, serviceClearance: 82 },
+  { spacing: 50, lateral: 26, lateralJitter: 6, forwardJitter: 18, height: [34, 92], width: [17, 38], depth: [20, 40], skip: 0.0, serviceClearance: 120 },
+  { spacing: 68, lateral: 50, lateralJitter: 10, forwardJitter: 24, height: [46, 122], width: [20, 48], depth: [24, 48], skip: 0.0, serviceClearance: 164 },
+  { spacing: 92, lateral: 82, lateralJitter: 15, forwardJitter: 31, height: [58, 152], width: [24, 58], depth: [28, 56], skip: 0.003, serviceClearance: 216 },
+  { spacing: 122, lateral: 122, lateralJitter: 22, forwardJitter: 40, height: [70, 182], width: [28, 68], depth: [32, 66], skip: 0.006, serviceClearance: 276 },
+  { spacing: 158, lateral: 170, lateralJitter: 30, forwardJitter: 49, height: [84, 206], width: [30, 76], depth: [36, 74], skip: 0.01, serviceClearance: 340 },
+  { spacing: 204, lateral: 228, lateralJitter: 40, forwardJitter: 58, height: [98, 230], width: [34, 86], depth: [40, 84], skip: 0.014, serviceClearance: 420 },
+  { spacing: 262, lateral: 300, lateralJitter: 52, forwardJitter: 70, height: [118, 260], width: [40, 100], depth: [46, 96], skip: 0.018, serviceClearance: 520 },
 ];
 const CITY_MANUAL_CLEARANCE = 46;
-const CITY_DISTRICT_HALF_WIDTH = 360;
+const CITY_DISTRICT_HALF_WIDTH = 520;
 const CITY_SIDEWALK_INTERVAL = 24;
 const CITY_STREETLIGHT_INTERVAL = 112;
 
@@ -834,7 +836,7 @@ export class HighwayWorld {
     return mesh;
   }
 
-  createScaledInstancedBoxes(instances, material, castShadow = false) {
+  createScaledInstancedBoxes(instances, material, castShadow = false, remodelIgnore = true) {
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const mesh = new THREE.InstancedMesh(geometry, material, Math.max(1, instances.length));
     const dummy = new THREE.Object3D();
@@ -852,7 +854,8 @@ export class HighwayWorld {
     mesh.count = instances.length;
     mesh.castShadow = castShadow;
     mesh.receiveShadow = true;
-    mesh.userData.remodelIgnore = true;
+    mesh.userData.remodelIgnore = remodelIgnore;
+    mesh.userData.remodelInstances = instances.map((instance) => instance.remodel ?? null);
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
     return mesh;
@@ -938,7 +941,6 @@ export class HighwayWorld {
   createProceduralRoadsideDistrict(parent) {
     const district = new THREE.Group();
     district.name = "FixedDeterministicRoadsideDistrict";
-    district.userData.remodelIgnore = true;
 
     const bodyBatches = CITY_FACADE_PALETTE.map(() => []);
     const roofs = [];
@@ -976,13 +978,13 @@ export class HighwayWorld {
     }
 
     for (let i = 0; i < bodyBatches.length; i += 1) {
-      district.add(this.createScaledInstancedBoxes(bodyBatches[i], this.makeFacadeMaterial(CITY_FACADE_PALETTE[i], 0.82, 0.04)));
+      district.add(this.createScaledInstancedBoxes(bodyBatches[i], this.makeFacadeMaterial(CITY_FACADE_PALETTE[i], 0.82, 0.04), false, false));
     }
-    district.add(this.createScaledInstancedBoxes(roofs, this.materials.buildingTrim));
-    district.add(this.createScaledInstancedBoxes(glass, this.materials.buildingWindow));
-    district.add(this.createScaledInstancedBoxes(warmWindows, this.materials.buildingWindowWarm));
-    district.add(this.createScaledInstancedBoxes(trim, this.materials.buildingGlassDark));
-    district.add(this.createScaledInstancedBoxes(signs, this.materials.tunnelSign));
+    district.add(this.createScaledInstancedBoxes(roofs, this.materials.buildingTrim, false, false));
+    district.add(this.createScaledInstancedBoxes(glass, this.materials.buildingWindow, false, false));
+    district.add(this.createScaledInstancedBoxes(warmWindows, this.materials.buildingWindowWarm, false, false));
+    district.add(this.createScaledInstancedBoxes(trim, this.materials.buildingGlassDark, false, false));
+    district.add(this.createScaledInstancedBoxes(signs, this.materials.tunnelSign, false, false));
     parent.add(district);
   }
 
@@ -1009,15 +1011,19 @@ export class HighwayWorld {
       return;
     }
 
+    const buildingId = `building:city:${rowIndex}:${side > 0 ? "r" : "l"}:${Math.round(s)}`;
+    const buildingLabel = `Building ${rowIndex + 1}.${Math.round(s)}`;
     bodyBatches[paletteIndex].push({
       position: new THREE.Vector3(base.x, bodyHeight * 0.5, base.z),
       yaw,
       scale: { x: width, y: bodyHeight, z: depth },
+      remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "body", true),
     });
     roofs.push({
       position: new THREE.Vector3(base.x, bodyHeight + 0.18, base.z),
       yaw,
       scale: { x: width * 1.04, y: 0.36, z: depth * 1.04 },
+      remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "roof"),
     });
 
     const facadeX = -side * (width * 0.5 + 0.07);
@@ -1034,6 +1040,8 @@ export class HighwayWorld {
       rowIndex,
       seed,
       facadeX,
+      buildingId,
+      buildingLabel,
     });
 
     if (height > 44 && cityNoise(seed + 18.2) > 0.5) {
@@ -1042,6 +1050,7 @@ export class HighwayWorld {
         position: roofDetail,
         yaw,
         scale: { x: width * cityRange(seed + 20.1, 0.16, 0.34), y: cityRange(seed + 21.2, 1.1, 2.4), z: depth * cityRange(seed + 22.3, 0.12, 0.28) },
+        remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "trim"),
       });
     }
 
@@ -1049,6 +1058,7 @@ export class HighwayWorld {
       position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.01, 0, bodyHeight * 0.18),
       yaw,
       scale: { x: 0.1, y: 0.18, z: depth * 0.84 },
+      remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "trim"),
     });
 
     if (rowIndex === 0 && cityNoise(seed + 23.6) > 0.52) {
@@ -1056,8 +1066,20 @@ export class HighwayWorld {
         position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.05, cityRange(seed + 24.4, -depth * 0.28, depth * 0.28), 3.1),
         yaw,
         scale: { x: 0.16, y: cityRange(seed + 25.1, 0.42, 0.9), z: cityRange(seed + 26.2, 1.6, 4.8) },
+        remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "sign"),
       });
     }
+  }
+
+  makeBuildingRemodelMeta(groupId, label, part, selectable = false) {
+    return {
+      remodelCategory: "building",
+      remodelGroupId: groupId,
+      remodelFixedId: selectable ? groupId : `${groupId}:${part}`,
+      remodelLabel: label,
+      remodelPart: part,
+      remodelSelectable: selectable,
+    };
   }
 
   addProceduralFacadeDetails({
@@ -1072,6 +1094,8 @@ export class HighwayWorld {
     rowIndex,
     seed,
     facadeX,
+    buildingId,
+    buildingLabel,
   }) {
     const groundMargin = cityRange(seed + 11.1, 3.1, 5.4);
     const roofMargin = cityRange(seed + 12.7, 2.0, 4.8);
@@ -1102,6 +1126,7 @@ export class HighwayWorld {
             position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.015, z, y),
             yaw,
             scale: { x: 0.11, y: bandHeight, z: segmentDepth },
+            remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window"),
           });
         }
       }
@@ -1113,6 +1138,7 @@ export class HighwayWorld {
           position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.025, z, groundMargin + usableHeight * 0.5),
           yaw,
           scale: { x: 0.1, y: usableHeight * 0.96, z: 0.08 },
+          remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "trim"),
         });
       }
       return;
@@ -1133,6 +1159,7 @@ export class HighwayWorld {
           position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.015, z, y),
           yaw,
           scale: { x: 0.11, y: windowHeight, z: windowDepth },
+          remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window"),
         });
       }
     }
@@ -1226,7 +1253,31 @@ export class HighwayWorld {
     group.rotation.y = frame.yaw + (placement.yaw ?? 0);
 
     this.buildBuildingType(group, type, scale, placement.side);
+    group.traverse((object) => {
+      if (object.isMesh) {
+        object.userData.remodelIgnore = true;
+      }
+    });
     parent.add(group);
+    parent.add(this.createBuildingRemodelProxy(group, type, placement));
+  }
+
+  createBuildingRemodelProxy(group, type, placement) {
+    group.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(group);
+    const size = bounds.getSize(new THREE.Vector3());
+    const center = bounds.getCenter(new THREE.Vector3());
+    const proxy = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.materials.remodelCreated);
+    proxy.name = `RemodelProxy_${group.name}`;
+    proxy.position.copy(center);
+    proxy.rotation.copy(group.rotation);
+    proxy.scale.set(Math.max(size.x, 1), Math.max(size.y, 1), Math.max(size.z, 1));
+    proxy.visible = false;
+    proxy.userData.remodelFixedId = `building:manual:${placement.side > 0 ? "r" : "l"}:${Math.round(placement.s)}:${type.id}`;
+    proxy.userData.remodelLabel = `Building ${type.id} ${Math.round(placement.s)}`;
+    proxy.userData.remodelCategory = "building";
+    proxy.userData.remodelControlledObject = group;
+    return proxy;
   }
 
   buildBuildingType(group, type, scale, side) {
@@ -1561,6 +1612,7 @@ export class HighwayWorld {
     this.remodelTargets = [];
     this.remodelTargetMap.clear();
 
+    const linkedInstanceGroups = this.collectRemodelInstanceGroups();
     let meshIndex = 0;
     let instancedIndex = 0;
 
@@ -1578,8 +1630,12 @@ export class HighwayWorld {
         const instancedId = instancedIndex;
         instancedIndex += 1;
         for (let instanceId = 0; instanceId < object.count; instanceId += 1) {
-          const category = this.getRemodelCategory(object, rootName);
-          const id = `inst:${instancedId}:${instanceId}`;
+          const meta = object.userData?.remodelInstances?.[instanceId] ?? null;
+          if (meta?.remodelSelectable === false) {
+            continue;
+          }
+          const category = this.getRemodelCategory(object, rootName, meta);
+          const id = meta?.remodelFixedId ?? `inst:${instancedId}:${instanceId}`;
           const target = {
             id,
             type: "instance",
@@ -1588,8 +1644,9 @@ export class HighwayWorld {
             baseDimensions: this.cloneDimensions(baseDimensions),
             baseState: this.readInstanceRemodelState(object, instanceId, baseDimensions),
             category,
+            linkedInstances: meta?.remodelGroupId ? (linkedInstanceGroups.get(meta.remodelGroupId) ?? []) : null,
             group: rootName,
-            label: `${this.getRemodelCategoryLabel(category)} ${instanceId + 1}`,
+            label: meta?.remodelLabel ?? `${this.getRemodelCategoryLabel(category)} ${instanceId + 1}`,
           };
           if (this.remodelDeletedIds.has(id)) {
             this.hideRemodelTarget(target);
@@ -1627,6 +1684,29 @@ export class HighwayWorld {
         this.remodelTargetMap.set(target.id, target);
       }
     });
+  }
+
+  collectRemodelInstanceGroups() {
+    const groups = new Map();
+    this.scene.traverse((object) => {
+      if (!object.isInstancedMesh || object.userData?.remodelIgnore) {
+        return;
+      }
+      const instances = object.userData?.remodelInstances;
+      if (!Array.isArray(instances)) {
+        return;
+      }
+      for (let instanceId = 0; instanceId < Math.min(object.count, instances.length); instanceId += 1) {
+        const groupId = instances[instanceId]?.remodelGroupId;
+        if (!groupId) {
+          continue;
+        }
+        const parts = groups.get(groupId) ?? [];
+        parts.push({ object, instanceId });
+        groups.set(groupId, parts);
+      }
+    });
+    return groups;
   }
 
   getRemodelTargets() {
@@ -1795,18 +1875,32 @@ export class HighwayWorld {
 
     if (target.type === "mesh") {
       target.object.visible = false;
+      if (target.object.userData?.remodelControlledObject) {
+        target.object.userData.remodelControlledObject.visible = false;
+      }
       return;
     }
 
-    const state = this.getRemodelTargetState(target) ?? target.baseState;
-    this.writeInstanceRemodelState(target, {
-      ...state,
-      dimensions: {
-        x: MIN_REMODEL_DIMENSION,
-        y: MIN_REMODEL_DIMENSION,
-        z: MIN_REMODEL_DIMENSION,
-      },
-    });
+    const parts = target.linkedInstances?.length
+      ? target.linkedInstances
+      : [{ object: target.object, instanceId: target.instanceId }];
+    for (const part of parts) {
+      const baseDimensions = part.object === target.object && part.instanceId === target.instanceId
+        ? target.baseDimensions
+        : this.getBoxGeometryDimensions(part.object);
+      if (!baseDimensions) {
+        continue;
+      }
+      const state = this.readInstanceRemodelState(part.object, part.instanceId, baseDimensions);
+      this.writeSingleInstanceRemodelState(part.object, part.instanceId, baseDimensions, {
+        ...state,
+        dimensions: {
+          x: MIN_REMODEL_DIMENSION,
+          y: MIN_REMODEL_DIMENSION,
+          z: MIN_REMODEL_DIMENSION,
+        },
+      });
+    }
   }
 
   getCreatedRemodelPayload() {
@@ -1861,7 +1955,10 @@ export class HighwayWorld {
       : null;
   }
 
-  getRemodelCategory(object, rootName) {
+  getRemodelCategory(object, rootName, meta = null) {
+    if (meta?.remodelCategory) {
+      return meta.remodelCategory;
+    }
     if (object.userData?.remodelCategory === "hitbox" || rootName === REMODEL_HITBOX_GROUP) {
       return "hitbox";
     }
@@ -1882,6 +1979,9 @@ export class HighwayWorld {
     if (rootName === "SpawnServiceLot") {
       return "service";
     }
+    if (rootName === "FixedRoadsideCityscape" || object.userData?.remodelCategory === "building") {
+      return "building";
+    }
     return "default";
   }
 
@@ -1893,6 +1993,7 @@ export class HighwayWorld {
       service: "Service model",
       created: "Created box",
       hitbox: "Hitbox",
+      building: "Building",
       default: "Map model",
     }[category] ?? "Map model";
   }
@@ -1951,6 +2052,8 @@ export class HighwayWorld {
 
   writeMeshRemodelState(target, state) {
     const object = target.object;
+    const controlledObject = object.userData?.remodelControlledObject;
+    const previousPosition = object.position.clone();
     object.position.set(state.position.x, state.position.y, state.position.z);
     object.rotation.set(state.rotation.x, state.rotation.y, state.rotation.z);
     object.scale.set(
@@ -1964,23 +2067,96 @@ export class HighwayWorld {
       }
       object.material.color.set(state.color);
     }
+    if (controlledObject) {
+      controlledObject.position.add(object.position.clone().sub(previousPosition));
+      controlledObject.rotation.copy(object.rotation);
+      controlledObject.scale.copy(object.scale);
+      controlledObject.updateMatrixWorld(true);
+    }
     object.updateMatrixWorld(true);
   }
 
   writeInstanceRemodelState(target, state) {
+    const previous = target.linkedInstances?.length
+      ? this.readInstanceRemodelState(target.object, target.instanceId, target.baseDimensions)
+      : null;
+    this.writeSingleInstanceRemodelState(target.object, target.instanceId, target.baseDimensions, state);
+
+    if (!previous || !target.linkedInstances?.length) {
+      return;
+    }
+
+    const positionDelta = {
+      x: state.position.x - previous.position.x,
+      y: state.position.y - previous.position.y,
+      z: state.position.z - previous.position.z,
+    };
+    const rotationDelta = {
+      x: state.rotation.x - previous.rotation.x,
+      y: state.rotation.y - previous.rotation.y,
+      z: state.rotation.z - previous.rotation.z,
+    };
+    const scaleRatio = {
+      x: previous.dimensions.x > MIN_REMODEL_DIMENSION ? state.dimensions.x / previous.dimensions.x : 1,
+      y: previous.dimensions.y > MIN_REMODEL_DIMENSION ? state.dimensions.y / previous.dimensions.y : 1,
+      z: previous.dimensions.z > MIN_REMODEL_DIMENSION ? state.dimensions.z / previous.dimensions.z : 1,
+    };
+    const unchanged = [positionDelta.x, positionDelta.y, positionDelta.z, rotationDelta.x, rotationDelta.y, rotationDelta.z]
+      .every((value) => Math.abs(value) < 0.00001) &&
+      [scaleRatio.x, scaleRatio.y, scaleRatio.z].every((value) => Math.abs(value - 1) < 0.00001);
+    if (unchanged) {
+      return;
+    }
+
+    const yawSin = Math.sin(rotationDelta.y);
+    const yawCos = Math.cos(rotationDelta.y);
+    for (const part of target.linkedInstances) {
+      if (part.object === target.object && part.instanceId === target.instanceId) {
+        continue;
+      }
+      const baseDimensions = this.getBoxGeometryDimensions(part.object);
+      if (!baseDimensions) {
+        continue;
+      }
+      const partState = this.readInstanceRemodelState(part.object, part.instanceId, baseDimensions);
+      const offsetX = (partState.position.x - previous.position.x) * scaleRatio.x;
+      const offsetY = (partState.position.y - previous.position.y) * scaleRatio.y;
+      const offsetZ = (partState.position.z - previous.position.z) * scaleRatio.z;
+      this.writeSingleInstanceRemodelState(part.object, part.instanceId, baseDimensions, {
+        ...partState,
+        position: {
+          x: state.position.x + offsetX * yawCos + offsetZ * yawSin,
+          y: state.position.y + offsetY,
+          z: state.position.z - offsetX * yawSin + offsetZ * yawCos,
+        },
+        rotation: {
+          x: partState.rotation.x + rotationDelta.x,
+          y: partState.rotation.y + rotationDelta.y,
+          z: partState.rotation.z + rotationDelta.z,
+        },
+        dimensions: {
+          x: partState.dimensions.x * scaleRatio.x,
+          y: partState.dimensions.y * scaleRatio.y,
+          z: partState.dimensions.z * scaleRatio.z,
+        },
+      });
+    }
+  }
+
+  writeSingleInstanceRemodelState(object, instanceId, baseDimensions, state) {
     const position = new THREE.Vector3(state.position.x, state.position.y, state.position.z);
     const quaternion = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(state.rotation.x, state.rotation.y, state.rotation.z),
     );
     const scale = new THREE.Vector3(
-      state.dimensions.x / target.baseDimensions.x,
-      state.dimensions.y / target.baseDimensions.y,
-      state.dimensions.z / target.baseDimensions.z,
+      state.dimensions.x / baseDimensions.x,
+      state.dimensions.y / baseDimensions.y,
+      state.dimensions.z / baseDimensions.z,
     );
     const matrix = new THREE.Matrix4().compose(position, quaternion, scale);
-    target.object.setMatrixAt(target.instanceId, matrix);
-    target.object.instanceMatrix.needsUpdate = true;
-    target.object.computeBoundingSphere();
+    object.setMatrixAt(instanceId, matrix);
+    object.instanceMatrix.needsUpdate = true;
+    object.computeBoundingSphere();
   }
 
   sanitizeRemodelState(state, fallback) {
