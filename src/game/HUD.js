@@ -195,7 +195,7 @@ export class HUD {
       for (const preset of CAR_PRESETS) {
         const option = document.createElement("option");
         option.value = preset.id;
-        option.textContent = preset.label;
+        option.textContent = preset.inGamePlayer ? preset.label : `${preset.label} [NON USATA IN GAME]`;
         this.nodes.carPreset.appendChild(option);
       }
       this.nodes.carPreset.value = this.settings.carPreset;
@@ -483,7 +483,7 @@ export class HUD {
     }
 
     this.nodes.carShopList.innerHTML = "";
-    for (const preset of CAR_PRESETS) {
+    for (const preset of CAR_PRESETS.filter((car) => car.inGamePlayer)) {
       const button = document.createElement("button");
       button.className = "car-shop-button";
       button.dataset.carId = preset.id;
@@ -504,7 +504,7 @@ export class HUD {
       this.nodes.carShopList.appendChild(button);
     }
     if (this.nodes.marketCarCount) {
-      this.nodes.marketCarCount.textContent = `${CAR_PRESETS.length} risultati`;
+      this.nodes.marketCarCount.textContent = `${CAR_PRESETS.filter((car) => car.inGamePlayer).length} risultati`;
     }
   }
 
