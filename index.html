@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PolyHesi</title>
+  </head>
+  <body>
+    <div id="game-root"></div>
+
+    <main class="hud-shell" aria-label="PolyHesi game HUD">
+      <section class="hud-card hud-card--stack hud-card--speed" aria-live="polite">
+        <div class="brand-lockup">
+          <span class="brand-dot"></span>
+          <span>PolyHesi</span>
+        </div>
+        <div class="speed-readout">
+          <span id="speedValue">0</span>
+          <small>km/h</small>
+        </div>
+        <div class="meter-row">
+          <span>Run</span>
+          <strong id="scoreValue">0</strong>
+        </div>
+        <div class="meter-row meter-row--coins">
+          <span>Coins</span>
+          <strong id="coinValue">0</strong>
+        </div>
+      </section>
+
+      <section class="hud-card hud-card--stats">
+        <div class="stat-cell">
+          <span>Combo</span>
+          <strong id="comboValue">x1.0</strong>
+        </div>
+        <div class="stat-cell">
+          <span>Near miss</span>
+          <strong id="nearMissValue">0</strong>
+        </div>
+        <div class="stat-cell">
+          <span>Hits</span>
+          <strong id="hitValue">0/3</strong>
+        </div>
+      </section>
+
+      <section id="nearMissToast" class="near-miss-toast" aria-live="polite">
+        <span>Near miss</span>
+        <strong id="nearMissPoints">+0</strong>
+      </section>
+
+      <section id="interactionPrompt" class="interaction-prompt" aria-live="polite">
+        <kbd id="interactionKey">E</kbd>
+        <span id="interactionText">Interact</span>
+      </section>
+      <div id="remodelReticle" class="remodel-reticle" aria-hidden="true"></div>
+      <div id="remodelHoverLabel" class="remodel-hover-label" aria-hidden="true"></div>
+
+      <button id="restartButton" class="restart-button" type="button">Restart</button>
+
+      <aside class="dev-panel" aria-label="Development tuning panel">
+        <header>
+          <span>Dev Panel <kbd>O</kbd></span>
+          <strong id="fpsValue">60</strong>
+        </header>
+        <nav class="dev-tabs" aria-label="Dev panel tabs">
+          <button class="is-active" data-dev-tab="gameplay" type="button">Game</button>
+          <button data-dev-tab="physics" type="button">Guida</button>
+          <button data-dev-tab="debug" type="button">Debug</button>
+        </nav>
+
+        <div class="dev-page is-active" data-dev-page="gameplay">
+          <label class="dev-toggle">
+            <span>Traffic</span>
+            <output id="trafficEnabledOut">On</output>
+            <input id="trafficEnabled" type="checkbox" checked />
+          </label>
+          <label>
+            <span>Car</span>
+            <output id="carPresetOut">Street coupe</output>
+            <select id="carPreset"></select>
+          </label>
+          <label>
+            <span>Traffic density</span>
+            <output id="trafficDensityOut">150</output>
+            <input id="trafficDensity" type="range" min="90" max="620" step="1" />
+          </label>
+          <label>
+            <span>Traffic speed</span>
+            <output id="trafficSpeedKmhOut">125</output>
+            <input id="trafficSpeedKmh" type="range" min="70" max="180" step="1" />
+          </label>
+          <label>
+            <span>Camera FOV</span>
+            <output id="cameraFovOut">64</output>
+            <input id="cameraFov" type="range" min="48" max="82" step="1" />
+          </label>
+          <label class="dev-toggle">
+            <span>Day/night cycle</span>
+            <output id="dayNightCycleOut">On</output>
+            <input id="dayNightCycle" type="checkbox" checked />
+          </label>
+          <label>
+            <span>Time of day</span>
+            <output id="timeOfDayOut">18:15</output>
+            <input id="timeOfDay" type="range" min="0" max="24" step="0.05" />
+          </label>
+          <label>
+            <span>Cycle speed</span>
+            <output id="dayNightSpeedOut">18 min/s</output>
+            <input id="dayNightSpeed" type="range" min="0" max="120" step="1" />
+          </label>
+        </div>
+
+        <div class="dev-page" data-dev-page="physics">
+          <label>
+            <span>Car speed</span>
+            <output id="maxSpeedKmhOut">285</output>
+            <input id="maxSpeedKmh" type="range" min="170" max="460" step="1" />
+          </label>
+          <label>
+            <span>Handling</span>
+            <output id="handlingOut">0.85</output>
+            <input id="handling" type="range" min="0.55" max="1.8" step="0.01" />
+          </label>
+          <label>
+            <span>Power</span>
+            <output id="powerMultiplierOut">1.00x</output>
+            <input id="powerMultiplier" type="range" min="0.45" max="2.2" step="0.01" />
+          </label>
+          <label>
+            <span>Grip</span>
+            <output id="gripMultiplierOut">1.00x</output>
+            <input id="gripMultiplier" type="range" min="0.35" max="2.0" step="0.01" />
+          </label>
+          <label>
+            <span>Brakes</span>
+            <output id="brakePowerOut">1.00x</output>
+            <input id="brakePower" type="range" min="0.35" max="2.0" step="0.01" />
+          </label>
+          <label>
+            <span>Weight tune</span>
+            <output id="weightMultiplierOut">1.00x</output>
+            <input id="weightMultiplier" type="range" min="0.65" max="1.6" step="0.01" />
+          </label>
+        </div>
+
+        <div class="dev-page" data-dev-page="debug">
+          <label class="dev-toggle">
+            <span>No clip</span>
+            <output id="noClipOut">Off</output>
+            <input id="noClip" type="checkbox" />
+          </label>
+          <label id="remodelModeWrap" class="dev-toggle">
+            <span>Remodel</span>
+            <output id="remodelModeOut">Off</output>
+            <input id="remodelMode" type="checkbox" disabled />
+          </label>
+          <label class="dev-toggle">
+            <span>Snap to grid</span>
+            <output id="remodelSnapToGridOut">Off</output>
+            <input id="remodelSnapToGrid" type="checkbox" />
+          </label>
+          <label>
+            <span>Grid size</span>
+            <output id="remodelGridSizeOut">0.25</output>
+            <input id="remodelGridSize" type="number" min="0.05" max="10" step="0.05" />
+          </label>
+          <label>
+            <span>No clip speed</span>
+            <output id="noClipSpeedKmhOut">101</output>
+            <input id="noClipSpeedKmh" type="range" min="10" max="520" step="1" />
+          </label>
+          <label>
+            <span>Boost speed</span>
+            <output id="noClipBoostSpeedKmhOut">331</output>
+            <input id="noClipBoostSpeedKmh" type="range" min="30" max="1200" step="1" />
+          </label>
+          <div id="noClipReadout" class="no-clip-readout" aria-live="polite">
+            <span>Coordinates</span>
+            <output id="noClipCoords">X 0.00 / Y 0.00 / Z 0.00</output>
+            <small id="noClipAngles">Yaw 0.0 / Pitch 0.0 / Speed 0</small>
+          </div>
+          <label class="dev-toggle">
+            <span>Hitbox mode</span>
+            <output id="hitboxModeOut">Off</output>
+            <input id="hitboxMode" type="checkbox" />
+          </label>
+        </div>
+
+        <div class="dev-actions">
+          <button id="saveDevSettings" type="button">Save</button>
+          <button id="resetDevSettings" type="button">Reset</button>
+        </div>
+      </aside>
+
+      <section id="mapOverlay" class="map-overlay" aria-label="Map">
+        <canvas id="miniMapCanvas" width="320" height="320"></canvas>
+      </section>
+
+      <section id="remodelToolbox" class="remodel-toolbox" aria-label="Remodel tools">
+        <button id="remodelCreateButton" type="button">Create box</button>
+        <button id="remodelDeleteButton" type="button" disabled>Delete</button>
+        <button id="remodelUndoButton" type="button">Undo</button>
+        <button id="remodelCopyButton" type="button">Copy</button>
+        <button id="remodelPasteButton" type="button">Paste</button>
+        <button id="remodelStripeButton" type="button">Stripe</button>
+        <button id="remodelGuardrailButton" type="button">Guardrail</button>
+      </section>
+
+      <section id="remodelPanel" class="remodel-panel" aria-label="Remodel editor">
+        <header>
+          <span id="remodelTitle">Remodel</span>
+          <button id="remodelCloseButton" type="button">Close</button>
+        </header>
+        <small id="remodelTargetMeta">No model selected</small>
+        <div class="remodel-group">
+          <span>Position</span>
+          <div class="remodel-axis-grid">
+            <label><span>X</span><input id="remodelPosX" type="number" step="0.25" /></label>
+            <label><span>Y</span><input id="remodelPosY" type="number" step="0.25" /></label>
+            <label><span>Z</span><input id="remodelPosZ" type="number" step="0.25" /></label>
+          </div>
+        </div>
+        <div class="remodel-group">
+          <span>Size</span>
+          <div class="remodel-axis-grid">
+            <label><span>X</span><input id="remodelSizeX" type="number" min="0.01" step="0.25" /></label>
+            <label><span>Y</span><input id="remodelSizeY" type="number" min="0.01" step="0.25" /></label>
+            <label><span>Z</span><input id="remodelSizeZ" type="number" min="0.01" step="0.25" /></label>
+          </div>
+        </div>
+        <div class="remodel-group">
+          <span>Rotation</span>
+          <div class="remodel-axis-grid">
+            <label><span>X</span><input id="remodelRotX" type="number" step="1" /></label>
+            <label><span>Y</span><input id="remodelRotY" type="number" step="1" /></label>
+            <label><span>Z</span><input id="remodelRotZ" type="number" step="1" /></label>
+          </div>
+        </div>
+        <div class="remodel-group">
+          <span>Color</span>
+          <input id="remodelColor" class="remodel-color-input" type="color" value="#78e0c1" />
+        </div>
+        <div class="remodel-actions">
+          <button id="remodelSaveButton" type="button">Save map</button>
+          <button id="remodelResetButton" type="button">Reset model</button>
+        </div>
+        <output id="remodelStatus">Live edit</output>
+      </section>
+
+      <section id="marketOverlay" class="market-overlay browser-overlay" aria-label="Garage browser">
+        <header class="browser-chrome">
+          <div class="browser-window-controls" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <nav class="browser-tabs" aria-label="Garage sites">
+            <button class="browser-tab is-active" data-market-tab="cars" type="button">Used Marketplace</button>
+            <button class="browser-tab" data-market-tab="parts" type="button">Parts Site</button>
+          </nav>
+          <button id="marketCloseButton" class="browser-close" type="button">Chiudi</button>
+        </header>
+
+        <div class="browser-toolbar">
+          <div class="browser-nav-icons" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <div class="browser-address">
+            <span id="marketAddress">https://garage.search/used-marketplace</span>
+          </div>
+        </div>
+
+        <div class="browser-search-area">
+          <div class="browser-logo">Garage</div>
+          <div class="browser-search-box">
+            <span id="marketSearchQuery">used cars near me</span>
+          </div>
+        </div>
+
+        <div class="market-sections">
+          <section class="browser-page is-active" data-market-page="cars">
+            <div class="search-result-head">
+              <span>Used Marketplace</span>
+              <strong id="marketCarCount">0 risultati</strong>
+            </div>
+            <div class="search-chips">
+              <span>cash only</span>
+              <span>local pickup</span>
+              <span>as-is</span>
+            </div>
+            <div id="carShopList" class="car-shop-list"></div>
+          </section>
+
+          <section class="browser-page browser-page--parts" data-market-page="parts">
+            <div class="market-balance">
+              <span>Wallet</span>
+              <strong id="marketCoinValue">0</strong>
+            </div>
+            <div class="search-result-head">
+              <span>Parts Site</span>
+              <strong>used parts</strong>
+            </div>
+            <div class="parts-grid">
+              <button class="upgrade-button" data-upgrade="engine" type="button">
+                <span>
+                  <strong>Engine</strong>
+                  Aspirazione + scarico
+                </span>
+                <small data-upgrade-info="engine">LV 0/5 - 320 coins</small>
+              </button>
+              <button class="upgrade-button" data-upgrade="turbo" type="button">
+                <span>
+                  <strong>Turbo</strong>
+                  Turbo kit rigenerato
+                </span>
+                <small data-upgrade-info="turbo">LV 0/4 - 480 coins</small>
+              </button>
+              <button class="upgrade-button" data-upgrade="ecu" type="button">
+                <span>
+                  <strong>ECU</strong>
+                  Mappa ECU notturna
+                </span>
+                <small data-upgrade-info="ecu">LV 0/4 - 390 coins</small>
+              </button>
+              <button class="upgrade-button" data-upgrade="tires" type="button">
+                <span>
+                  <strong>Tires</strong>
+                  Semi slick usate
+                </span>
+                <small data-upgrade-info="tires">LV 0/5 - 300 coins</small>
+              </button>
+              <button class="upgrade-button" data-upgrade="handling" type="button">
+                <span>
+                  <strong>Suspension</strong>
+                  Assetto coilover
+                </span>
+                <small data-upgrade-info="handling">LV 0/5 - 280 coins</small>
+              </button>
+              <button class="upgrade-button" data-upgrade="brakes" type="button">
+                <span>
+                  <strong>Brakes</strong>
+                  Kit freni maggiorato
+                </span>
+                <small data-upgrade-info="brakes">LV 0/5 - 290 coins</small>
+              </button>
+              <button class="upgrade-button" data-upgrade="weight" type="button">
+                <span>
+                  <strong>Weight</strong>
+                  Alleggerimento interni
+                </span>
+                <small data-upgrade-info="weight">LV 0/4 - 360 coins</small>
+              </button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="garageOverlay" class="garage-overlay" aria-label="Garage car manager">
+        <header class="garage-manager-header">
+          <span>Garage</span>
+          <button id="garageCloseButton" type="button">Chiudi</button>
+        </header>
+        <div class="garage-manager-grid">
+          <section class="garage-manager-panel">
+            <h2>Le tue auto</h2>
+            <div id="ownedCarList" class="owned-car-list"></div>
+          </section>
+          <section class="garage-manager-panel">
+            <h2>Upgrades montati</h2>
+            <div id="installedUpgradeList" class="installed-upgrade-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="crashOverlay" class="crash-overlay" aria-live="assertive">
+        <div>
+          <span>Score reset</span>
+          <strong id="finalScoreValue">0</strong>
+          <button id="overlayRestartButton" type="button">Restart</button>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,29 @@
+MACRO AREE
+
+
+1. Guida e fisica 
+
+2. World Enviorement
+
+3. Mappa e tracciato
+
+4. Gameplay singleplayer
+
+5. Market e livelli player
+
+
+
+
+TODO
+
+1. Fixare visuale modalità remodel non edit ora si vede mouse
+
+2. Fixare visuale terza persona
+
+3. Fixare collisioni ora fa effetto colla invece vorrei piu realistico tipo assetto corsa che puoi scontrarti ma continuare ad andare
+
+4. Mod remodel aggiungere anche modo per fare undo, copiare incollare elementi, cambiare colore
+
+5. Aggiungere nella modalità remodel dietro allo spawn point le auto del traffico e del player però invece che modificarne la forma si modificherà la forma delle loro hitboxes (questo solo per le auto del traffico e player)
+
+
