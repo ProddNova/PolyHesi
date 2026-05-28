@@ -74,7 +74,8 @@ export class InputController {
     });
     this.target.addEventListener("pointerdown", (event) => this.handlePointerDown(event));
     window.addEventListener("pointermove", (event) => this.handlePointerMove(event));
-    window.addEventListener("pointerup", () => this.handlePointerUp());
+    window.addEventListener("pointerup", (event) => this.handlePointerUp(event));
+    window.addEventListener("pointercancel", (event) => this.handlePointerUp(event));
     document.addEventListener("pointerlockchange", () => {
       this.pointerLocked = document.pointerLockElement === this.target;
       this.isCameraDragging = false;
@@ -150,9 +151,14 @@ export class InputController {
         }
 
         event.preventDefault();
-        button.setPointerCapture?.(event.pointerId);
+        try {
+          button.setPointerCapture?.(event.pointerId);
+        } catch {
+          // Touch input still works without capture; the window fallback releases it.
+        }
         this.touchPointers.set(event.pointerId, { control, button });
         this.setTouchControl(control, true);
+        this.pulseTouchFeedback(8);
       });
 
       const release = (event) => {
@@ -179,6 +185,7 @@ export class InputController {
         event.preventDefault();
         this.queueTouchAction(button.dataset.touchAction);
         button.classList.add("is-active");
+        this.pulseTouchFeedback(6);
         window.setTimeout(() => button.classList.remove("is-active"), 130);
       });
     }
@@ -224,6 +231,18 @@ export class InputController {
     }
     if (action === "map") {
       this.mapToggleQueued = true;
+    }
+  }
+
+  pulseTouchFeedback(durationMs = 8) {
+    if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") {
+      return;
+    }
+
+    try {
+      navigator.vibrate(durationMs);
+    } catch {
+      // Vibration is optional and often blocked by the platform.
     }
   }
 
@@ -291,7 +310,13 @@ export class InputController {
     this.lastPointerY = event.clientY;
   }
 
-  handlePointerUp() {
+  handlePointerUp(event = null) {
+    const active = event ? this.touchPointers.get(event.pointerId) : null;
+    if (active) {
+      this.touchPointers.delete(event.pointerId);
+      this.setTouchControl(active.control, false);
+    }
+
     if (!this.pointerLocked) {
       this.isCameraDragging = false;
     }

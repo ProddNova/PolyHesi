@@ -27,3 +27,70 @@ TODO
 5. Aggiungere nella modalità remodel dietro allo spawn point le auto del traffico e del player però invece che modificarne la forma si modificherà la forma delle loro hitboxes (questo solo per le auto del traffico e player)
 
 
+
+AUTO PLAYER
+
+1 american muscle
+
+2 american sport sedan
+
+3 american super sedan
+
+4 Autobahn racer
+
+5 English light sportcar
+
+6 German hypercar
+
+7 German old bandit
+
+8 German retro sport car
+
+9 German small coupe
+
+10 German small fighter
+
+11 German sport car
+
+12 German sport wagon
+
+13 German V8 supercar
+
+14 Ital rare supercar
+
+15 Japan 4wd street racer
+
+16 Japan drifter
+
+17 Japan legend
+
+18 Japan rally legend coupe
+
+19 Japan rotary coupe
+
+20 Japan small coupe
+
+21 Japan small fighter
+
+22 Japan small fwd coupe
+
+23 Japan sport coupe track edition
+
+24 Japan tuner
+
+25 
+
+
+
+
+AUTO TRAFFICO
+
+1 Japan rally legacy
+
+2 Japan sedan
+
+3 Korean hatch
+
+
+
+

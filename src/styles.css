@@ -15,14 +15,30 @@ html,
 body,
 #game-root {
   width: 100%;
-  height: 100%;
   margin: 0;
   overflow: hidden;
+}
+
+html {
+  height: 100%;
+}
+
+body,
+#game-root {
+  height: 100%;
+  height: 100dvh;
+  min-height: -webkit-fill-available;
 }
 
 body {
   user-select: none;
   touch-action: none;
+}
+
+button,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
 }
 
 canvas {
@@ -132,6 +148,7 @@ canvas {
   position: fixed;
   inset: 0;
   z-index: 10;
+  overflow: hidden;
   pointer-events: none;
 }
 
@@ -378,6 +395,8 @@ canvas {
 }
 
 .touch-controls {
+  --touch-edge: 18px;
+  --touch-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   display: none;
 }
 
@@ -390,41 +409,79 @@ canvas {
 
 .touch-actions {
   left: 50%;
-  bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(142px + env(safe-area-inset-bottom, 0px));
   display: grid;
-  grid-template-columns: repeat(4, 52px);
+  grid-template-columns: repeat(5, minmax(44px, 52px));
   gap: 8px;
+  width: min(304px, calc(100vw - 28px));
+  justify-content: center;
   transform: translateX(-50%);
 }
 
 .touch-cluster {
-  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
-  display: flex;
-  gap: 10px;
+  bottom: var(--touch-bottom);
+  display: grid;
+  gap: 9px;
 }
 
 .touch-cluster--left {
-  left: calc(18px + env(safe-area-inset-left, 0px));
+  left: calc(var(--touch-edge) + env(safe-area-inset-left, 0px));
+  grid-template-columns: repeat(2, 72px);
 }
 
 .touch-cluster--right {
-  right: calc(18px + env(safe-area-inset-right, 0px));
+  right: calc(var(--touch-edge) + env(safe-area-inset-right, 0px));
+  grid-template-columns: 62px 76px;
+  grid-template-rows: repeat(2, 54px);
 }
 
 .touch-controls button {
-  width: 62px;
-  height: 58px;
+  width: 100%;
+  height: 100%;
   backdrop-filter: blur(18px);
-  background: rgba(8, 10, 11, 0.62);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025)),
+    rgba(8, 10, 11, 0.66);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
   font-size: 12px;
+  line-height: 1;
+  text-transform: uppercase;
   touch-action: none;
   user-select: none;
+  transition:
+    background 110ms ease,
+    border-color 110ms ease,
+    transform 110ms ease;
+}
+
+.touch-cluster--left button {
+  min-width: 72px;
+  min-height: 72px;
+  font-size: 26px;
+}
+
+.touch-cluster--right button[data-touch-control="throttle"] {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  min-height: 117px;
+  border-color: rgba(199, 155, 75, 0.32);
+  background:
+    linear-gradient(180deg, rgba(199, 155, 75, 0.24), rgba(199, 155, 75, 0.08)),
+    rgba(8, 10, 11, 0.68);
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.touch-cluster--right button[data-touch-control="brake"],
+.touch-cluster--right button[data-touch-control="handbrake"] {
+  min-width: 62px;
+  min-height: 54px;
 }
 
 .touch-actions button {
-  width: 52px;
-  height: 42px;
+  width: 100%;
+  min-width: 0;
+  height: 44px;
   font-size: 10px;
 }
 
@@ -432,6 +489,20 @@ canvas {
   border-color: rgba(199, 155, 75, 0.58);
   background: rgba(199, 155, 75, 0.22);
   color: #ffffff;
+  transform: translateY(1px) scale(0.98);
+}
+
+.dev-panel,
+.map-overlay,
+.remodel-toolbox,
+.remodel-panel,
+.market-overlay,
+.garage-overlay {
+  z-index: 22;
+}
+
+.crash-overlay {
+  z-index: 30;
 }
 
 .dev-panel {
@@ -1671,31 +1742,187 @@ canvas {
 }
 
 @media (max-width: 760px) {
+  .login-overlay {
+    padding:
+      calc(18px + env(safe-area-inset-top, 0px))
+      14px
+      calc(18px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .login-card {
+    width: min(390px, 100%);
+    gap: 13px;
+    padding: 20px;
+  }
+
+  .login-card h1 {
+    font-size: 26px;
+  }
+
+  .login-card input,
+  .login-card button {
+    height: 48px;
+  }
+
+  .hud-card {
+    padding: 10px;
+  }
+
+  .hud-card--speed {
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    left: calc(10px + env(safe-area-inset-left, 0px));
+    width: 156px;
+  }
+
   .hud-card--stats {
-    top: 136px;
-    right: auto;
+    top: calc(10px + env(safe-area-inset-top, 0px));
+    right: calc(10px + env(safe-area-inset-right, 0px));
     bottom: auto;
-    left: 18px;
-    grid-template-columns: repeat(3, minmax(60px, 1fr));
-    min-width: min(300px, calc(100vw - 36px));
+    left: auto;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    width: min(128px, calc(100vw - 186px));
+    min-width: 118px;
+    padding: 8px;
+  }
+
+  .brand-lockup {
+    gap: 6px;
+    font-size: 10px;
+  }
+
+  .brand-dot {
+    width: 7px;
+    height: 7px;
+  }
+
+  .speed-readout {
+    gap: 5px;
+    margin-top: 6px;
+  }
+
+  .speed-readout span {
+    min-width: 74px;
+    font-size: 40px;
+  }
+
+  .speed-readout small,
+  .meter-row span,
+  .stat-cell span {
+    font-size: 9px;
+  }
+
+  .meter-row {
+    gap: 8px;
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  .stat-cell {
+    min-height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    padding: 5px 7px;
+  }
+
+  .stat-cell strong {
+    margin-top: 0;
+    font-size: 16px;
+  }
+
+  .near-miss-toast {
+    top: 18%;
+    max-width: calc(100vw - 28px);
+    padding: 9px 12px;
+    font-size: 12px;
   }
 
   .session-panel {
     top: auto;
-    bottom: calc(158px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(196px + env(safe-area-inset-bottom, 0px));
+    gap: 5px;
+    max-width: min(250px, calc(100vw - 28px));
+    padding: 5px 6px;
+  }
+
+  .session-panel span {
+    max-width: 86px;
+    font-size: 10px;
+  }
+
+  .session-panel small {
+    font-size: 9px;
+    padding: 3px 5px;
+  }
+
+  .session-panel small#sessionRole {
+    display: none;
+  }
+
+  .session-panel button {
+    height: 26px;
+    padding: 0 8px;
+  }
+
+  .interaction-prompt {
+    bottom: calc(238px + env(safe-area-inset-bottom, 0px));
     max-width: calc(100vw - 28px);
+    padding: 9px 12px;
+    font-size: 12px;
+  }
+
+  .interaction-prompt kbd {
+    min-width: 24px;
+    height: 24px;
   }
 
   .dev-panel {
-    width: min(315px, calc(100vw - 36px));
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    left: calc(8px + env(safe-area-inset-left, 0px));
+    width: auto;
+    max-height: calc(100dvh - 16px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    padding: 12px;
   }
 
   .restart-button {
     display: none;
   }
 
+  .map-overlay {
+    top: calc(154px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+    width: min(220px, calc(100vw - 28px));
+  }
+
+  .remodel-panel {
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    left: calc(8px + env(safe-area-inset-left, 0px));
+    width: auto;
+    max-height: calc(100dvh - 16px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
+
+  .remodel-toolbox {
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    bottom: calc(188px + env(safe-area-inset-bottom, 0px));
+    left: calc(8px + env(safe-area-inset-left, 0px));
+    width: auto;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    transform: none;
+  }
+
   .market-overlay {
-    max-height: calc(100vh - 36px);
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    left: calc(8px + env(safe-area-inset-left, 0px));
+    width: auto;
+    height: auto;
+    max-height: none;
+    transform: none;
   }
 
   .market-sections {
@@ -1708,6 +1935,8 @@ canvas {
 
   .browser-chrome {
     grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 8px 8px 0;
   }
 
   .browser-window-controls {
@@ -1716,30 +1945,120 @@ canvas {
 
   .browser-tabs {
     overflow-x: auto;
+    scrollbar-width: none;
   }
 
-  .browser-tab {
-    min-width: 142px;
+  .browser-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .browser-overlay .browser-tab {
+    min-width: 116px;
+    height: 34px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  .browser-overlay .browser-close {
+    min-width: 64px;
+    height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+
+  .browser-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 8px 10px;
+  }
+
+  .browser-nav-icons {
+    display: none;
+  }
+
+  .browser-address {
+    height: 30px;
+    font-size: 11px;
   }
 
   .browser-search-area {
-    padding: 18px 14px 14px;
+    gap: 9px;
+    padding: 14px 12px 12px;
   }
 
   .browser-logo {
-    font-size: 34px;
+    font-size: 30px;
+  }
+
+  .browser-search-box {
+    min-height: 38px;
+    padding: 0 14px;
+    font-size: 13px;
   }
 
   .browser-overlay .market-sections {
-    padding: 0 14px 16px;
+    padding: 0 12px 14px;
+  }
+
+  .search-result-head {
+    font-size: 13px;
+  }
+
+  .search-chips {
+    gap: 6px;
+  }
+
+  .search-chips span {
+    padding: 5px 7px;
+    font-size: 9px;
+  }
+
+  .car-shop-button,
+  .owned-car-button {
+    min-height: 68px;
+    padding: 10px;
+  }
+
+  .car-shop-copy strong {
+    font-size: 13px;
+  }
+
+  .car-shop-action {
+    min-width: 66px;
+    font-size: 10px;
+  }
+
+  .garage-overlay {
+    top: calc(8px + env(safe-area-inset-top, 0px));
+    right: calc(8px + env(safe-area-inset-right, 0px));
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    left: calc(8px + env(safe-area-inset-left, 0px));
+    width: auto;
+    height: auto;
+    max-height: none;
+    transform: none;
+  }
+
+  .garage-manager-header {
+    padding: 11px 12px;
   }
 
   .garage-manager-grid {
     grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 12px;
   }
 
   .garage-upgrade-row {
     grid-template-columns: 1fr;
+  }
+
+  .garage-upgrade-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .garage-upgrade-row button {
+    min-height: 38px;
   }
 }
 
@@ -1750,23 +2069,109 @@ canvas {
 }
 
 @media (max-width: 520px) {
+  .touch-controls {
+    --touch-edge: 12px;
+    --touch-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+
   .touch-actions {
-    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-    grid-template-columns: repeat(4, 44px);
+    bottom: calc(134px + env(safe-area-inset-bottom, 0px));
+    grid-template-columns: repeat(5, minmax(40px, 46px));
     gap: 6px;
+    width: min(260px, calc(100vw - 24px));
   }
 
   .touch-actions button {
-    width: 44px;
-  }
-
-  .touch-controls button {
-    width: 54px;
-    height: 54px;
+    height: 42px;
+    font-size: 9px;
   }
 
   .touch-cluster {
-    gap: 8px;
+    gap: 7px;
   }
 
+  .touch-cluster--left {
+    grid-template-columns: repeat(2, 64px);
+  }
+
+  .touch-cluster--left button {
+    min-width: 64px;
+    min-height: 68px;
+    font-size: 24px;
+  }
+
+  .touch-cluster--right {
+    grid-template-columns: 56px 70px;
+    grid-template-rows: repeat(2, 50px);
+  }
+
+  .touch-cluster--right button[data-touch-control="throttle"] {
+    min-height: 107px;
+  }
+
+  .touch-cluster--right button[data-touch-control="brake"],
+  .touch-cluster--right button[data-touch-control="handbrake"] {
+    min-width: 56px;
+    min-height: 50px;
+    font-size: 10px;
+  }
+
+  .hud-card--speed {
+    width: 148px;
+    padding: 8px 9px;
+  }
+
+  .speed-readout span {
+    min-width: 66px;
+    font-size: 36px;
+  }
+
+  .hud-card--stats {
+    width: 118px;
+    min-width: 112px;
+    gap: 5px;
+    padding: 7px;
+  }
+
+  .stat-cell {
+    padding: 5px 6px;
+  }
+
+  .session-panel {
+    bottom: calc(186px + env(safe-area-inset-bottom, 0px));
+    max-width: min(230px, calc(100vw - 24px));
+  }
+
+  .interaction-prompt {
+    bottom: calc(226px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .remodel-toolbox {
+    bottom: calc(178px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .map-overlay {
+    top: calc(146px + env(safe-area-inset-top, 0px));
+    bottom: auto;
+    width: min(208px, calc(100vw - 24px));
+  }
+}
+
+@media (max-height: 520px) and (hover: none), (max-height: 520px) and (pointer: coarse) {
+  .hud-card--stats,
+  .session-panel {
+    display: none;
+  }
+
+  .hud-card--speed {
+    top: calc(8px + env(safe-area-inset-top, 0px));
+  }
+
+  .touch-actions {
+    bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .interaction-prompt {
+    bottom: calc(156px + env(safe-area-inset-bottom, 0px));
+  }
 }
