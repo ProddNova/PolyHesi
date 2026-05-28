@@ -132,6 +132,10 @@ const CITY_BLOCK_ROWS = [
   { spacing: 158, lateral: 170, lateralJitter: 30, forwardJitter: 49, height: [84, 206], width: [30, 76], depth: [36, 74], skip: 0.01, serviceClearance: 340 },
   { spacing: 204, lateral: 228, lateralJitter: 40, forwardJitter: 58, height: [98, 230], width: [34, 86], depth: [40, 84], skip: 0.014, serviceClearance: 420 },
   { spacing: 262, lateral: 300, lateralJitter: 52, forwardJitter: 70, height: [118, 260], width: [40, 100], depth: [46, 96], skip: 0.018, serviceClearance: 520 },
+  { spacing: 330, lateral: 400, lateralJitter: 65, forwardJitter: 85, height: [140, 280], width: [50, 120], depth: [55, 110], skip: 0.022, serviceClearance: 620 },
+  { spacing: 420, lateral: 560, lateralJitter: 90, forwardJitter: 110, height: [180, 340], width: [65, 150], depth: [70, 140], skip: 0.028, serviceClearance: 740 },
+  { spacing: 540, lateral: 780, lateralJitter: 120, forwardJitter: 140, height: [220, 400], width: [80, 180], depth: [85, 170], skip: 0.034, serviceClearance: 900 },
+  { spacing: 680, lateral: 1080, lateralJitter: 160, forwardJitter: 180, height: [260, 480], width: [100, 220], depth: [100, 200], skip: 0.042, serviceClearance: 1100 },
 ];
 const CITY_MANUAL_CLEARANCE = 46;
 const CITY_DISTRICT_HALF_WIDTH = 520;
@@ -918,6 +922,28 @@ export class HighwayWorld {
     details.add(this.createScaledInstancedBoxes(lamps, this.materials.streetlightGlow));
     parent.add(details);
   }
+  createHorizonBuildings(parent) {
+    const horizonGroup = new THREE.Group();
+    horizonGroup.name = "HorizonSkyline";
+    const steps = 180;
+    const lateral = 1400;
+    const height = 320;
+    const width = 90;
+    const depth = 90;
+    const material = new THREE.MeshStandardMaterial({ color: 0x2a3035, roughness: 0.9, flatShading: true });
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const distance = t * this.trackLength;
+      const frame = this.getFrameAtDistance(distance);
+      const pos = this.offsetPoint(frame, lateral, 0);
+      const building = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+      building.position.set(pos.x, height * 0.5, pos.z);
+      building.castShadow = false;
+      building.receiveShadow = false;
+      horizonGroup.add(building);
+    }
+    parent.add(horizonGroup);
+  }
 
   createFixedCityscape(parent) {
     const city = new THREE.Group();
@@ -929,6 +955,8 @@ export class HighwayWorld {
     }
 
     this.createProceduralRoadsideDistrict(city);
+    
+    this.createHorizonBuildings(city);
 
     for (const placement of CITY_BUILDING_PLACEMENTS) {
       this.addRoadsideBuilding(city, placement);
