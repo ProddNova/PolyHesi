@@ -137,8 +137,9 @@ function processNext() {
     return;
   }
 
-  const resolvers = pendingResolvers.get(preset.id) ?? [];
-  pendingResolvers.delete(preset.id);
+  const cacheKey = getThumbnailCacheKey(preset);
+  const resolvers = pendingResolvers.get(cacheKey) ?? [];
+  pendingResolvers.delete(cacheKey);
 
   let url = "";
   try {
@@ -147,7 +148,7 @@ function processNext() {
     console.warn(`Unable to render car thumbnail for ${preset.id}.`, error);
   }
 
-  thumbnailCache.set(preset.id, url);
+  thumbnailCache.set(cacheKey, url);
   for (const resolve of resolvers) {
     resolve(url);
   }
@@ -164,20 +165,25 @@ function scheduleQueue() {
   window.requestAnimationFrame(processNext);
 }
 
+function getThumbnailCacheKey(preset) {
+  return `${preset.id}:${preset.color ?? ""}:${preset.secondaryColor ?? ""}`;
+}
+
 export function getCarThumbnailUrl(preset) {
-  const cached = thumbnailCache.get(preset.id);
+  const cacheKey = getThumbnailCacheKey(preset);
+  const cached = thumbnailCache.get(cacheKey);
   if (cached !== undefined) {
     return Promise.resolve(cached);
   }
 
   return new Promise((resolve) => {
-    const resolvers = pendingResolvers.get(preset.id);
+    const resolvers = pendingResolvers.get(cacheKey);
     if (resolvers) {
       resolvers.push(resolve);
       return;
     }
 
-    pendingResolvers.set(preset.id, [resolve]);
+    pendingResolvers.set(cacheKey, [resolve]);
     renderQueue.push(preset);
     scheduleQueue();
   });

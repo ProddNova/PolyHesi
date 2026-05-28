@@ -1,8 +1,40 @@
-import { CAR_PRESETS, PARTS_CATALOG, SETTING_DEFS, getCarPreset } from "./config.js";
+import {
+  CAR_AUCTION_LISTINGS,
+  CAR_PRESETS,
+  PARTS_CATALOG,
+  SETTING_DEFS,
+  getCarPreset,
+  getVehiclePreset,
+} from "./config.js";
 import { getCarThumbnailUrl } from "./CarThumbnailRenderer.js";
 
 const RAD_TO_DEG = 180 / Math.PI;
 const DEG_TO_RAD = Math.PI / 180;
+const PERFORMANCE_LABELS = {
+  maxSpeedKmh: "Vmax",
+  powerMultiplier: "Power",
+  handling: "Handling",
+  gripMultiplier: "Grip",
+  brakePower: "Freni",
+  weightMultiplier: "Peso",
+};
+
+function formatColorSwatch(color) {
+  return `#${Number(color ?? 0).toString(16).padStart(6, "0")}`;
+}
+
+function formatPartEffects(part) {
+  return Object.entries(part.effects ?? {})
+    .filter(([_key, value]) => Number(value) > 0)
+    .map(([key, value]) => {
+      const label = PERFORMANCE_LABELS[key] ?? key;
+      const amount = key === "maxSpeedKmh"
+        ? `+${Math.round(value)} km/h`
+        : `+${Number(value).toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}`;
+      return `${label} ${amount}`;
+    })
+    .join(" / ");
+}
 
 export class HUD {
   constructor(
@@ -131,14 +163,11 @@ export class HUD {
       marketPages: [...document.querySelectorAll("[data-market-page]")],
       marketAddress: document.querySelector("#marketAddress"),
       marketSearchQuery: document.querySelector("#marketSearchQuery"),
+      marketLogo: document.querySelector("#marketLogo"),
       marketCarCount: document.querySelector("#marketCarCount"),
-      upgradeButtons: [...document.querySelectorAll(".upgrade-button")],
-      upgradeInfo: new Map(
-        [...document.querySelectorAll("[data-upgrade-info]")].map((node) => [
-          node.dataset.upgradeInfo,
-          node,
-        ]),
-      ),
+      partsGrid: document.querySelector("#partsGrid"),
+      upgradeButtons: [],
+      upgradeInfo: new Map(),
       carShopList: document.querySelector("#carShopList"),
       garageOverlay: document.querySelector("#garageOverlay"),
       garageClose: document.querySelector("#garageCloseButton"),
@@ -182,6 +211,7 @@ export class HUD {
     for (const tab of this.nodes.marketTabs) {
       tab.addEventListener("click", () => this.setMarketSite(tab.dataset.marketTab));
     }
+    this.buildPartsShop();
     for (const button of this.nodes.upgradeButtons) {
       button.addEventListener("click", () => this.onUpgrade?.(button.dataset.upgrade));
     }
@@ -483,29 +513,71 @@ export class HUD {
     }
 
     this.nodes.carShopList.innerHTML = "";
-    for (const preset of CAR_PRESETS.filter((car) => car.inGamePlayer)) {
+    for (const listing of CAR_AUCTION_LISTINGS) {
       const button = document.createElement("button");
       button.className = "car-shop-button";
-      button.dataset.carId = preset.id;
+      button.dataset.listingId = listing.id;
+      button.dataset.carId = listing.carId;
       button.type = "button";
       button.innerHTML = `
         <span class="car-thumbnail-frame">
-          <img class="car-thumbnail" alt="${preset.label}" loading="lazy">
+          <img class="car-thumbnail" alt="${listing.label}" loading="lazy">
         </span>
         <span class="car-shop-copy">
-          <strong>${preset.label}</strong>
-          <small>${preset.seller ?? "GhostList"} / ${preset.condition ?? "used"}</small>
-          <small>${preset.mileage ?? "unknown"} / ${Math.round(preset.maxSpeedScale * 285)} km/h class</small>
+          <span class="car-shop-lot">${listing.lot} / ${listing.seller}</span>
+          <strong>${listing.label}</strong>
+          <span class="car-shop-specs">
+            <small><i class="car-color-chip" style="background:${formatColorSwatch(listing.color)}"></i>${listing.colorName}</small>
+            <small>${listing.mileage}</small>
+            <small>${listing.transmission}</small>
+            <small>${listing.engine}</small>
+          </span>
+          <small>${listing.condition} / ${listing.location} / chiude ${listing.endsIn}</small>
         </span>
-        <span class="car-shop-action"></span>
+        <span class="car-shop-action"><b>${listing.price} c</b><small>${listing.bids} offerte</small></span>
       `;
-      this.loadCarThumbnail(preset, button.querySelector(".car-thumbnail"));
-      button.addEventListener("click", () => this.onCarMarket?.(preset.id));
+      this.loadCarThumbnail(getVehiclePreset(listing), button.querySelector(".car-thumbnail"));
+      button.addEventListener("click", () => this.onCarMarket?.(listing.id));
       this.nodes.carShopList.appendChild(button);
     }
     if (this.nodes.marketCarCount) {
-      this.nodes.marketCarCount.textContent = `${CAR_PRESETS.filter((car) => car.inGamePlayer).length} risultati`;
+      this.nodes.marketCarCount.textContent = `${CAR_AUCTION_LISTINGS.length} aste`;
     }
+  }
+
+  buildPartsShop() {
+    if (!this.nodes.partsGrid) {
+      return;
+    }
+
+    this.nodes.partsGrid.innerHTML = "";
+    for (const part of PARTS_CATALOG) {
+      const button = document.createElement("button");
+      button.className = "upgrade-button";
+      button.dataset.upgrade = part.id;
+      button.type = "button";
+      button.innerHTML = `
+        <span class="part-main">
+          <span class="part-category">${part.category}</span>
+          <strong>${part.brand}</strong>
+          <b>${part.label}</b>
+          <small>${part.detail}</small>
+        </span>
+        <span class="part-side">
+          <small class="part-effects">${formatPartEffects(part)}</small>
+          <small data-upgrade-info="${part.id}">${part.baseCost} coins</small>
+        </span>
+      `;
+      this.nodes.partsGrid.appendChild(button);
+    }
+
+    this.nodes.upgradeButtons = [...this.nodes.partsGrid.querySelectorAll(".upgrade-button")];
+    this.nodes.upgradeInfo = new Map(
+      [...this.nodes.partsGrid.querySelectorAll("[data-upgrade-info]")].map((node) => [
+        node.dataset.upgradeInfo,
+        node,
+      ]),
+    );
   }
 
   loadCarThumbnail(preset, image) {
@@ -577,6 +649,8 @@ export class HUD {
 
   setMarketSite(site = "cars") {
     this.marketSite = site;
+    this.nodes.marketOverlay?.classList.toggle("is-auction", site === "cars");
+    this.nodes.marketOverlay?.classList.toggle("is-parts", site === "parts");
     for (const tab of this.nodes.marketTabs ?? []) {
       tab.classList.toggle("is-active", tab.dataset.marketTab === site);
     }
@@ -586,11 +660,14 @@ export class HUD {
     if (this.nodes.marketAddress) {
       this.nodes.marketAddress.textContent =
         site === "parts"
-          ? "https://garage.search/parts-site"
-          : "https://garage.search/used-marketplace";
+          ? "https://partdock.local/autodoc-catalog"
+          : "https://nightrunner.auctions/live-lots";
     }
     if (this.nodes.marketSearchQuery) {
-      this.nodes.marketSearchQuery.textContent = site === "parts" ? "used car parts" : "used cars near me";
+      this.nodes.marketSearchQuery.textContent = site === "parts" ? "turbo assetto distanziali freni" : "aste auto usate import street";
+    }
+    if (this.nodes.marketLogo) {
+      this.nodes.marketLogo.textContent = site === "parts" ? "PartDock" : "NightRunner";
     }
   }
 
@@ -600,22 +677,26 @@ export class HUD {
     installedUpgrades = {},
     costs,
     ownedCars = ["street"],
+    ownedVehicles = [],
     activeCar = "street",
+    activeVehicleId = "",
   }) {
     const owned = new Set(ownedCars);
+    const ownedListings = new Set(ownedVehicles.map((vehicle) => vehicle.sourceListingId).filter(Boolean));
     if (this.nodes.marketCoins) {
       this.nodes.marketCoins.textContent = Math.floor(coins).toLocaleString("en-US");
     }
 
     for (const part of PARTS_CATALOG) {
-      const level = upgrades[part.id] ?? 0;
-      const installedLevel = installedUpgrades[part.id] ?? 0;
+      const isOwned = (upgrades[part.id] ?? 0) > 0;
+      const isInstalled = (installedUpgrades[part.id] ?? 0) > 0;
       const node = this.nodes.upgradeInfo.get(part.id);
       if (node) {
-        node.textContent =
-          level >= part.maxLevel
-            ? `LV ${level}/${part.maxLevel} - montati ${installedLevel}/${level}`
-            : `LV ${level}/${part.maxLevel} - ${costs[part.id]} coins`;
+        node.textContent = isInstalled
+          ? "Installato"
+          : isOwned
+            ? "In garage"
+            : `${costs[part.id]} coins`;
       }
     }
 
@@ -625,7 +706,11 @@ export class HUD {
       if (!part) {
         continue;
       }
-      button.disabled = (upgrades[key] ?? 0) >= part.maxLevel || coins < costs[key];
+      const isOwned = (upgrades[key] ?? 0) > 0;
+      const isInstalled = (installedUpgrades[key] ?? 0) > 0;
+      button.classList.toggle("is-owned", isOwned);
+      button.classList.toggle("is-installed", isInstalled);
+      button.disabled = isOwned || coins < costs[key];
     }
 
     if (this.nodes.carPreset) {
@@ -635,60 +720,61 @@ export class HUD {
     }
 
     for (const button of this.nodes.carShopList?.querySelectorAll(".car-shop-button") ?? []) {
-      const preset = CAR_PRESETS.find((car) => car.id === button.dataset.carId);
-      if (!preset) {
+      const listing = CAR_AUCTION_LISTINGS.find((item) => item.id === button.dataset.listingId);
+      if (!listing) {
         continue;
       }
-      const isOwned = owned.has(preset.id);
-      const isActive = activeCar === preset.id;
+      const vehicle = ownedVehicles.find((item) => item.sourceListingId === listing.id);
+      const isOwned = ownedListings.has(listing.id);
+      const isActive = vehicle?.id === activeVehicleId;
       const action = button.querySelector(".car-shop-action");
       button.classList.toggle("is-active", isActive);
       button.classList.toggle("is-owned", isOwned);
-      button.disabled = !isOwned && coins < preset.price;
+      button.disabled = !isOwned && coins < listing.price;
       if (action) {
-        action.textContent = isActive
-          ? "In uso"
+        action.innerHTML = isActive
+          ? "<b>In uso</b><small>garage</small>"
           : isOwned
-            ? "Usa"
-            : `${preset.price} c`;
+            ? "<b>Usa</b><small>comprata</small>"
+            : `<b>${listing.price} c</b><small>${listing.bids} offerte</small>`;
       }
     }
 
-    this.renderOwnedCarList(owned, activeCar);
+    this.renderOwnedCarList(ownedVehicles, activeVehicleId);
     this.renderInstalledUpgradeList(upgrades, installedUpgrades);
   }
 
-  renderOwnedCarList(owned, activeCar) {
+  renderOwnedCarList(ownedVehicles, activeVehicleId) {
     if (!this.nodes.ownedCarList) {
       return;
     }
 
-    const ownedIds = CAR_PRESETS.filter((preset) => owned.has(preset.id)).map((preset) => preset.id);
-    const signature = `${activeCar}|${ownedIds.join(",")}`;
+    const signature = `${activeVehicleId}|${ownedVehicles.map((vehicle) => vehicle.id).join(",")}`;
     if (signature === this.ownedCarsSignature) {
       return;
     }
 
     this.ownedCarsSignature = signature;
     this.nodes.ownedCarList.innerHTML = "";
-    for (const preset of CAR_PRESETS.filter((car) => owned.has(car.id))) {
+    for (const vehicle of ownedVehicles) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "owned-car-button";
-      button.classList.toggle("is-active", activeCar === preset.id);
-      button.dataset.ownedCarId = preset.id;
+      button.classList.toggle("is-active", activeVehicleId === vehicle.id);
+      button.dataset.ownedCarId = vehicle.id;
       button.innerHTML = `
         <span class="car-thumbnail-frame">
-          <img class="car-thumbnail" alt="${preset.label}" loading="lazy">
+          <img class="car-thumbnail" alt="${vehicle.label}" loading="lazy">
         </span>
         <span class="car-shop-copy">
-          <strong>${preset.label}</strong>
-          <small>${preset.condition ?? "used"} / ${preset.mileage ?? "unknown"}</small>
+          <strong>${vehicle.label}</strong>
+          <small>${vehicle.colorName} / ${vehicle.mileage} / ${vehicle.transmission}</small>
+          <small>${vehicle.engine} / ${vehicle.condition}</small>
         </span>
-        <span class="car-shop-action">${activeCar === preset.id ? "In uso" : "Usa"}</span>
+        <span class="car-shop-action">${activeVehicleId === vehicle.id ? "In uso" : "Usa"}</span>
       `;
-      this.loadCarThumbnail(preset, button.querySelector(".car-thumbnail"));
-      button.addEventListener("click", () => this.onOwnedCarSelect?.(preset.id));
+      this.loadCarThumbnail(getVehiclePreset(vehicle), button.querySelector(".car-thumbnail"));
+      button.addEventListener("click", () => this.onOwnedCarSelect?.(vehicle.id));
       this.nodes.ownedCarList.appendChild(button);
     }
   }
@@ -709,15 +795,28 @@ export class HUD {
 
     this.installedUpgradeSignature = signature;
     this.nodes.installedUpgradeList.innerHTML = "";
-    for (const part of PARTS_CATALOG) {
-      const ownedLevel = upgrades[part.id] ?? 0;
+    const ownedParts = PARTS_CATALOG.filter((part) => (upgrades[part.id] ?? 0) > 0);
+    if (!ownedParts.length) {
+      const empty = document.createElement("div");
+      empty.className = "garage-upgrade-row garage-upgrade-row--empty";
+      empty.innerHTML = `
+        <span>
+          <strong>Nessun pezzo in garage</strong>
+          <small>Compra pezzi singoli su PartDock</small>
+        </span>
+      `;
+      this.nodes.installedUpgradeList.appendChild(empty);
+      return;
+    }
+
+    for (const part of ownedParts) {
       const installedLevel = installedUpgrades[part.id] ?? 0;
       const row = document.createElement("div");
       row.className = "garage-upgrade-row";
       row.innerHTML = `
         <span>
-          <strong>${part.label}</strong>
-          <small>Montati ${installedLevel}/${ownedLevel}</small>
+          <strong>${part.brand} ${part.label}</strong>
+          <small>${installedLevel > 0 ? "Installato" : "In magazzino"} / ${formatPartEffects(part)}</small>
         </span>
         <span class="garage-upgrade-actions">
           <button data-upgrade-delta="-1" type="button">Smonta</button>
@@ -728,7 +827,7 @@ export class HUD {
       const removeButton = row.querySelector('[data-upgrade-delta="-1"]');
       const installButton = row.querySelector('[data-upgrade-delta="1"]');
       removeButton.disabled = installedLevel <= 0;
-      installButton.disabled = installedLevel >= ownedLevel || ownedLevel <= 0;
+      installButton.disabled = installedLevel > 0;
       removeButton.addEventListener("click", () => this.onUpgradeInstall?.(part.id, -1));
       installButton.addEventListener("click", () => this.onUpgradeInstall?.(part.id, 1));
       this.nodes.installedUpgradeList.appendChild(row);

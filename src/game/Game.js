@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import {
+  CAR_AUCTION_LISTINGS,
   CAR_PRESETS,
   DEFAULT_SETTINGS,
   DEV_STORAGE_KEY,
@@ -7,6 +8,9 @@ import {
   PHYSICS_SETTING_KEYS,
   PROGRESS_VERSION,
   SETTING_DEFS,
+  createStarterVehicle,
+  createVehicleFromListing,
+  getVehiclePreset,
 } from "./config.js";
 import { AudioSystem } from "./AudioSystem.js";
 import { DebugOverlay } from "./DebugOverlay.js";
@@ -36,6 +40,15 @@ const REMODEL_PRESETS = {
 };
 const SAVE_DEBOUNCE_MS = 1800;
 const SAVE_RETRY_MS = 8000;
+const LEGACY_PART_MIGRATION = {
+  engine: ["air_filter_kmn", "exhaust_remus_street"],
+  turbo: ["turbo_ihi_stage1", "turbo_garrett_gtx"],
+  ecu: ["ecu_nightflash"],
+  tires: ["tires_advan_semislick"],
+  handling: ["spacers_hr_12", "coilovers_bilstein_b14", "coilovers_kw_v3"],
+  brakes: ["brakes_brembo_big"],
+  weight: ["seats_sparco_bucket"],
+};
 
 function clampSaveInteger(value, min, max) {
   const next = Math.floor(Number(value));
@@ -97,7 +110,9 @@ export class Game {
     };
     this.upgrades = Object.fromEntries(PARTS_CATALOG.map((part) => [part.id, 0]));
     this.installedUpgrades = Object.fromEntries(PARTS_CATALOG.map((part) => [part.id, 0]));
-    this.ownedCars = new Set([DEFAULT_SETTINGS.carPreset]);
+    this.ownedVehicles = [createStarterVehicle()];
+    this.activeVehicleId = this.ownedVehicles[0].id;
+    this.ownedCars = new Set(this.ownedVehicles.map((vehicle) => vehicle.carId));
     this.applySavedProgress(options.progress);
     this.marketOpen = false;
     this.garageManagerOpen = false;
@@ -134,7 +149,7 @@ export class Game {
     this.input = new InputController(this.renderer.domElement);
     this.world = new HighwayWorld(this.scene);
     this.player = new PlayerCar(this.scene, this.world.getStartPose());
-    this.player.setCarPreset(this.settings.carPreset);
+    this.player.setCarPreset(this.getActiveVehiclePreset());
     this.traffic = new TrafficSystem(this.scene, this.world);
     this.debugOverlay = new DebugOverlay(this.scene, this.world);
     this.remodelOverlay = new RemodelOverlay(
@@ -431,7 +446,7 @@ export class Game {
   }
 
   updateGarage(dt, inputState, interact, garageMenuToggle) {
-    this.player.setCarPreset(this.settings.carPreset);
+    this.player.setCarPreset(this.getActiveVehiclePreset());
 
     if (this.marketOpen) {
       this.hud.setInteraction("Chiudi browser");
@@ -824,11 +839,51 @@ export class Game {
     this.hud?.setGarageManagerVisible(false);
   }
 
+  refreshOwnedCarSet() {
+    this.ownedCars = new Set(this.ownedVehicles.map((vehicle) => vehicle.carId));
+  }
+
+  getActiveVehicle() {
+    const active = this.ownedVehicles.find((vehicle) => vehicle.id === this.activeVehicleId);
+    if (active) {
+      return active;
+    }
+
+    const fallback = this.ownedVehicles[0] ?? createStarterVehicle();
+    this.activeVehicleId = fallback.id;
+    if (!this.ownedVehicles.length) {
+      this.ownedVehicles.push(fallback);
+      this.refreshOwnedCarSet();
+    }
+    return fallback;
+  }
+
+  getActiveVehiclePreset() {
+    return getVehiclePreset(this.getActiveVehicle());
+  }
+
+  syncActiveVehicleToSettings() {
+    const vehicle = this.getActiveVehicle();
+    this.settings.carPreset = vehicle.carId;
+    this.settings.activeVehiclePreset = getVehiclePreset(vehicle);
+  }
+
+  selectFirstOwnedVehicleForCar(carId) {
+    const vehicle = this.ownedVehicles.find((item) => item.carId === carId);
+    if (vehicle) {
+      this.selectOwnedCar(vehicle.id);
+      return true;
+    }
+    this.syncActiveVehicleToSettings();
+    this.hud.syncSettings?.();
+    return false;
+  }
+
   getUpgradeCosts() {
     return Object.fromEntries(
       PARTS_CATALOG.map((part) => [
         part.id,
-        part.baseCost + (this.upgrades[part.id] ?? 0) * part.costStep,
+        part.baseCost,
       ]),
     );
   }
@@ -841,8 +896,8 @@ export class Game {
     }
 
     this.coins -= costs[upgrade];
-    this.upgrades[upgrade] += 1;
-    this.installedUpgrades[upgrade] = Math.min(this.upgrades[upgrade], (this.installedUpgrades[upgrade] ?? 0) + 1);
+    this.upgrades[upgrade] = 1;
+    this.installedUpgrades[upgrade] = 1;
     this.applyInstalledUpgrades();
     this.hud.syncSettings?.();
     this.markProgressDirty({ immediate: true });
@@ -870,73 +925,85 @@ export class Game {
   }
 
   applyInstalledUpgrades() {
-    const level = (upgrade) => this.installedUpgrades[upgrade] ?? 0;
+    const totals = {
+      maxSpeedKmh: 0,
+      powerMultiplier: 0,
+      handling: 0,
+      gripMultiplier: 0,
+      brakePower: 0,
+      weightMultiplier: 0,
+    };
+
+    for (const part of PARTS_CATALOG) {
+      if ((this.installedUpgrades[part.id] ?? 0) <= 0) {
+        continue;
+      }
+      for (const [key, value] of Object.entries(part.effects ?? {})) {
+        totals[key] = (totals[key] ?? 0) + Number(value || 0);
+      }
+    }
+
     this.settings.maxSpeedKmh = Math.min(
       460,
-      this.basePerformance.maxSpeedKmh +
-        level("engine") * 14 +
-        level("turbo") * 5 +
-        level("ecu") * 8,
+      this.basePerformance.maxSpeedKmh + totals.maxSpeedKmh,
     );
     this.settings.powerMultiplier = Math.min(
       1.48,
-      this.basePerformance.powerMultiplier +
-        level("turbo") * 0.08 +
-        level("ecu") * 0.045,
+      this.basePerformance.powerMultiplier + totals.powerMultiplier,
     );
     this.settings.handling = Math.min(
       1.8,
-      this.basePerformance.handling +
-        level("tires") * 0.05 +
-        level("handling") * 0.06 +
-        level("weight") * 0.03,
+      this.basePerformance.handling + totals.handling,
     );
     this.settings.gripMultiplier = Math.min(
       1.55,
-      this.basePerformance.gripMultiplier +
-        level("tires") * 0.09 +
-        level("handling") * 0.04,
+      this.basePerformance.gripMultiplier + totals.gripMultiplier,
     );
     this.settings.brakePower = Math.min(
       1.52,
-      this.basePerformance.brakePower + level("brakes") * 0.09,
+      this.basePerformance.brakePower + totals.brakePower,
     );
     this.settings.weightMultiplier = Math.min(
       1.24,
-      this.basePerformance.weightMultiplier + level("weight") * 0.055,
+      this.basePerformance.weightMultiplier + totals.weightMultiplier,
     );
   }
 
-  handleCarMarket(carId) {
-    const preset = CAR_PRESETS.find((car) => car.id === carId);
-    if (!preset) {
+  handleCarMarket(listingId) {
+    const listing = CAR_AUCTION_LISTINGS.find((item) => item.id === listingId);
+    if (!listing) {
       return;
     }
 
-    if (this.ownedCars.has(carId)) {
-      this.selectOwnedCar(carId);
+    const ownedVehicle = this.ownedVehicles.find((vehicle) => vehicle.sourceListingId === listing.id);
+    if (ownedVehicle) {
+      this.selectOwnedCar(ownedVehicle.id);
       return;
     }
 
-    const price = preset.price ?? 0;
+    const price = listing.price ?? 0;
     if (this.coins < price) {
       return;
     }
 
     this.coins -= price;
-    this.ownedCars.add(carId);
-    this.selectOwnedCar(carId);
+    const vehicle = createVehicleFromListing(listing);
+    this.ownedVehicles.push(vehicle);
+    this.refreshOwnedCarSet();
+    this.selectOwnedCar(vehicle.id);
     this.markProgressDirty({ immediate: true });
     this.audio.upgrade();
   }
 
-  selectOwnedCar(carId) {
-    if (!this.ownedCars.has(carId)) {
+  selectOwnedCar(vehicleId) {
+    const vehicle = this.ownedVehicles.find((item) => item.id === vehicleId);
+    if (!vehicle) {
       return;
     }
 
-    this.settings.carPreset = carId;
-    this.player.setCarPreset(carId);
+    this.activeVehicleId = vehicle.id;
+    this.syncActiveVehicleToSettings();
+    this.player.setCarPreset(this.getActiveVehiclePreset());
     this.hud.syncSettings?.();
     this.markProgressDirty({ immediate: true });
   }
@@ -1322,7 +1389,9 @@ export class Game {
       installedUpgrades: this.installedUpgrades,
       costs: this.getUpgradeCosts(),
       ownedCars: [...this.ownedCars],
+      ownedVehicles: this.ownedVehicles,
       activeCar: this.settings.carPreset,
+      activeVehicleId: this.activeVehicleId,
     });
     this.hud.updateNoClipInfo({
       active: this.settings.noClip,
@@ -1363,15 +1432,18 @@ export class Game {
     this.bestScore = saved.bestScore;
     this.upgrades = saved.upgrades;
     this.installedUpgrades = saved.installedUpgrades;
-    this.ownedCars = new Set(saved.ownedCars);
-    this.settings.carPreset = saved.activeCar;
+    this.ownedVehicles = saved.ownedVehicles;
+    this.activeVehicleId = saved.activeVehicleId;
+    this.refreshOwnedCarSet();
+    this.syncActiveVehicleToSettings();
     this.applyInstalledUpgrades();
   }
 
   normalizeProgress(progress = {}) {
     const raw = progress && typeof progress === "object" ? progress : {};
     const carIds = new Set(CAR_PRESETS.map((preset) => preset.id));
-    const ownedCars = [
+    const listings = new Map(CAR_AUCTION_LISTINGS.map((listing) => [listing.id, listing]));
+    const legacyOwnedCars = [
       ...new Set(
         (Array.isArray(raw.ownedCars) ? raw.ownedCars : [DEFAULT_SETTINGS.carPreset])
           .filter((id) => carIds.has(id)),
@@ -1379,34 +1451,132 @@ export class Game {
     ];
     const isLegacyFullGarage =
       clampSaveInteger(raw.version, 0, PROGRESS_VERSION) < PROGRESS_VERSION &&
-      ownedCars.length === CAR_PRESETS.length;
+      legacyOwnedCars.length === CAR_PRESETS.length;
     if (isLegacyFullGarage) {
-      ownedCars.splice(0, ownedCars.length, DEFAULT_SETTINGS.carPreset);
-    }
-    if (!ownedCars.length) {
-      ownedCars.push(DEFAULT_SETTINGS.carPreset);
+      legacyOwnedCars.splice(0, legacyOwnedCars.length, DEFAULT_SETTINGS.carPreset);
     }
 
-    const activeCar =
-      carIds.has(raw.activeCar) && ownedCars.includes(raw.activeCar)
-        ? raw.activeCar
-        : ownedCars.includes(DEFAULT_SETTINGS.carPreset)
-          ? DEFAULT_SETTINGS.carPreset
-          : ownedCars[0];
+    const sanitizeVehicle = (vehicle, index) => {
+      const listing = listings.get(vehicle?.sourceListingId);
+      const carId = carIds.has(vehicle?.carId)
+        ? vehicle.carId
+        : listing?.carId;
+      if (!carId) {
+        return null;
+      }
+
+      const preset = CAR_PRESETS.find((item) => item.id === carId);
+      const color = Number.isFinite(Number(vehicle?.color))
+        ? Number(vehicle.color)
+        : listing?.color ?? preset.color;
+      const secondaryColor = Number.isFinite(Number(vehicle?.secondaryColor))
+        ? Number(vehicle.secondaryColor)
+        : listing?.secondaryColor ?? preset.secondaryColor;
+      const mileageKm = clampSaveInteger(vehicle?.mileageKm ?? listing?.mileageKm ?? 0, 0, 999999);
+      const id = typeof vehicle?.id === "string" && vehicle.id.trim()
+        ? vehicle.id.trim()
+        : listing
+          ? `owned-${listing.id}`
+          : `legacy-${carId}-${index}`;
+
+      return {
+        id,
+        carId,
+        label: preset.label,
+        sourceListingId: listing?.id ?? (typeof vehicle?.sourceListingId === "string" ? vehicle.sourceListingId : null),
+        purchasePrice: clampSaveInteger(vehicle?.purchasePrice ?? listing?.price ?? preset.price, 0, Number.MAX_SAFE_INTEGER),
+        seller: String(vehicle?.seller ?? listing?.seller ?? "Garage"),
+        condition: String(vehicle?.condition ?? listing?.condition ?? "usata"),
+        mileageKm,
+        mileage: typeof vehicle?.mileage === "string" ? vehicle.mileage : `${mileageKm.toLocaleString("it-IT")} km`,
+        color,
+        colorName: String(vehicle?.colorName ?? listing?.colorName ?? "Factory"),
+        secondaryColor,
+        transmission: String(vehicle?.transmission ?? listing?.transmission ?? "Manuale"),
+        engine: String(vehicle?.engine ?? listing?.engine ?? "stock"),
+      };
+    };
+
+    const createLegacyVehicle = (carId, index) => {
+      if (carId === DEFAULT_SETTINGS.carPreset && index === 0) {
+        return createStarterVehicle();
+      }
+      const preset = CAR_PRESETS.find((item) => item.id === carId);
+      return {
+        id: `legacy-${carId}-${index}`,
+        carId,
+        label: preset.label,
+        sourceListingId: null,
+        purchasePrice: preset.price ?? 0,
+        seller: "Garage salvato",
+        condition: "salvataggio precedente",
+        mileageKm: 0,
+        mileage: "km non registrati",
+        color: preset.color,
+        colorName: "Factory",
+        secondaryColor: preset.secondaryColor,
+        transmission: "Manuale",
+        engine: "stock",
+      };
+    };
+
+    let ownedVehicles = Array.isArray(raw.ownedVehicles)
+      ? raw.ownedVehicles.map(sanitizeVehicle).filter(Boolean)
+      : legacyOwnedCars.map(createLegacyVehicle);
+
+    const seenVehicleIds = new Set();
+    ownedVehicles = ownedVehicles.map((vehicle, index) => {
+      if (!seenVehicleIds.has(vehicle.id)) {
+        seenVehicleIds.add(vehicle.id);
+        return vehicle;
+      }
+      const uniqueVehicle = { ...vehicle, id: `${vehicle.id}-${index}` };
+      seenVehicleIds.add(uniqueVehicle.id);
+      return uniqueVehicle;
+    });
+
+    if (!ownedVehicles.length) {
+      ownedVehicles.push(createStarterVehicle());
+    }
+
+    const activeVehicle =
+      ownedVehicles.find((vehicle) => vehicle.id === raw.activeVehicleId) ??
+      ownedVehicles.find((vehicle) => vehicle.carId === raw.activeCar) ??
+      ownedVehicles.find((vehicle) => vehicle.carId === DEFAULT_SETTINGS.carPreset) ??
+      ownedVehicles[0];
+
+    const legacyOwnedPartIds = new Set();
+    const legacyInstalledPartIds = new Set();
+    for (const [legacyId, migratedIds] of Object.entries(LEGACY_PART_MIGRATION)) {
+      const ownedCount = clampSaveInteger(raw.upgrades?.[legacyId], 0, migratedIds.length);
+      const installedCount = clampSaveInteger(raw.installedUpgrades?.[legacyId], 0, ownedCount);
+      for (let index = 0; index < ownedCount; index += 1) {
+        legacyOwnedPartIds.add(migratedIds[index]);
+      }
+      for (let index = 0; index < installedCount; index += 1) {
+        legacyInstalledPartIds.add(migratedIds[index]);
+      }
+    }
 
     const upgrades = {};
     const installedUpgrades = {};
     for (const part of PARTS_CATALOG) {
-      const ownedLevel = isLegacyFullGarage ? 0 : clampSaveInteger(raw.upgrades?.[part.id], 0, part.maxLevel);
+      const ownedLevel = isLegacyFullGarage
+        ? 0
+        : clampSaveInteger(raw.upgrades?.[part.id] ?? (legacyOwnedPartIds.has(part.id) ? 1 : 0), 0, part.maxLevel);
       upgrades[part.id] = ownedLevel;
-      installedUpgrades[part.id] = clampSaveInteger(raw.installedUpgrades?.[part.id], 0, ownedLevel);
+      installedUpgrades[part.id] = clampSaveInteger(
+        raw.installedUpgrades?.[part.id] ?? (legacyInstalledPartIds.has(part.id) ? 1 : 0),
+        0,
+        ownedLevel,
+      );
     }
 
     return {
       coins: isLegacyFullGarage ? 0 : clampSaveInteger(raw.coins, 0, Number.MAX_SAFE_INTEGER),
       bestScore: isLegacyFullGarage ? 0 : clampSaveInteger(raw.bestScore, 0, Number.MAX_SAFE_INTEGER),
-      activeCar,
-      ownedCars,
+      activeVehicleId: activeVehicle.id,
+      ownedVehicles,
       upgrades,
       installedUpgrades,
     };
@@ -1419,8 +1589,10 @@ export class Game {
       coins: Math.max(0, Math.floor(this.coins)),
       bestScore: Math.max(0, Math.floor(this.bestScore)),
       lastScore: Math.max(0, Math.floor(this.score)),
-      activeCar: this.settings.carPreset,
+      activeCar: this.getActiveVehicle().carId,
+      activeVehicleId: this.activeVehicleId,
       ownedCars: [...this.ownedCars],
+      ownedVehicles: this.ownedVehicles.map((vehicle) => ({ ...vehicle })),
       upgrades: { ...this.upgrades },
       installedUpgrades: { ...this.installedUpgrades },
     };
@@ -1583,7 +1755,8 @@ export class Game {
       this.basePerformance[key] = this.settings[key];
     }
     this.applyInstalledUpgrades();
-    this.player.setCarPreset(this.settings.carPreset);
+    this.syncActiveVehicleToSettings();
+    this.player.setCarPreset(this.getActiveVehiclePreset());
     this.hud.syncSettings?.();
     this.handleSettingsChanged();
     this.hud.flashNotice("Dev reset", "defaults restored");
@@ -1626,6 +1799,10 @@ export class Game {
   }
 
   handleSettingsChanged(changedKey = null) {
+    if (changedKey === "carPreset") {
+      this.selectFirstOwnedVehicleForCar(this.settings.carPreset);
+    }
+
     if (PHYSICS_SETTING_KEYS.includes(changedKey)) {
       this.basePerformance[changedKey] = this.settings[changedKey];
       this.applyInstalledUpgrades();

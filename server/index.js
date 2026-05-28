@@ -5,7 +5,14 @@ import { MongoClient } from "mongodb";
 import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CAR_PRESETS, DEFAULT_SETTINGS, PARTS_CATALOG, PROGRESS_VERSION } from "../src/game/config.js";
+import {
+  CAR_AUCTION_LISTINGS,
+  CAR_PRESETS,
+  DEFAULT_SETTINGS,
+  PARTS_CATALOG,
+  PROGRESS_VERSION,
+  createStarterVehicle,
+} from "../src/game/config.js";
 
 dotenv.config();
 
@@ -52,6 +59,16 @@ const SEEDED_ACCOUNTS = [
 
 const CAR_IDS = new Set(CAR_PRESETS.map((car) => car.id));
 const PARTS_BY_ID = new Map(PARTS_CATALOG.map((part) => [part.id, part]));
+const AUCTION_LISTINGS_BY_ID = new Map(CAR_AUCTION_LISTINGS.map((listing) => [listing.id, listing]));
+const LEGACY_PART_MIGRATION = {
+  engine: ["air_filter_kmn", "exhaust_remus_street"],
+  turbo: ["turbo_ihi_stage1", "turbo_garrett_gtx"],
+  ecu: ["ecu_nightflash"],
+  tires: ["tires_advan_semislick"],
+  handling: ["spacers_hr_12", "coilovers_bilstein_b14", "coilovers_kw_v3"],
+  brakes: ["brakes_brembo_big"],
+  weight: ["seats_sparco_bucket"],
+};
 
 function normalizeUsername(username) {
   return String(username ?? "").trim().toLowerCase();
@@ -150,50 +167,151 @@ function defaultUpgradeLevels() {
 }
 
 function defaultProgress() {
+  const starter = createStarterVehicle();
   return {
     version: PROGRESS_VERSION,
     coins: 0,
     bestScore: 0,
     lastScore: 0,
-    activeCar: DEFAULT_SETTINGS.carPreset,
-    ownedCars: [DEFAULT_SETTINGS.carPreset],
+    activeCar: starter.carId,
+    activeVehicleId: starter.id,
+    ownedCars: [starter.carId],
+    ownedVehicles: [starter],
     upgrades: defaultUpgradeLevels(),
     installedUpgrades: defaultUpgradeLevels(),
+  };
+}
+
+function sanitizeVehicle(vehicle, index) {
+  const listing = AUCTION_LISTINGS_BY_ID.get(vehicle?.sourceListingId);
+  const carId = CAR_IDS.has(vehicle?.carId) ? vehicle.carId : listing?.carId;
+  if (!carId) {
+    return null;
+  }
+
+  const preset = CAR_PRESETS.find((car) => car.id === carId);
+  const color = Number.isFinite(Number(vehicle?.color))
+    ? Number(vehicle.color)
+    : listing?.color ?? preset.color;
+  const secondaryColor = Number.isFinite(Number(vehicle?.secondaryColor))
+    ? Number(vehicle.secondaryColor)
+    : listing?.secondaryColor ?? preset.secondaryColor;
+  const mileageKm = clampInteger(vehicle?.mileageKm ?? listing?.mileageKm ?? 0, 0, 999999);
+  const id = typeof vehicle?.id === "string" && vehicle.id.trim()
+    ? vehicle.id.trim()
+    : listing
+      ? `owned-${listing.id}`
+      : `legacy-${carId}-${index}`;
+
+  return {
+    id,
+    carId,
+    label: preset.label,
+    sourceListingId: listing?.id ?? (typeof vehicle?.sourceListingId === "string" ? vehicle.sourceListingId : null),
+    purchasePrice: clampInteger(vehicle?.purchasePrice ?? listing?.price ?? preset.price, 0, Number.MAX_SAFE_INTEGER),
+    seller: String(vehicle?.seller ?? listing?.seller ?? "Garage"),
+    condition: String(vehicle?.condition ?? listing?.condition ?? "usata"),
+    mileageKm,
+    mileage: typeof vehicle?.mileage === "string" ? vehicle.mileage : `${mileageKm.toLocaleString("it-IT")} km`,
+    color,
+    colorName: String(vehicle?.colorName ?? listing?.colorName ?? "Factory"),
+    secondaryColor,
+    transmission: String(vehicle?.transmission ?? listing?.transmission ?? "Manuale"),
+    engine: String(vehicle?.engine ?? listing?.engine ?? "stock"),
+  };
+}
+
+function createLegacyVehicle(carId, index) {
+  if (carId === DEFAULT_SETTINGS.carPreset && index === 0) {
+    return createStarterVehicle();
+  }
+
+  const preset = CAR_PRESETS.find((car) => car.id === carId);
+  return {
+    id: `legacy-${carId}-${index}`,
+    carId,
+    label: preset.label,
+    sourceListingId: null,
+    purchasePrice: preset.price ?? 0,
+    seller: "Garage salvato",
+    condition: "salvataggio precedente",
+    mileageKm: 0,
+    mileage: "km non registrati",
+    color: preset.color,
+    colorName: "Factory",
+    secondaryColor: preset.secondaryColor,
+    transmission: "Manuale",
+    engine: "stock",
   };
 }
 
 function sanitizeProgress(rawProgress) {
   const fallback = defaultProgress();
   const raw = rawProgress && typeof rawProgress === "object" ? rawProgress : {};
-  const ownedCars = [
+  const legacyOwnedCars = [
     ...new Set(
       (Array.isArray(raw.ownedCars) ? raw.ownedCars : fallback.ownedCars).filter((id) => CAR_IDS.has(id)),
     ),
   ];
   const isLegacyFullGarage =
     clampInteger(raw.version, 0, PROGRESS_VERSION) < PROGRESS_VERSION &&
-    ownedCars.length === CAR_PRESETS.length;
+    legacyOwnedCars.length === CAR_PRESETS.length;
   if (isLegacyFullGarage) {
-    ownedCars.splice(0, ownedCars.length, DEFAULT_SETTINGS.carPreset);
+    legacyOwnedCars.splice(0, legacyOwnedCars.length, DEFAULT_SETTINGS.carPreset);
   }
 
-  if (!ownedCars.length) {
-    ownedCars.push(DEFAULT_SETTINGS.carPreset);
+  let ownedVehicles = Array.isArray(raw.ownedVehicles)
+    ? raw.ownedVehicles.map(sanitizeVehicle).filter(Boolean)
+    : legacyOwnedCars.map(createLegacyVehicle);
+
+  const seenVehicleIds = new Set();
+  ownedVehicles = ownedVehicles.map((vehicle, index) => {
+    if (!seenVehicleIds.has(vehicle.id)) {
+      seenVehicleIds.add(vehicle.id);
+      return vehicle;
+    }
+    const uniqueVehicle = { ...vehicle, id: `${vehicle.id}-${index}` };
+    seenVehicleIds.add(uniqueVehicle.id);
+    return uniqueVehicle;
+  });
+
+  if (!ownedVehicles.length) {
+    ownedVehicles.push(createStarterVehicle());
   }
 
-  const activeCar =
-    CAR_IDS.has(raw.activeCar) && ownedCars.includes(raw.activeCar)
-      ? raw.activeCar
-      : ownedCars.includes(DEFAULT_SETTINGS.carPreset)
-        ? DEFAULT_SETTINGS.carPreset
-        : ownedCars[0];
+  const activeVehicle =
+    ownedVehicles.find((vehicle) => vehicle.id === raw.activeVehicleId) ??
+    ownedVehicles.find((vehicle) => vehicle.carId === raw.activeCar) ??
+    ownedVehicles.find((vehicle) => vehicle.carId === DEFAULT_SETTINGS.carPreset) ??
+    ownedVehicles[0];
+
+  const ownedCars = [...new Set(ownedVehicles.map((vehicle) => vehicle.carId))];
+
+  const legacyOwnedPartIds = new Set();
+  const legacyInstalledPartIds = new Set();
+  for (const [legacyId, migratedIds] of Object.entries(LEGACY_PART_MIGRATION)) {
+    const ownedCount = clampInteger(raw.upgrades?.[legacyId], 0, migratedIds.length);
+    const installedCount = clampInteger(raw.installedUpgrades?.[legacyId], 0, ownedCount);
+    for (let index = 0; index < ownedCount; index += 1) {
+      legacyOwnedPartIds.add(migratedIds[index]);
+    }
+    for (let index = 0; index < installedCount; index += 1) {
+      legacyInstalledPartIds.add(migratedIds[index]);
+    }
+  }
 
   const upgrades = {};
   const installedUpgrades = {};
   for (const [partId, part] of PARTS_BY_ID) {
-    const ownedLevel = isLegacyFullGarage ? 0 : clampInteger(raw.upgrades?.[partId], 0, part.maxLevel);
+    const ownedLevel = isLegacyFullGarage
+      ? 0
+      : clampInteger(raw.upgrades?.[partId] ?? (legacyOwnedPartIds.has(partId) ? 1 : 0), 0, part.maxLevel);
     upgrades[partId] = ownedLevel;
-    installedUpgrades[partId] = clampInteger(raw.installedUpgrades?.[partId], 0, ownedLevel);
+    installedUpgrades[partId] = clampInteger(
+      raw.installedUpgrades?.[partId] ?? (legacyInstalledPartIds.has(partId) ? 1 : 0),
+      0,
+      ownedLevel,
+    );
   }
 
   return {
@@ -201,8 +319,10 @@ function sanitizeProgress(rawProgress) {
     coins: isLegacyFullGarage ? 0 : clampInteger(raw.coins, 0, Number.MAX_SAFE_INTEGER),
     bestScore: isLegacyFullGarage ? 0 : clampInteger(raw.bestScore, 0, Number.MAX_SAFE_INTEGER),
     lastScore: isLegacyFullGarage ? 0 : clampInteger(raw.lastScore, 0, Number.MAX_SAFE_INTEGER),
-    activeCar,
+    activeCar: activeVehicle.carId,
+    activeVehicleId: activeVehicle.id,
     ownedCars,
+    ownedVehicles,
     upgrades,
     installedUpgrades,
   };

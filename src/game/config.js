@@ -8,7 +8,7 @@ export const PLAYER_START = {
   yaw: 0,
 };
 export const STARTER_CAR_ID = "JapanLegendaryDrifter";
-export const PROGRESS_VERSION = 2;
+export const PROGRESS_VERSION = 3;
 
 function formatTimeOfDay(value) {
   const normalized = ((Number(value) % 24) + 24) % 24;
@@ -207,69 +207,298 @@ export function getCarPreset(id) {
   return CAR_PRESETS.find((preset) => preset.id === id) ?? CAR_PRESETS[0];
 }
 
+const AUCTION_COLORS = [
+  { name: "Rosso corsa", color: 0xb43f38, secondaryColor: 0x171a1e },
+  { name: "Giallo sodio", color: 0xd6ad3d, secondaryColor: 0x111416 },
+  { name: "Grafite", color: 0x596064, secondaryColor: 0x141619 },
+  { name: "Blu notte", color: 0x2f4a5f, secondaryColor: 0x101316 },
+  { name: "Verde acqua", color: 0x30a78f, secondaryColor: 0x20242a },
+  { name: "Bianco perla", color: 0xd4d1c8, secondaryColor: 0x171a1e },
+  { name: "Viola midnight", color: 0x463f5b, secondaryColor: 0x111416 },
+  { name: "Nero ossidiana", color: 0x222529, secondaryColor: 0x141619 },
+  { name: "Argento metallo", color: 0xa7b7bd, secondaryColor: 0x101316 },
+  { name: "Blu petrolio", color: 0x2d6a78, secondaryColor: 0x20242a },
+  { name: "Rosso mattone", color: 0x8e2f29, secondaryColor: 0x171a1e },
+  { name: "Crema oldschool", color: 0xe9e2cf, secondaryColor: 0x111416 },
+];
+
+const AUCTION_TRANSMISSIONS = [
+  "Manuale 5 marce",
+  "Manuale 6 marce",
+  "Automatico 6 rapporti",
+  "Doppia frizione",
+  "Sequenziale corto",
+];
+
+const AUCTION_ENGINES = [
+  "1.6 turbo benzina",
+  "2.0 aspirato",
+  "2.0 turbo",
+  "2.5 turbo",
+  "3.0 sei cilindri",
+  "V8 aspirato",
+];
+
+const AUCTION_CONDITIONS = [
+  "tagliandi misti",
+  "vernice vissuta",
+  "interni buoni",
+  "meccanica pronta",
+  "progetto leggero",
+  "ex trackday",
+];
+
+const AUCTION_SELLERS = [
+  "NightRunner Auctions",
+  "Dockside Imports",
+  "Neon Lot Milano",
+  "Private Seller",
+  "Hillside Garage",
+  "Midnight Fleet",
+];
+
+const AUCTION_LOCATIONS = [
+  "Milano est",
+  "Bergamo",
+  "Monza",
+  "Torino sud",
+  "Verona",
+  "Bologna",
+];
+
+function formatKilometers(value) {
+  return `${Math.round(value).toLocaleString("it-IT")} km`;
+}
+
+function createCarAuctionListing(preset, carIndex, variantIndex) {
+  const seed = carIndex * 17 + variantIndex * 31;
+  const color = AUCTION_COLORS[seed % AUCTION_COLORS.length];
+  const mileageKm = 18000 + ((seed * 13873) % 184000) + variantIndex * 2400;
+  const mileageFactor = Math.max(0.62, 1.08 - mileageKm / 360000);
+  const transmission = AUCTION_TRANSMISSIONS[(seed + carIndex) % AUCTION_TRANSMISSIONS.length];
+  const engine = AUCTION_ENGINES[(seed + Math.floor(preset.maxSpeedScale * 10)) % AUCTION_ENGINES.length];
+  const condition = AUCTION_CONDITIONS[(seed + variantIndex) % AUCTION_CONDITIONS.length];
+  const seller = AUCTION_SELLERS[(seed + 2) % AUCTION_SELLERS.length];
+  const basePrice = Math.max(preset.price, 420);
+  const colorPremium = color.name.includes("Nero") || color.name.includes("Bianco") ? 1.08 : 1;
+  const manualPremium = transmission.includes("Manuale") ? 1.07 : 0.98;
+  const price = Math.round((basePrice * mileageFactor * colorPremium * manualPremium + variantIndex * 140) / 10) * 10;
+
+  return {
+    id: `lot-${preset.id}-${variantIndex + 1}`,
+    lot: `NR-${String(carIndex + 1).padStart(2, "0")}${variantIndex + 1}`,
+    carId: preset.id,
+    label: preset.label,
+    seller,
+    condition,
+    mileageKm,
+    mileage: formatKilometers(mileageKm),
+    color: color.color,
+    colorName: color.name,
+    secondaryColor: color.secondaryColor,
+    transmission,
+    engine,
+    location: AUCTION_LOCATIONS[seed % AUCTION_LOCATIONS.length],
+    endsIn: `${2 + ((seed + 3) % 9)}h ${10 + ((seed * 7) % 49)}m`,
+    bids: 3 + ((seed * 5) % 24),
+    price,
+  };
+}
+
+export const CAR_AUCTION_LISTINGS = CAR_PRESETS
+  .filter((preset) => preset.inGamePlayer)
+  .flatMap((preset, index) => {
+    const listingCount = index % 4 === 0 ? 3 : 2;
+    return Array.from({ length: listingCount }, (_item, variantIndex) =>
+      createCarAuctionListing(preset, index, variantIndex),
+    );
+  });
+
+export const STARTER_VEHICLE_ID = `starter-${STARTER_CAR_ID}`;
+
+export function createStarterVehicle() {
+  const preset = getCarPreset(STARTER_CAR_ID);
+  return {
+    id: STARTER_VEHICLE_ID,
+    carId: STARTER_CAR_ID,
+    label: preset.label,
+    sourceListingId: null,
+    purchasePrice: 0,
+    seller: "Garage",
+    condition: "prima auto",
+    mileageKm: 92000,
+    mileage: formatKilometers(92000),
+    color: preset.color,
+    colorName: "Rosso garage",
+    secondaryColor: preset.secondaryColor,
+    transmission: "Manuale 5 marce",
+    engine: "2.0 turbo",
+  };
+}
+
+export function createVehicleFromListing(listing) {
+  return {
+    id: `owned-${listing.id}`,
+    carId: listing.carId,
+    label: listing.label,
+    sourceListingId: listing.id,
+    purchasePrice: listing.price,
+    seller: listing.seller,
+    condition: listing.condition,
+    mileageKm: listing.mileageKm,
+    mileage: listing.mileage,
+    color: listing.color,
+    colorName: listing.colorName,
+    secondaryColor: listing.secondaryColor,
+    transmission: listing.transmission,
+    engine: listing.engine,
+  };
+}
+
+export function getVehiclePreset(vehicle) {
+  const preset = getCarPreset(vehicle?.carId ?? vehicle?.id ?? STARTER_CAR_ID);
+  return {
+    ...preset,
+    id: vehicle?.id ?? preset.id,
+    carId: preset.id,
+    label: preset.label,
+    color: vehicle?.color ?? preset.color,
+    secondaryColor: vehicle?.secondaryColor ?? preset.secondaryColor,
+  };
+}
+
 export const PARTS_CATALOG = [
   {
-    id: "engine",
-    app: "BoostBay",
-    label: "Aspirazione + scarico",
-    detail: "Pezzi usati, piu allungo",
-    baseCost: 320,
-    costStep: 210,
-    maxLevel: 5,
+    id: "air_filter_kmn",
+    category: "Aspirazione",
+    app: "PartDock",
+    brand: "K-MN",
+    label: "Filtro aria sportivo",
+    detail: "Pannello lavabile per motori stock",
+    baseCost: 260,
+    maxLevel: 1,
+    effects: { maxSpeedKmh: 4, powerMultiplier: 0.018 },
   },
   {
-    id: "turbo",
+    id: "exhaust_remus_street",
+    category: "Scarico",
+    app: "PartDock",
+    brand: "Remus",
+    label: "Catback inox street",
+    detail: "Scarico completo omologato pista",
+    baseCost: 420,
+    maxLevel: 1,
+    effects: { maxSpeedKmh: 7, powerMultiplier: 0.024 },
+  },
+  {
+    id: "turbo_ihi_stage1",
+    category: "Turbo",
     app: "TurboSwap",
-    label: "Turbo kit rigenerato",
-    detail: "Spinge forte, non chiedere fattura",
-    baseCost: 480,
-    costStep: 330,
-    maxLevel: 4,
+    brand: "IHI",
+    label: "Turbina maggiorata Stage 1",
+    detail: "Rigenerata, spool rapido",
+    baseCost: 720,
+    maxLevel: 1,
+    effects: { maxSpeedKmh: 9, powerMultiplier: 0.078 },
   },
   {
-    id: "ecu",
+    id: "turbo_garrett_gtx",
+    category: "Turbo",
+    app: "TurboSwap",
+    brand: "Garrett",
+    label: "Turbina GTX usata",
+    detail: "Costa di piu, spinge piu in alto",
+    baseCost: 1180,
+    maxLevel: 1,
+    effects: { maxSpeedKmh: 15, powerMultiplier: 0.126 },
+  },
+  {
+    id: "ecu_nightflash",
+    category: "Elettronica",
     app: "ECUCloud",
-    label: "Mappa ECU notturna",
-    detail: "Piu boost e limitatore alto",
-    baseCost: 390,
-    costStep: 260,
-    maxLevel: 4,
+    brand: "NightFlash",
+    label: "Mappa ECU 98 ottani",
+    detail: "Boost e limitatore piu aggressivi",
+    baseCost: 540,
+    maxLevel: 1,
+    effects: { maxSpeedKmh: 10, powerMultiplier: 0.045 },
   },
   {
-    id: "tires",
-    app: "TyreCart",
-    label: "Semi slick usate",
-    detail: "Grip extra sui curvoni",
-    baseCost: 300,
-    costStep: 190,
-    maxLevel: 5,
-  },
-  {
-    id: "handling",
+    id: "spacers_hr_12",
+    category: "Assetto",
     app: "SuspensionLab",
-    label: "Assetto coilover",
-    detail: "Sterzo piu rapido e stabile",
-    baseCost: 280,
-    costStep: 180,
-    maxLevel: 5,
+    brand: "H&R",
+    label: "Distanziali 12 mm",
+    detail: "Carreggiata piu larga, sterzo piu pieno",
+    baseCost: 210,
+    maxLevel: 1,
+    effects: { handling: 0.035, gripMultiplier: 0.018 },
   },
   {
-    id: "brakes",
+    id: "coilovers_bilstein_b14",
+    category: "Assetto",
+    app: "SuspensionLab",
+    brand: "Bilstein",
+    label: "Assetto B14 coilover",
+    detail: "Regolabile, buono su strada",
+    baseCost: 620,
+    maxLevel: 1,
+    effects: { handling: 0.09, gripMultiplier: 0.035 },
+  },
+  {
+    id: "coilovers_kw_v3",
+    category: "Assetto",
+    app: "SuspensionLab",
+    brand: "KW",
+    label: "Assetto V3 inox",
+    detail: "Piu caro, piu stabile nei curvoni",
+    baseCost: 980,
+    maxLevel: 1,
+    effects: { handling: 0.135, gripMultiplier: 0.06 },
+  },
+  {
+    id: "tires_advan_semislick",
+    category: "Gomme",
+    app: "TyreCart",
+    brand: "Advan",
+    label: "Semi slick 200TW",
+    detail: "Grip serio, durata discutibile",
+    baseCost: 430,
+    maxLevel: 1,
+    effects: { handling: 0.04, gripMultiplier: 0.13 },
+  },
+  {
+    id: "brakes_brembo_big",
+    category: "Freni",
     app: "BrakeStop",
+    brand: "Brembo",
     label: "Kit freni maggiorato",
-    detail: "Meno panico, piu staccata",
-    baseCost: 290,
-    costStep: 185,
-    maxLevel: 5,
+    detail: "Dischi grandi e pastiglie sportive",
+    baseCost: 690,
+    maxLevel: 1,
+    effects: { brakePower: 0.18 },
   },
   {
-    id: "weight",
+    id: "seats_sparco_bucket",
+    category: "Peso",
     app: "Junkyard",
-    label: "Alleggerimento interni",
-    detail: "Via sedili, via silenzio",
-    baseCost: 360,
-    costStep: 240,
-    maxLevel: 4,
+    brand: "Sparco",
+    label: "Sedili bucket leggeri",
+    detail: "Meno peso, piu risposta",
+    baseCost: 510,
+    maxLevel: 1,
+    effects: { handling: 0.026, weightMultiplier: 0.05 },
+  },
+  {
+    id: "flywheel_exedy_light",
+    category: "Trasmissione",
+    app: "ClutchMart",
+    brand: "Exedy",
+    label: "Volano alleggerito",
+    detail: "Sale di giri piu in fretta",
+    baseCost: 460,
+    maxLevel: 1,
+    effects: { powerMultiplier: 0.026, weightMultiplier: 0.025 },
   },
 ];
 

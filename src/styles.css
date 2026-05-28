@@ -1696,6 +1696,221 @@ canvas {
   background: #eef5ff;
 }
 
+.browser-overlay.is-auction {
+  border-color: rgba(102, 215, 255, 0.22);
+  background: #10151c;
+  color: #edf5fb;
+}
+
+.browser-overlay.is-auction .browser-chrome {
+  border-bottom-color: #263443;
+  background: #080b11;
+}
+
+.browser-overlay.is-auction .browser-tab {
+  border-color: #293746;
+  background: #151d28;
+  color: #b9c9d8;
+}
+
+.browser-overlay.is-auction .browser-tab.is-active {
+  border-color: #10151c;
+  border-bottom-color: #10151c;
+  background: #10151c;
+  color: #ffffff;
+}
+
+.browser-overlay.is-auction .browser-toolbar,
+.browser-overlay.is-auction .browser-search-area {
+  border-color: #243241;
+  background:
+    linear-gradient(90deg, rgba(227, 75, 75, 0.18), rgba(102, 215, 255, 0.08)),
+    #10151c;
+}
+
+.browser-overlay.is-auction .browser-address,
+.browser-overlay.is-auction .browser-search-box {
+  border-color: rgba(102, 215, 255, 0.24);
+  background: rgba(255, 255, 255, 0.055);
+  color: #c9d8e4;
+  box-shadow: none;
+}
+
+.browser-overlay.is-auction .browser-nav-icons span {
+  background: #1a2430;
+}
+
+.browser-overlay.is-auction .browser-logo {
+  color: #ff5c67;
+  text-shadow: 0 0 18px rgba(255, 92, 103, 0.28);
+}
+
+.browser-overlay.is-auction .market-sections {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.026) 0,
+      rgba(255, 255, 255, 0.026) 1px,
+      transparent 1px,
+      transparent 7px
+    ),
+    #10151c;
+}
+
+.browser-overlay.is-auction .search-result-head {
+  border-top-color: #263443;
+  color: #edf5fb;
+}
+
+.browser-overlay.is-auction .search-result-head strong {
+  color: #78e0c1;
+}
+
+.browser-overlay.is-auction .search-chips span {
+  border-color: rgba(120, 224, 193, 0.24);
+  background: rgba(120, 224, 193, 0.08);
+  color: #bbe8de;
+}
+
+.browser-overlay.is-auction .car-shop-button {
+  grid-template-columns: 132px minmax(0, 1fr) 104px;
+  align-items: stretch;
+  border-color: rgba(102, 215, 255, 0.18);
+  background:
+    linear-gradient(135deg, rgba(102, 215, 255, 0.08), transparent 34%),
+    #141b24;
+  color: #edf5fb;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+}
+
+.browser-overlay.is-auction .car-shop-button:hover:not(:disabled) {
+  border-color: rgba(120, 224, 193, 0.42);
+  background:
+    linear-gradient(135deg, rgba(120, 224, 193, 0.12), rgba(227, 75, 75, 0.045)),
+    #172330;
+}
+
+.browser-overlay.is-auction .car-shop-button.is-active {
+  border-color: rgba(120, 224, 193, 0.72);
+  background:
+    linear-gradient(135deg, rgba(120, 224, 193, 0.18), rgba(102, 215, 255, 0.08)),
+    #172330;
+}
+
+.browser-overlay.is-parts .browser-logo,
+.browser-overlay.is-parts .search-result-head strong,
+.browser-overlay.is-parts .upgrade-button > span strong {
+  color: #188038;
+}
+
+.browser-overlay.is-parts .search-chips span {
+  border-color: #d7eadf;
+  background: #f2fbf5;
+  color: #2d6b43;
+}
+
+.car-shop-button {
+  display: grid;
+  grid-template-columns: 126px minmax(0, 1fr) 96px;
+}
+
+.car-shop-lot {
+  color: #78e0c1;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.car-shop-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.car-shop-specs small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(112, 117, 122, 0.24);
+  border-radius: 999px;
+  padding: 4px 7px;
+}
+
+.car-color-chip {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  border-radius: 50%;
+}
+
+.car-shop-action {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+}
+
+.car-shop-action b {
+  font-size: 12px;
+}
+
+.car-shop-action small {
+  color: currentColor;
+  font-size: 9px;
+  opacity: 0.72;
+}
+
+.upgrade-button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(126px, 0.36fr);
+  align-items: stretch;
+}
+
+.upgrade-button .part-main,
+.upgrade-button .part-side {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.upgrade-button .part-side {
+  justify-items: end;
+  text-align: right;
+}
+
+.part-category {
+  color: #188038;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.upgrade-button b {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.part-effects {
+  color: #5f6368;
+  line-height: 1.35;
+  text-transform: none;
+}
+
+.browser-overlay .upgrade-button.is-owned {
+  border-color: #d7eadf;
+  background: #f6fbf8;
+}
+
+.browser-overlay .upgrade-button.is-installed {
+  border-color: #9ed7b2;
+  background: #eef8f1;
+}
+
 .garage-overlay {
   position: absolute;
   left: 50%;
@@ -2087,8 +2302,13 @@ canvas {
 
   .car-shop-button,
   .owned-car-button {
+    grid-template-columns: 86px minmax(0, 1fr);
     min-height: 68px;
     padding: 10px;
+  }
+
+  .browser-overlay.is-auction .car-shop-button {
+    grid-template-columns: 86px minmax(0, 1fr);
   }
 
   .car-thumbnail-frame {
@@ -2101,8 +2321,19 @@ canvas {
   }
 
   .car-shop-action {
+    grid-column: 2;
+    justify-self: start;
     min-width: 66px;
     font-size: 10px;
+  }
+
+  .upgrade-button {
+    grid-template-columns: 1fr;
+  }
+
+  .upgrade-button .part-side {
+    justify-items: start;
+    text-align: left;
   }
 
   .garage-overlay {

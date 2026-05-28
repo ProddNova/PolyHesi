@@ -30,6 +30,7 @@ export class PlayerCar {
     this.bodyPitch = 0;
     this.bodyRoll = 0;
     this.activePresetId = null;
+    this.activePresetKey = "";
     this.activePreset = getCarPreset();
     this.position = new THREE.Vector3(0, 0, 0);
     this.previousPosition = new THREE.Vector3(0, 0, 0);
@@ -148,12 +149,15 @@ export class PlayerCar {
     this.group.add(headLight.target);
   }
 
-  setCarPreset(id) {
-    if (id === this.activePresetId) {
+  setCarPreset(car) {
+    const preset = typeof car === "string" || !car ? getCarPreset(car) : car;
+    const key = `${preset.id}:${preset.color}:${preset.secondaryColor}`;
+    if (key === this.activePresetKey) {
       return;
     }
 
-    this.buildMesh(getCarPreset(id));
+    this.activePresetKey = key;
+    this.buildMesh(preset);
   }
 
   reset(startPose = this.startPose) {
@@ -192,7 +196,7 @@ export class PlayerCar {
   }
 
   update(dt, input, settings, crashed) {
-    this.setCarPreset(settings.carPreset);
+    this.setCarPreset(settings.activeVehiclePreset ?? settings.carPreset);
     const preset = this.activePreset;
     const maxSpeed = (settings.maxSpeedKmh * preset.maxSpeedScale) / 3.6;
     const maxReverseSpeed = maxSpeed * 0.18;

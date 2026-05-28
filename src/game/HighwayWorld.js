@@ -920,6 +920,11 @@ export class HighwayWorld {
     const city = new THREE.Group();
     city.name = "FixedRoadsideCityscape";
 
+    this.cityBuildingFootprints = new Map();
+    for (const placement of CITY_BUILDING_PLACEMENTS) {
+      this.reserveCityFootprint(this.createManualCityFootprint(placement));
+    }
+
     this.createProceduralRoadsideDistrict(city);
 
     for (const placement of CITY_BUILDING_PLACEMENTS) {
@@ -927,6 +932,7 @@ export class HighwayWorld {
     }
 
     parent.add(city);
+    this.cityBuildingFootprints = null;
   }
 
   createProceduralRoadsideDistrict(parent) {
@@ -992,6 +998,16 @@ export class HighwayWorld {
     const yaw = frame.yaw + cityRange(seed + 7.9, -0.075, 0.075);
     const paletteIndex = Math.floor(cityNoise(seed + 8.3) * CITY_FACADE_PALETTE.length) % CITY_FACADE_PALETTE.length;
     const bodyHeight = height * cityRange(seed + 9.7, 0.88, 1.04);
+    const footprint = {
+      side,
+      s: (s + forward + this.trackLength) % this.trackLength,
+      lateral: Math.abs(lateral),
+      halfForward: depth * 0.5 + 7 + rowIndex * 0.8,
+      halfLateral: width * 0.5 + 4,
+    };
+    if (!this.reserveCityFootprint(footprint)) {
+      return;
+    }
 
     bodyBatches[paletteIndex].push({
       position: new THREE.Vector3(base.x, bodyHeight * 0.5, base.z),
@@ -1150,6 +1166,41 @@ export class HighwayWorld {
   loopDistance(a, b) {
     const delta = Math.abs(((a - b) % this.trackLength + this.trackLength) % this.trackLength);
     return Math.min(delta, this.trackLength - delta);
+  }
+
+  createManualCityFootprint(placement) {
+    const type = BUILDING_TYPES.find((item) => item.id === placement.type) ?? BUILDING_TYPES[0];
+    const scale = placement.scale ?? 1;
+    const width = type.width * scale;
+    const depth = type.depth * scale;
+    const lateral = ROAD_HALF_WIDTH + 12 + (placement.setback ?? 14) + width * 0.5;
+    return {
+      side: placement.side,
+      s: (placement.s + (placement.forward ?? 0) + this.trackLength) % this.trackLength,
+      lateral: Math.abs(lateral),
+      halfForward: depth * 0.5 + 10,
+      halfLateral: width * 0.5 + 5,
+    };
+  }
+
+  reserveCityFootprint(footprint) {
+    if (!this.cityBuildingFootprints || !footprint) {
+      return true;
+    }
+
+    const key = footprint.side > 0 ? "right" : "left";
+    const footprints = this.cityBuildingFootprints.get(key) ?? [];
+    for (const other of footprints) {
+      const forwardOverlap = this.loopDistance(footprint.s, other.s) < footprint.halfForward + other.halfForward;
+      const lateralOverlap = Math.abs(footprint.lateral - other.lateral) < footprint.halfLateral + other.halfLateral;
+      if (forwardOverlap && lateralOverlap) {
+        return false;
+      }
+    }
+
+    footprints.push(footprint);
+    this.cityBuildingFootprints.set(key, footprints);
+    return true;
   }
 
   offsetLocalPoint(origin, yaw, localX, localZ, y = origin.y) {

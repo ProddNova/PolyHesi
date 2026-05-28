@@ -302,8 +302,8 @@
             <span></span>
           </div>
           <nav class="browser-tabs" aria-label="Garage sites">
-            <button class="browser-tab is-active" data-market-tab="cars" type="button">Used Marketplace</button>
-            <button class="browser-tab" data-market-tab="parts" type="button">Parts Site</button>
+            <button class="browser-tab is-active" data-market-tab="cars" type="button">NightRunner Auctions</button>
+            <button class="browser-tab" data-market-tab="parts" type="button">PartDock</button>
           </nav>
           <button id="marketCloseButton" class="browser-close" type="button">Chiudi</button>
         </header>
@@ -315,27 +315,28 @@
             <span></span>
           </div>
           <div class="browser-address">
-            <span id="marketAddress">https://garage.search/used-marketplace</span>
+            <span id="marketAddress">https://nightrunner.auctions/live-lots</span>
           </div>
         </div>
 
         <div class="browser-search-area">
-          <div class="browser-logo">Garage</div>
+          <div id="marketLogo" class="browser-logo">NightRunner</div>
           <div class="browser-search-box">
-            <span id="marketSearchQuery">used cars near me</span>
+            <span id="marketSearchQuery">aste auto usate import street</span>
           </div>
         </div>
 
         <div class="market-sections">
           <section class="browser-page is-active" data-market-page="cars">
             <div class="search-result-head">
-              <span>Used Marketplace</span>
+              <span>Aste live</span>
               <strong id="marketCarCount">0 risultati</strong>
             </div>
             <div class="search-chips">
-              <span>cash only</span>
-              <span>local pickup</span>
-              <span>as-is</span>
+              <span>km reali</span>
+              <span>manuale / automatico</span>
+              <span>colori diversi</span>
+              <span>escrow garage</span>
             </div>
             <div id="carShopList" class="car-shop-list"></div>
           </section>
@@ -346,60 +347,17 @@
               <strong id="marketCoinValue">0</strong>
             </div>
             <div class="search-result-head">
-              <span>Parts Site</span>
-              <strong>used parts</strong>
+              <span>PartDock catalogo</span>
+              <strong>pezzi singoli</strong>
             </div>
-            <div class="parts-grid">
-              <button class="upgrade-button" data-upgrade="engine" type="button">
-                <span>
-                  <strong>Engine</strong>
-                  Aspirazione + scarico
-                </span>
-                <small data-upgrade-info="engine">LV 0/5 - 320 coins</small>
-              </button>
-              <button class="upgrade-button" data-upgrade="turbo" type="button">
-                <span>
-                  <strong>Turbo</strong>
-                  Turbo kit rigenerato
-                </span>
-                <small data-upgrade-info="turbo">LV 0/4 - 480 coins</small>
-              </button>
-              <button class="upgrade-button" data-upgrade="ecu" type="button">
-                <span>
-                  <strong>ECU</strong>
-                  Mappa ECU notturna
-                </span>
-                <small data-upgrade-info="ecu">LV 0/4 - 390 coins</small>
-              </button>
-              <button class="upgrade-button" data-upgrade="tires" type="button">
-                <span>
-                  <strong>Tires</strong>
-                  Semi slick usate
-                </span>
-                <small data-upgrade-info="tires">LV 0/5 - 300 coins</small>
-              </button>
-              <button class="upgrade-button" data-upgrade="handling" type="button">
-                <span>
-                  <strong>Suspension</strong>
-                  Assetto coilover
-                </span>
-                <small data-upgrade-info="handling">LV 0/5 - 280 coins</small>
-              </button>
-              <button class="upgrade-button" data-upgrade="brakes" type="button">
-                <span>
-                  <strong>Brakes</strong>
-                  Kit freni maggiorato
-                </span>
-                <small data-upgrade-info="brakes">LV 0/5 - 290 coins</small>
-              </button>
-              <button class="upgrade-button" data-upgrade="weight" type="button">
-                <span>
-                  <strong>Weight</strong>
-                  Alleggerimento interni
-                </span>
-                <small data-upgrade-info="weight">LV 0/4 - 360 coins</small>
-              </button>
+            <div class="search-chips">
+              <span>turbo</span>
+              <span>assetto</span>
+              <span>distanziali</span>
+              <span>freni</span>
+              <span>gomme</span>
             </div>
+            <div id="partsGrid" class="parts-grid"></div>
           </section>
         </div>
       </section>
