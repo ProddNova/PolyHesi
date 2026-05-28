@@ -17,7 +17,7 @@ function formatTimeOfDay(value) {
 }
 
 export const DEFAULT_SETTINGS = {
-  carPreset: "JapanSportCoupe",
+  carPreset: "AmericanMuscle",
   maxSpeedKmh: 285,
   trafficEnabled: true,
   trafficDensity: 150,
@@ -92,6 +92,35 @@ const PSX_MODEL_IDS = [
   "ScandinavianHypercar",
 ];
 
+export const PLAYER_CAR_IDS = [
+  "AmericanMuscle",
+  "AmericanSportSedan",
+  "AmericanSuperSedan",
+  "AutobahnRacer",
+  "EnglishLightSportcar",
+  "GermanHypercar",
+  "GermanOldBandit",
+  "GermanRetroSportCar",
+  "GermanSmallCoupe",
+  "GermanSmallFighter",
+  "GermanSportCar",
+  "GermanSportWagen",
+  "GermanV8Supercar",
+  "ItalRareSupercar",
+  "Japan4WDStreetRacer",
+  "JapanDrifter",
+  "JapanLegend",
+  "JapanRallyLegendCoupe",
+  "JapanRotaryCoupe",
+  "JapanSmallCoupe",
+  "JapanSmallFighter",
+  "JapanSmallFWDCoupe",
+  "JapanSportCoupeTrackEdition",
+  "JapanTuner",
+];
+
+export const TRAFFIC_CAR_IDS = ["JapanRallyLegacy", "JapanSedan", "KoreanHatch"];
+
 const PAINT_COLORS = [
   0xb43f38, 0xd6ad3d, 0x596064, 0x2f4a5f, 0x30a78f, 0xd4d1c8,
   0x463f5b, 0x222529, 0xa7b7bd, 0x2d6a78, 0x8e2f29, 0xe9e2cf,
@@ -161,6 +190,8 @@ function createPsxPreset(id, index) {
     bodyHeight: 0.68,
     cabinLength: profile.length * 0.34,
     cabinOffset: -0.24,
+    inGamePlayer: PLAYER_CAR_IDS.includes(id),
+    trafficEligible: TRAFFIC_CAR_IDS.includes(id),
   };
 }
 
