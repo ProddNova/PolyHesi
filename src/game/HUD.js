@@ -3,6 +3,24 @@ import { CAR_PRESETS, PARTS_CATALOG, SETTING_DEFS, getCarPreset } from "./config
 const RAD_TO_DEG = 180 / Math.PI;
 const DEG_TO_RAD = Math.PI / 180;
 
+
+function getCarThumbnailCandidates(preset) {
+  const model = preset?.psxModel ?? preset?.id;
+  if (!model) {
+    return [];
+  }
+  const base = `./PSXStyleCars-DevEdition/body/${model}/MaterialsAndTextures`;
+  return [
+    `${base}/thumbnail.png`,
+    `${base}/texture1.png`,
+    `${base}/texture.png`,
+    `${base}/texture2.png`,
+    `${base}/Screenshot_20220727-190858_Google.png`,
+    `${base}/Screenshot_20220727-191009_Google.png`,
+  ];
+}
+
+
 export class HUD {
   constructor(
     settings,
@@ -489,7 +507,10 @@ export class HUD {
       button.dataset.carId = preset.id;
       button.type = "button";
       button.innerHTML = `
-        <span class="car-thumb-garage"><span class="car-swatch" style="--car-color: #${color}"></span></span>
+        <span class="car-thumb-garage">
+          <img class="car-thumb-image" alt="${preset.label}" loading="lazy" />
+          <span class="car-swatch" style="--car-color: #${color}"></span>
+        </span>
         <span class="car-shop-copy">
           <strong>${preset.label}</strong>
           <small>${preset.seller ?? "GhostList"} / ${preset.condition ?? "used"}</small>
@@ -497,6 +518,27 @@ export class HUD {
         </span>
         <span class="car-shop-action"></span>
       `;
+      const thumbnail = button.querySelector(".car-thumb-image");
+      const fallback = button.querySelector(".car-swatch");
+      const candidates = getCarThumbnailCandidates(preset);
+      let imageIndex = 0;
+      if (thumbnail) {
+        const loadCandidate = () => {
+          if (imageIndex >= candidates.length) {
+            thumbnail.classList.remove("is-active");
+            fallback?.classList.add("is-active");
+            return;
+          }
+          thumbnail.src = candidates[imageIndex++];
+        };
+        thumbnail.addEventListener("load", () => {
+          thumbnail.classList.add("is-active");
+          fallback?.classList.remove("is-active");
+        });
+        thumbnail.addEventListener("error", loadCandidate);
+        loadCandidate();
+      }
+
       button.addEventListener("click", () => this.onCarMarket?.(preset.id));
       this.nodes.carShopList.appendChild(button);
     }

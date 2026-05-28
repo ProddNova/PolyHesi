@@ -1047,6 +1047,26 @@ canvas {
   border-radius: 4px;
 }
 
+.car-thumb-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 5px;
+  display: none;
+}
+
+.car-thumb-image.is-active {
+  display: block;
+}
+
+.car-thumb-garage .car-swatch {
+  display: none;
+}
+
+.car-thumb-garage .car-swatch.is-active {
+  display: block;
+}
+
 .car-shop-copy {
   display: grid;
   gap: 4px;

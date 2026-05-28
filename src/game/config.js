@@ -17,7 +17,7 @@ function formatTimeOfDay(value) {
 }
 
 export const DEFAULT_SETTINGS = {
-  carPreset: "AmericanMuscle",
+  carPreset: "JapanLegend",
   maxSpeedKmh: 285,
   trafficEnabled: true,
   trafficDensity: 150,
