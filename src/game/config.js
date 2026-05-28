@@ -7,6 +7,8 @@ export const PLAYER_START = {
   z: -56,
   yaw: 0,
 };
+export const STARTER_CAR_ID = "JapanLegendaryDrifter";
+export const PROGRESS_VERSION = 2;
 
 function formatTimeOfDay(value) {
   const normalized = ((Number(value) % 24) + 24) % 24;
@@ -17,7 +19,7 @@ function formatTimeOfDay(value) {
 }
 
 export const DEFAULT_SETTINGS = {
-  carPreset: "JapanSportCoupe",
+  carPreset: STARTER_CAR_ID,
   maxSpeedKmh: 285,
   trafficEnabled: true,
   trafficDensity: 150,
@@ -131,11 +133,14 @@ function classifyModel(id) {
 function createPsxPreset(id, index) {
   const profile = classifyModel(id);
   const speedBias = 1 + (index % 5) * 0.012;
+  const basePrice = Math.round(
+    (180 + profile.accel * 22 + profile.speed * 260 + index * 6) / 10,
+  ) * 10;
   return {
     id,
     psxModel: id,
     label: labelFromModelId(id),
-    price: 0,
+    price: id === STARTER_CAR_ID ? 0 : basePrice,
     seller: "PSXStyleCars",
     condition: "asset folder",
     mileage: "showroom",

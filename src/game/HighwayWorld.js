@@ -123,14 +123,16 @@ const CITY_FACADE_PALETTE = [
   0x8d8172,
 ];
 const CITY_BLOCK_ROWS = [
-  { spacing: 52, lateral: 11, lateralJitter: 3, forwardJitter: 15, height: [22, 58], width: [13, 27], depth: [16, 30], skip: 0.0, serviceClearance: 74 },
-  { spacing: 76, lateral: 31, lateralJitter: 7, forwardJitter: 20, height: [30, 82], width: [16, 34], depth: [18, 34], skip: 0.0, serviceClearance: 106 },
-  { spacing: 106, lateral: 57, lateralJitter: 12, forwardJitter: 26, height: [42, 108], width: [18, 42], depth: [20, 40], skip: 0.01, serviceClearance: 146 },
-  { spacing: 142, lateral: 92, lateralJitter: 18, forwardJitter: 34, height: [54, 138], width: [22, 52], depth: [24, 48], skip: 0.02, serviceClearance: 196 },
-  { spacing: 188, lateral: 137, lateralJitter: 26, forwardJitter: 42, height: [64, 164], width: [26, 62], depth: [28, 56], skip: 0.03, serviceClearance: 250 },
+  { spacing: 40, lateral: 10, lateralJitter: 3, forwardJitter: 12, height: [22, 58], width: [13, 27], depth: [16, 30], skip: 0.0, serviceClearance: 78 },
+  { spacing: 56, lateral: 28, lateralJitter: 6, forwardJitter: 17, height: [30, 82], width: [16, 34], depth: [18, 34], skip: 0.0, serviceClearance: 112 },
+  { spacing: 76, lateral: 52, lateralJitter: 10, forwardJitter: 22, height: [42, 108], width: [18, 42], depth: [20, 40], skip: 0.0, serviceClearance: 152 },
+  { spacing: 102, lateral: 82, lateralJitter: 15, forwardJitter: 28, height: [54, 138], width: [22, 52], depth: [24, 48], skip: 0.005, serviceClearance: 202 },
+  { spacing: 132, lateral: 118, lateralJitter: 22, forwardJitter: 36, height: [64, 164], width: [26, 62], depth: [28, 56], skip: 0.01, serviceClearance: 258 },
+  { spacing: 166, lateral: 160, lateralJitter: 28, forwardJitter: 43, height: [78, 184], width: [28, 70], depth: [30, 62], skip: 0.015, serviceClearance: 318 },
+  { spacing: 208, lateral: 205, lateralJitter: 34, forwardJitter: 50, height: [88, 210], width: [32, 78], depth: [34, 68], skip: 0.02, serviceClearance: 380 },
 ];
 const CITY_MANUAL_CLEARANCE = 46;
-const CITY_DISTRICT_HALF_WIDTH = 246;
+const CITY_DISTRICT_HALF_WIDTH = 360;
 const CITY_SIDEWALK_INTERVAL = 24;
 const CITY_STREETLIGHT_INTERVAL = 112;
 
@@ -704,6 +706,13 @@ export class HighwayWorld {
       metalness: 0.18,
       flatShading: true,
     });
+    const ceilingLight = new THREE.MeshBasicMaterial({ color: 0xffd98c });
+    const ceilingLightHousing = new THREE.MeshStandardMaterial({
+      color: 0x202426,
+      roughness: 0.72,
+      metalness: 0.16,
+      flatShading: true,
+    });
     const deskMaterial = new THREE.MeshStandardMaterial({
       color: 0x5b4532,
       roughness: 0.82,
@@ -713,6 +722,8 @@ export class HighwayWorld {
     wall.name = "garageWall";
     roof.name = "garageRoof";
     shutter.name = "garageShutter";
+    ceilingLight.name = "garageCeilingLight";
+    ceilingLightHousing.name = "garageCeilingLightHousing";
     deskMaterial.name = "garageDesk";
     screenMaterial.name = "garageScreen";
 
@@ -724,6 +735,16 @@ export class HighwayWorld {
     parent.add(makeBox(garage.wall, garage.height, 4.78, wall, new THREE.Vector3(garage.rightX, 3.24, -37.4), true));
     parent.add(makeBox(garage.wall, 1.35, 10.9, wall, new THREE.Vector3(garage.rightX, 5.72, garage.centerZ), true));
     parent.add(makeBox(36.3, 0.78, 22.2, roof, new THREE.Vector3(garage.centerX, 6.85, garage.centerZ), true));
+
+    for (const x of [-101.5, -94.6, -87.7, -80.8]) {
+      for (const z of [-50.0, -40.0]) {
+        parent.add(makeBox(3.8, 0.12, 0.82, ceilingLightHousing, new THREE.Vector3(x, 6.34, z), true));
+        parent.add(makeBox(3.25, 0.07, 0.48, ceilingLight, new THREE.Vector3(x, 6.26, z)));
+        const light = new THREE.PointLight(0xffdca3, 0.92, 16, 1.9);
+        light.position.set(x, 5.8, z);
+        parent.add(light);
+      }
+    }
 
     for (const [x, z] of [
       [garage.leftX, garage.frontZ],
@@ -910,7 +931,7 @@ export class HighwayWorld {
 
   createProceduralRoadsideDistrict(parent) {
     const district = new THREE.Group();
-    district.name = "ProceduralRoadsideDistrict";
+    district.name = "FixedDeterministicRoadsideDistrict";
     district.userData.remodelIgnore = true;
 
     const bodyBatches = CITY_FACADE_PALETTE.map(() => []);

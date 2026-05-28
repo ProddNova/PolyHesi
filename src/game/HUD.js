@@ -1,4 +1,5 @@
 import { CAR_PRESETS, PARTS_CATALOG, SETTING_DEFS, getCarPreset } from "./config.js";
+import { getCarThumbnailUrl } from "./CarThumbnailRenderer.js";
 
 const RAD_TO_DEG = 180 / Math.PI;
 const DEG_TO_RAD = Math.PI / 180;
@@ -484,12 +485,13 @@ export class HUD {
     this.nodes.carShopList.innerHTML = "";
     for (const preset of CAR_PRESETS) {
       const button = document.createElement("button");
-      const color = preset.color.toString(16).padStart(6, "0");
       button.className = "car-shop-button";
       button.dataset.carId = preset.id;
       button.type = "button";
       button.innerHTML = `
-        <span class="car-swatch" style="--car-color: #${color}"></span>
+        <span class="car-thumbnail-frame">
+          <img class="car-thumbnail" alt="${preset.label}" loading="lazy">
+        </span>
         <span class="car-shop-copy">
           <strong>${preset.label}</strong>
           <small>${preset.seller ?? "GhostList"} / ${preset.condition ?? "used"}</small>
@@ -497,12 +499,27 @@ export class HUD {
         </span>
         <span class="car-shop-action"></span>
       `;
+      this.loadCarThumbnail(preset, button.querySelector(".car-thumbnail"));
       button.addEventListener("click", () => this.onCarMarket?.(preset.id));
       this.nodes.carShopList.appendChild(button);
     }
     if (this.nodes.marketCarCount) {
       this.nodes.marketCarCount.textContent = `${CAR_PRESETS.length} risultati`;
     }
+  }
+
+  loadCarThumbnail(preset, image) {
+    if (!image) {
+      return;
+    }
+
+    getCarThumbnailUrl(preset).then((url) => {
+      if (!url || !image.isConnected) {
+        return;
+      }
+      image.src = url;
+      image.classList.add("is-loaded");
+    });
   }
 
   update({ speedKmh, score, coins, comboMultiplier, nearMisses, hits, maxHits, fps, crashed, canRestart }) {
@@ -656,19 +673,21 @@ export class HUD {
     this.nodes.ownedCarList.innerHTML = "";
     for (const preset of CAR_PRESETS.filter((car) => owned.has(car.id))) {
       const button = document.createElement("button");
-      const color = preset.color.toString(16).padStart(6, "0");
       button.type = "button";
       button.className = "owned-car-button";
       button.classList.toggle("is-active", activeCar === preset.id);
       button.dataset.ownedCarId = preset.id;
       button.innerHTML = `
-        <span class="car-swatch" style="--car-color: #${color}"></span>
+        <span class="car-thumbnail-frame">
+          <img class="car-thumbnail" alt="${preset.label}" loading="lazy">
+        </span>
         <span class="car-shop-copy">
           <strong>${preset.label}</strong>
           <small>${preset.condition ?? "used"} / ${preset.mileage ?? "unknown"}</small>
         </span>
         <span class="car-shop-action">${activeCar === preset.id ? "In uso" : "Usa"}</span>
       `;
+      this.loadCarThumbnail(preset, button.querySelector(".car-thumbnail"));
       button.addEventListener("click", () => this.onOwnedCarSelect?.(preset.id));
       this.nodes.ownedCarList.appendChild(button);
     }

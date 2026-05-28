@@ -5,6 +5,7 @@ import {
   DEV_STORAGE_KEY,
   PARTS_CATALOG,
   PHYSICS_SETTING_KEYS,
+  PROGRESS_VERSION,
   SETTING_DEFS,
 } from "./config.js";
 import { AudioSystem } from "./AudioSystem.js";
@@ -96,7 +97,7 @@ export class Game {
     };
     this.upgrades = Object.fromEntries(PARTS_CATALOG.map((part) => [part.id, 0]));
     this.installedUpgrades = Object.fromEntries(PARTS_CATALOG.map((part) => [part.id, 0]));
-    this.ownedCars = new Set(CAR_PRESETS.map((preset) => preset.id));
+    this.ownedCars = new Set([DEFAULT_SETTINGS.carPreset]);
     this.applySavedProgress(options.progress);
     this.marketOpen = false;
     this.garageManagerOpen = false;
@@ -1372,10 +1373,16 @@ export class Game {
     const carIds = new Set(CAR_PRESETS.map((preset) => preset.id));
     const ownedCars = [
       ...new Set(
-        (Array.isArray(raw.ownedCars) ? raw.ownedCars : CAR_PRESETS.map((preset) => preset.id))
+        (Array.isArray(raw.ownedCars) ? raw.ownedCars : [DEFAULT_SETTINGS.carPreset])
           .filter((id) => carIds.has(id)),
       ),
     ];
+    const isLegacyFullGarage =
+      clampSaveInteger(raw.version, 0, PROGRESS_VERSION) < PROGRESS_VERSION &&
+      ownedCars.length === CAR_PRESETS.length;
+    if (isLegacyFullGarage) {
+      ownedCars.splice(0, ownedCars.length, DEFAULT_SETTINGS.carPreset);
+    }
     if (!ownedCars.length) {
       ownedCars.push(DEFAULT_SETTINGS.carPreset);
     }
@@ -1390,14 +1397,14 @@ export class Game {
     const upgrades = {};
     const installedUpgrades = {};
     for (const part of PARTS_CATALOG) {
-      const ownedLevel = clampSaveInteger(raw.upgrades?.[part.id], 0, part.maxLevel);
+      const ownedLevel = isLegacyFullGarage ? 0 : clampSaveInteger(raw.upgrades?.[part.id], 0, part.maxLevel);
       upgrades[part.id] = ownedLevel;
       installedUpgrades[part.id] = clampSaveInteger(raw.installedUpgrades?.[part.id], 0, ownedLevel);
     }
 
     return {
-      coins: clampSaveInteger(raw.coins, 0, Number.MAX_SAFE_INTEGER),
-      bestScore: clampSaveInteger(raw.bestScore, 0, Number.MAX_SAFE_INTEGER),
+      coins: isLegacyFullGarage ? 0 : clampSaveInteger(raw.coins, 0, Number.MAX_SAFE_INTEGER),
+      bestScore: isLegacyFullGarage ? 0 : clampSaveInteger(raw.bestScore, 0, Number.MAX_SAFE_INTEGER),
       activeCar,
       ownedCars,
       upgrades,
@@ -1408,7 +1415,7 @@ export class Game {
   getProgressSnapshot() {
     this.updateBestScore();
     return {
-      version: 1,
+      version: PROGRESS_VERSION,
       coins: Math.max(0, Math.floor(this.coins)),
       bestScore: Math.max(0, Math.floor(this.bestScore)),
       lastScore: Math.max(0, Math.floor(this.score)),

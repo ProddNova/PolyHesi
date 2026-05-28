@@ -5,7 +5,7 @@ import { MongoClient } from "mongodb";
 import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CAR_PRESETS, DEFAULT_SETTINGS, PARTS_CATALOG } from "../src/game/config.js";
+import { CAR_PRESETS, DEFAULT_SETTINGS, PARTS_CATALOG, PROGRESS_VERSION } from "../src/game/config.js";
 
 dotenv.config();
 
@@ -151,12 +151,12 @@ function defaultUpgradeLevels() {
 
 function defaultProgress() {
   return {
-    version: 1,
+    version: PROGRESS_VERSION,
     coins: 0,
     bestScore: 0,
     lastScore: 0,
     activeCar: DEFAULT_SETTINGS.carPreset,
-    ownedCars: CAR_PRESETS.map((car) => car.id),
+    ownedCars: [DEFAULT_SETTINGS.carPreset],
     upgrades: defaultUpgradeLevels(),
     installedUpgrades: defaultUpgradeLevels(),
   };
@@ -170,6 +170,12 @@ function sanitizeProgress(rawProgress) {
       (Array.isArray(raw.ownedCars) ? raw.ownedCars : fallback.ownedCars).filter((id) => CAR_IDS.has(id)),
     ),
   ];
+  const isLegacyFullGarage =
+    clampInteger(raw.version, 0, PROGRESS_VERSION) < PROGRESS_VERSION &&
+    ownedCars.length === CAR_PRESETS.length;
+  if (isLegacyFullGarage) {
+    ownedCars.splice(0, ownedCars.length, DEFAULT_SETTINGS.carPreset);
+  }
 
   if (!ownedCars.length) {
     ownedCars.push(DEFAULT_SETTINGS.carPreset);
@@ -185,16 +191,16 @@ function sanitizeProgress(rawProgress) {
   const upgrades = {};
   const installedUpgrades = {};
   for (const [partId, part] of PARTS_BY_ID) {
-    const ownedLevel = clampInteger(raw.upgrades?.[partId], 0, part.maxLevel);
+    const ownedLevel = isLegacyFullGarage ? 0 : clampInteger(raw.upgrades?.[partId], 0, part.maxLevel);
     upgrades[partId] = ownedLevel;
     installedUpgrades[partId] = clampInteger(raw.installedUpgrades?.[partId], 0, ownedLevel);
   }
 
   return {
-    version: 1,
-    coins: clampInteger(raw.coins, 0, Number.MAX_SAFE_INTEGER),
-    bestScore: clampInteger(raw.bestScore, 0, Number.MAX_SAFE_INTEGER),
-    lastScore: clampInteger(raw.lastScore, 0, Number.MAX_SAFE_INTEGER),
+    version: PROGRESS_VERSION,
+    coins: isLegacyFullGarage ? 0 : clampInteger(raw.coins, 0, Number.MAX_SAFE_INTEGER),
+    bestScore: isLegacyFullGarage ? 0 : clampInteger(raw.bestScore, 0, Number.MAX_SAFE_INTEGER),
+    lastScore: isLegacyFullGarage ? 0 : clampInteger(raw.lastScore, 0, Number.MAX_SAFE_INTEGER),
     activeCar,
     ownedCars,
     upgrades,

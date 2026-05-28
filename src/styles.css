@@ -1017,19 +1017,52 @@ canvas {
   text-transform: uppercase;
 }
 
-.car-swatch {
-  width: 36px;
-  height: 24px;
+.car-thumbnail-frame {
+  position: relative;
+  width: 112px;
+  height: 68px;
   flex: 0 0 auto;
   border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 5px;
-  background: var(--car-color);
-  box-shadow: inset 0 -8px 0 rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 42%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.035) 0,
+      rgba(255, 255, 255, 0.035) 1px,
+      transparent 1px,
+      transparent 6px
+    ),
+    #141819;
+  box-shadow: inset 0 -14px 0 rgba(0, 0, 0, 0.18);
+}
+
+.car-thumbnail-frame::after {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  content: "";
+  pointer-events: none;
+}
+
+.car-thumbnail {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+.car-thumbnail.is-loaded {
+  opacity: 1;
 }
 
 .car-shop-copy {
   display: grid;
   gap: 4px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -2016,6 +2049,11 @@ canvas {
   .owned-car-button {
     min-height: 68px;
     padding: 10px;
+  }
+
+  .car-thumbnail-frame {
+    width: 86px;
+    height: 54px;
   }
 
   .car-shop-copy strong {
