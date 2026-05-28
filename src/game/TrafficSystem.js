@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { LANES } from "./config.js";
+import { LANES, TRAFFIC_CAR_IDS } from "./config.js";
 import { choice, clamp, damp, makeBox, rand } from "./utils.js";
 
 const TRAFFIC_COLORS = [0xb8b4a8, 0xd6d3c8, 0x4c5459, 0x273c4d, 0x7d2520, 0x4d594c];
@@ -276,7 +276,8 @@ export class TrafficSystem {
   }
 
   createVehicle() {
-    const isTruck = Math.random() < 0.14;
+    const isTruck = false;
+    const trafficModel = choice(TRAFFIC_CAR_IDS);
     const color = choice(TRAFFIC_COLORS);
     const bodyMaterial = new THREE.MeshStandardMaterial({
       color,
@@ -321,6 +322,7 @@ export class TrafficSystem {
 
     return {
       id: this.nextId++,
+      trafficModel,
       kind: isTruck ? "truck" : "car",
       group,
       width: bodyWidth,

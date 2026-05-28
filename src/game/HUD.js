@@ -194,7 +194,7 @@ export class HUD {
       for (const preset of CAR_PRESETS) {
         const option = document.createElement("option");
         option.value = preset.id;
-        option.textContent = preset.label;
+        option.textContent = preset.inGamePlayer ? preset.label : `${preset.label} [NON USATA IN GAME]`;
         this.nodes.carPreset.appendChild(option);
       }
       this.nodes.carPreset.value = this.settings.carPreset;
@@ -482,14 +482,14 @@ export class HUD {
     }
 
     this.nodes.carShopList.innerHTML = "";
-    for (const preset of CAR_PRESETS) {
+    for (const preset of CAR_PRESETS.filter((car) => car.inGamePlayer)) {
       const button = document.createElement("button");
       const color = preset.color.toString(16).padStart(6, "0");
       button.className = "car-shop-button";
       button.dataset.carId = preset.id;
       button.type = "button";
       button.innerHTML = `
-        <span class="car-swatch" style="--car-color: #${color}"></span>
+        <span class="car-thumb-garage"><span class="car-swatch" style="--car-color: #${color}"></span></span>
         <span class="car-shop-copy">
           <strong>${preset.label}</strong>
           <small>${preset.seller ?? "GhostList"} / ${preset.condition ?? "used"}</small>
@@ -501,7 +501,7 @@ export class HUD {
       this.nodes.carShopList.appendChild(button);
     }
     if (this.nodes.marketCarCount) {
-      this.nodes.marketCarCount.textContent = `${CAR_PRESETS.length} risultati`;
+      this.nodes.marketCarCount.textContent = `${CAR_PRESETS.filter((car) => car.inGamePlayer).length} risultati`;
     }
   }
 
