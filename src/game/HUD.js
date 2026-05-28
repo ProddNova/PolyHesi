@@ -533,6 +533,13 @@ export class HUD {
     this.nodes.shell?.classList.toggle("is-garage", mode === "garage");
   }
 
+  setAdminMode(isAdmin) {
+    this.nodes.shell?.classList.toggle("is-admin", Boolean(isAdmin));
+    if (!isAdmin) {
+      this.setDevPanelVisible(false);
+    }
+  }
+
   setInteraction(text, key = "E") {
     const active = Boolean(text);
     if (this.nodes.interactionKey) {

@@ -28,10 +28,23 @@ const DRIVING_KEYS = new Set([
   "Digit5",
 ]);
 
+function isEditableTarget(target) {
+  return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+}
+
 export class InputController {
   constructor(target = window) {
     this.target = target;
     this.keys = new Set();
+    this.touchControls = {
+      left: false,
+      right: false,
+      throttle: false,
+      brake: false,
+      handbrake: false,
+    };
+    this.touchControlCounts = new Map();
+    this.touchPointers = new Map();
     this.restartQueued = false;
     this.cameraModeQueued = false;
     this.cameraViewQueued = null;
@@ -56,6 +69,7 @@ export class InputController {
     window.addEventListener("keyup", (event) => this.handleKeyUp(event));
     window.addEventListener("blur", () => {
       this.keys.clear();
+      this.clearTouchControls();
       this.hasPointerPosition = false;
     });
     this.target.addEventListener("pointerdown", (event) => this.handlePointerDown(event));
@@ -66,9 +80,14 @@ export class InputController {
       this.isCameraDragging = false;
     });
     this.target.addEventListener("contextmenu", (event) => event.preventDefault());
+    this.bindTouchControls(document);
   }
 
   handleKeyDown(event) {
+    if (isEditableTarget(event.target)) {
+      return;
+    }
+
     if (DRIVING_KEYS.has(event.code)) {
       event.preventDefault();
     }
@@ -110,11 +129,102 @@ export class InputController {
   }
 
   handleKeyUp(event) {
+    if (isEditableTarget(event.target)) {
+      this.keys.delete(event.code);
+      return;
+    }
+
     if (DRIVING_KEYS.has(event.code)) {
       event.preventDefault();
     }
 
     this.keys.delete(event.code);
+  }
+
+  bindTouchControls(root) {
+    for (const button of root.querySelectorAll("[data-touch-control]")) {
+      const control = button.dataset.touchControl;
+      button.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) {
+          return;
+        }
+
+        event.preventDefault();
+        button.setPointerCapture?.(event.pointerId);
+        this.touchPointers.set(event.pointerId, { control, button });
+        this.setTouchControl(control, true);
+      });
+
+      const release = (event) => {
+        const active = this.touchPointers.get(event.pointerId);
+        if (!active || active.button !== button) {
+          return;
+        }
+
+        this.touchPointers.delete(event.pointerId);
+        this.setTouchControl(active.control, false);
+      };
+
+      button.addEventListener("pointerup", release);
+      button.addEventListener("pointercancel", release);
+      button.addEventListener("lostpointercapture", release);
+    }
+
+    for (const button of root.querySelectorAll("[data-touch-action]")) {
+      button.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) {
+          return;
+        }
+
+        event.preventDefault();
+        this.queueTouchAction(button.dataset.touchAction);
+        button.classList.add("is-active");
+        window.setTimeout(() => button.classList.remove("is-active"), 130);
+      });
+    }
+  }
+
+  setTouchControl(control, active) {
+    if (!Object.prototype.hasOwnProperty.call(this.touchControls, control)) {
+      return;
+    }
+
+    const count = this.touchControlCounts.get(control) ?? 0;
+    const nextCount = active ? count + 1 : Math.max(0, count - 1);
+    this.touchControlCounts.set(control, nextCount);
+    this.touchControls[control] = nextCount > 0;
+    for (const button of document.querySelectorAll(`[data-touch-control="${control}"]`)) {
+      button.classList.toggle("is-active", this.touchControls[control]);
+    }
+  }
+
+  clearTouchControls() {
+    this.touchPointers.clear();
+    this.touchControlCounts.clear();
+    for (const control of Object.keys(this.touchControls)) {
+      this.touchControls[control] = false;
+    }
+    for (const button of document.querySelectorAll("[data-touch-control]")) {
+      button.classList.remove("is-active");
+    }
+  }
+
+  queueTouchAction(action) {
+    if (action === "interact") {
+      this.interactQueued = true;
+    }
+    if (action === "garage") {
+      this.garageMenuQueued = true;
+    }
+    if (action === "camera") {
+      this.cameraModeQueued = true;
+    }
+    if (action === "restart") {
+      this.restartQueued = true;
+    }
+    if (action === "map") {
+      this.mapToggleQueued = true;
+    }
   }
 
   handlePointerDown(event) {
@@ -188,11 +298,11 @@ export class InputController {
   }
 
   getState() {
-    const left = this.keys.has("ArrowLeft") || this.keys.has("KeyA");
-    const right = this.keys.has("ArrowRight") || this.keys.has("KeyD");
-    const throttle = this.keys.has("ArrowUp") || this.keys.has("KeyW");
-    const footBrake = this.keys.has("ArrowDown") || this.keys.has("KeyS");
-    const handbrake = this.keys.has("Space");
+    const left = this.keys.has("ArrowLeft") || this.keys.has("KeyA") || this.touchControls.left;
+    const right = this.keys.has("ArrowRight") || this.keys.has("KeyD") || this.touchControls.right;
+    const throttle = this.keys.has("ArrowUp") || this.keys.has("KeyW") || this.touchControls.throttle;
+    const footBrake = this.keys.has("ArrowDown") || this.keys.has("KeyS") || this.touchControls.brake;
+    const handbrake = this.keys.has("Space") || this.touchControls.handbrake;
     const brake = footBrake || handbrake;
     const noClipUp = this.keys.has("Space");
     const noClipDown = this.keys.has("ControlLeft") || this.keys.has("ControlRight");

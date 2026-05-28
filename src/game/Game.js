@@ -33,13 +33,36 @@ const REMODEL_PRESETS = {
     dimensions: { x: 0.18, y: 0.18, z: 18.8 },
   },
 };
+const SAVE_DEBOUNCE_MS = 1800;
+const SAVE_RETRY_MS = 8000;
+
+function clampSaveInteger(value, min, max) {
+  const next = Math.floor(Number(value));
+  if (!Number.isFinite(next)) {
+    return min;
+  }
+  return Math.min(max, Math.max(min, next));
+}
 
 export class Game {
-  constructor(root) {
+  constructor(root, options = {}) {
     this.root = root;
+    this.authClient = options.authClient ?? null;
+    this.session = options.session ?? null;
+    this.isAdmin = this.session?.role === "admin";
+    this.onSaveStatus = options.onSaveStatus ?? (() => {});
+    this.progressDirty = false;
+    this.progressSaveTimer = null;
+    this.progressSaveInFlight = null;
     this.settings = this.loadSavedSettings();
+    if (!this.isAdmin) {
+      this.settings.noClip = false;
+      this.settings.remodelMode = false;
+      this.settings.hitboxMode = false;
+    }
     this.clock = new THREE.Clock();
     this.score = 0;
+    this.bestScore = 0;
     this.combo = 0;
     this.comboTimer = 0;
     this.nearMisses = 0;
@@ -74,6 +97,7 @@ export class Game {
     this.upgrades = Object.fromEntries(PARTS_CATALOG.map((part) => [part.id, 0]));
     this.installedUpgrades = Object.fromEntries(PARTS_CATALOG.map((part) => [part.id, 0]));
     this.ownedCars = new Set(CAR_PRESETS.map((preset) => preset.id));
+    this.applySavedProgress(options.progress);
     this.marketOpen = false;
     this.garageManagerOpen = false;
     this.walker = {
@@ -109,6 +133,7 @@ export class Game {
     this.input = new InputController(this.renderer.domElement);
     this.world = new HighwayWorld(this.scene);
     this.player = new PlayerCar(this.scene, this.world.getStartPose());
+    this.player.setCarPreset(this.settings.carPreset);
     this.traffic = new TrafficSystem(this.scene, this.world);
     this.debugOverlay = new DebugOverlay(this.scene, this.world);
     this.remodelOverlay = new RemodelOverlay(
@@ -181,14 +206,19 @@ export class Game {
       () => this.copyRemodelTarget(),
       () => this.pasteRemodelTarget(),
     );
+    this.hud.setAdminMode(this.isAdmin);
     this.hud.setRemodelAvailable(this.settings.noClip);
     this.setRemodelMode(this.settings.remodelMode);
+    this.setSaveStatus(this.authClient ? "pronto" : "");
 
     this.world.update();
     this.traffic.reset(this.settings);
     this.enterGarageMode(true);
 
     window.addEventListener("resize", () => this.resize());
+    window.addEventListener("beforeunload", () => {
+      this.flushProgressSave({ force: true, keepalive: true });
+    });
   }
 
   start() {
@@ -233,13 +263,25 @@ export class Game {
       this.hud.toggleMap();
     }
     if (this.input.consumeDevPanelToggle()) {
-      this.hud.toggleDevPanel();
+      if (this.isAdmin) {
+        this.hud.toggleDevPanel();
+      } else {
+        this.hud.flashNotice("Admin", "accesso riservato");
+      }
     }
     if (this.input.consumeNoClipToggle()) {
-      this.setNoClipMode(!this.settings.noClip);
+      if (this.isAdmin) {
+        this.setNoClipMode(!this.settings.noClip);
+      } else {
+        this.hud.flashNotice("Admin", "accesso riservato");
+      }
     }
     if (this.input.consumeRemodelToggle()) {
-      this.toggleRemodelShortcut();
+      if (this.isAdmin) {
+        this.toggleRemodelShortcut();
+      } else {
+        this.hud.flashNotice("Admin", "accesso riservato");
+      }
     }
 
     if (this.settings.noClip) {
@@ -487,6 +529,7 @@ export class Game {
         const earned = Math.floor(this.coinAccumulator);
         this.coinAccumulator -= earned;
         this.coins += earned;
+        this.markProgressDirty();
       }
     }
 
@@ -552,6 +595,7 @@ export class Game {
     const coins = Math.round(2 + danger * 5 + this.combo * 0.9);
     this.score += points;
     this.coins += coins;
+    this.markProgressDirty();
     this.cameraShake = Math.max(this.cameraShake, 0.18 + danger * 0.2);
     car.nearMissCooldown = 2.4;
     this.hud.flashNearMiss(points, "Near miss", coins);
@@ -588,6 +632,7 @@ export class Game {
     const coins = Math.round(1 + relativeSpeed * 4 + this.combo * 0.45);
     this.score += points;
     this.coins += coins;
+    this.markProgressDirty();
     this.hud.flashNearMiss(points, "Sorpasso", coins);
     this.audio.coin();
   }
@@ -651,6 +696,9 @@ export class Game {
   }
 
   resetRunScore() {
+    if (this.updateBestScore()) {
+      this.markProgressDirty({ immediate: true });
+    }
     this.score = 0;
     this.combo = 0;
     this.comboTimer = 0;
@@ -796,6 +844,7 @@ export class Game {
     this.installedUpgrades[upgrade] = Math.min(this.upgrades[upgrade], (this.installedUpgrades[upgrade] ?? 0) + 1);
     this.applyInstalledUpgrades();
     this.hud.syncSettings?.();
+    this.markProgressDirty({ immediate: true });
     this.audio.upgrade();
   }
 
@@ -815,6 +864,7 @@ export class Game {
     this.installedUpgrades[upgrade] = nextLevel;
     this.applyInstalledUpgrades();
     this.hud.syncSettings?.();
+    this.markProgressDirty({ immediate: true });
     this.audio.upgrade();
   }
 
@@ -875,6 +925,7 @@ export class Game {
     this.coins -= price;
     this.ownedCars.add(carId);
     this.selectOwnedCar(carId);
+    this.markProgressDirty({ immediate: true });
     this.audio.upgrade();
   }
 
@@ -886,6 +937,7 @@ export class Game {
     this.settings.carPreset = carId;
     this.player.setCarPreset(carId);
     this.hud.syncSettings?.();
+    this.markProgressDirty({ immediate: true });
   }
 
   setCameraMode(index) {
@@ -1304,6 +1356,146 @@ export class Game {
     this.world.applyEnvironment?.(this.settings);
   }
 
+  applySavedProgress(progress = {}) {
+    const saved = this.normalizeProgress(progress);
+    this.coins = saved.coins;
+    this.bestScore = saved.bestScore;
+    this.upgrades = saved.upgrades;
+    this.installedUpgrades = saved.installedUpgrades;
+    this.ownedCars = new Set(saved.ownedCars);
+    this.settings.carPreset = saved.activeCar;
+    this.applyInstalledUpgrades();
+  }
+
+  normalizeProgress(progress = {}) {
+    const raw = progress && typeof progress === "object" ? progress : {};
+    const carIds = new Set(CAR_PRESETS.map((preset) => preset.id));
+    const ownedCars = [
+      ...new Set(
+        (Array.isArray(raw.ownedCars) ? raw.ownedCars : CAR_PRESETS.map((preset) => preset.id))
+          .filter((id) => carIds.has(id)),
+      ),
+    ];
+    if (!ownedCars.length) {
+      ownedCars.push(DEFAULT_SETTINGS.carPreset);
+    }
+
+    const activeCar =
+      carIds.has(raw.activeCar) && ownedCars.includes(raw.activeCar)
+        ? raw.activeCar
+        : ownedCars.includes(DEFAULT_SETTINGS.carPreset)
+          ? DEFAULT_SETTINGS.carPreset
+          : ownedCars[0];
+
+    const upgrades = {};
+    const installedUpgrades = {};
+    for (const part of PARTS_CATALOG) {
+      const ownedLevel = clampSaveInteger(raw.upgrades?.[part.id], 0, part.maxLevel);
+      upgrades[part.id] = ownedLevel;
+      installedUpgrades[part.id] = clampSaveInteger(raw.installedUpgrades?.[part.id], 0, ownedLevel);
+    }
+
+    return {
+      coins: clampSaveInteger(raw.coins, 0, Number.MAX_SAFE_INTEGER),
+      bestScore: clampSaveInteger(raw.bestScore, 0, Number.MAX_SAFE_INTEGER),
+      activeCar,
+      ownedCars,
+      upgrades,
+      installedUpgrades,
+    };
+  }
+
+  getProgressSnapshot() {
+    this.updateBestScore();
+    return {
+      version: 1,
+      coins: Math.max(0, Math.floor(this.coins)),
+      bestScore: Math.max(0, Math.floor(this.bestScore)),
+      lastScore: Math.max(0, Math.floor(this.score)),
+      activeCar: this.settings.carPreset,
+      ownedCars: [...this.ownedCars],
+      upgrades: { ...this.upgrades },
+      installedUpgrades: { ...this.installedUpgrades },
+    };
+  }
+
+  updateBestScore() {
+    const score = Math.max(0, Math.floor(this.score));
+    if (score <= this.bestScore) {
+      return false;
+    }
+
+    this.bestScore = score;
+    return true;
+  }
+
+  markProgressDirty({ immediate = false } = {}) {
+    if (!this.authClient) {
+      return;
+    }
+
+    this.progressDirty = true;
+    this.setSaveStatus("salvando");
+    if (immediate) {
+      this.flushProgressSave({ force: true });
+      return;
+    }
+
+    if (!this.progressSaveTimer) {
+      this.progressSaveTimer = window.setTimeout(() => this.flushProgressSave(), SAVE_DEBOUNCE_MS);
+    }
+  }
+
+  async flushProgressSave({ force = false, keepalive = false } = {}) {
+    if (!this.authClient) {
+      return null;
+    }
+
+    if (this.progressSaveTimer) {
+      window.clearTimeout(this.progressSaveTimer);
+      this.progressSaveTimer = null;
+    }
+
+    if (!force && !this.progressDirty) {
+      return null;
+    }
+
+    if (this.progressSaveInFlight) {
+      return this.progressSaveInFlight;
+    }
+
+    const snapshot = this.getProgressSnapshot();
+    this.progressDirty = false;
+    this.setSaveStatus("salvando");
+    this.progressSaveInFlight = this.authClient
+      .saveGameState(snapshot, { keepalive })
+      .then(() => {
+        this.setSaveStatus("salvato");
+        return snapshot;
+      })
+      .catch((error) => {
+        this.progressDirty = true;
+        this.setSaveStatus("errore");
+        if (!keepalive) {
+          this.progressSaveTimer = window.setTimeout(() => this.flushProgressSave(), SAVE_RETRY_MS);
+        }
+        console.warn("Unable to save game progress.", error);
+        return null;
+      })
+      .finally(() => {
+        this.progressSaveInFlight = null;
+        if (this.progressDirty && !this.progressSaveTimer && !keepalive) {
+          this.progressSaveTimer = window.setTimeout(() => this.flushProgressSave(), SAVE_DEBOUNCE_MS);
+        }
+      });
+
+    return this.progressSaveInFlight;
+  }
+
+  setSaveStatus(status) {
+    this.onSaveStatus?.(status);
+  }
+
   loadSavedSettings() {
     const settings = { ...DEFAULT_SETTINGS };
     try {
@@ -1339,6 +1531,11 @@ export class Game {
   }
 
   saveDevSettings() {
+    if (!this.isAdmin) {
+      this.hud.flashNotice("Admin", "accesso riservato");
+      return;
+    }
+
     const payload = {
       carPreset: this.settings.carPreset,
       trafficEnabled: this.settings.trafficEnabled,
@@ -1361,6 +1558,11 @@ export class Game {
   }
 
   resetDevSettings() {
+    if (!this.isAdmin) {
+      this.hud.flashNotice("Admin", "accesso riservato");
+      return;
+    }
+
     try {
       window.localStorage.removeItem(DEV_STORAGE_KEY);
     } catch {

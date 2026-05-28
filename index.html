@@ -8,7 +8,34 @@
   <body>
     <div id="game-root"></div>
 
-    <main class="hud-shell" aria-label="PolyHesi game HUD">
+    <section id="loginOverlay" class="login-overlay" aria-label="Accesso PolyHesi">
+      <form id="loginForm" class="login-card">
+        <div class="login-brand">
+          <span class="brand-dot"></span>
+          <span>PolyHesi</span>
+        </div>
+        <h1>Accesso riservato</h1>
+        <label>
+          <span>Username</span>
+          <input id="loginUsername" name="username" type="text" autocomplete="username" required />
+        </label>
+        <label>
+          <span>Password</span>
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <button id="loginButton" type="submit">Entra</button>
+        <p id="loginError" class="login-error" role="alert"></p>
+      </form>
+    </section>
+
+    <main class="hud-shell" aria-label="PolyHesi game HUD" hidden>
+      <section id="sessionPanel" class="session-panel" aria-label="Sessione" hidden>
+        <span id="sessionName">User</span>
+        <small id="sessionRole">test</small>
+        <small id="saveStatus" data-status="pronto">pronto</small>
+        <button id="logoutButton" type="button">Logout</button>
+      </section>
+
       <section class="hud-card hud-card--stack hud-card--speed" aria-live="polite">
         <div class="brand-lockup">
           <span class="brand-dot"></span>
@@ -56,6 +83,24 @@
       <div id="remodelHoverLabel" class="remodel-hover-label" aria-hidden="true"></div>
 
       <button id="restartButton" class="restart-button" type="button">Restart</button>
+
+      <section id="touchControls" class="touch-controls" aria-label="Comandi touch">
+        <div class="touch-actions">
+          <button data-touch-action="interact" type="button" aria-label="Interagisci">E</button>
+          <button data-touch-action="garage" type="button" aria-label="Garage">G</button>
+          <button data-touch-action="camera" type="button" aria-label="Cambia camera">CAM</button>
+          <button data-touch-action="restart" type="button" aria-label="Restart">RST</button>
+        </div>
+        <div class="touch-cluster touch-cluster--left">
+          <button data-touch-control="left" type="button" aria-label="Sinistra">L</button>
+          <button data-touch-control="right" type="button" aria-label="Destra">R</button>
+        </div>
+        <div class="touch-cluster touch-cluster--right">
+          <button data-touch-control="brake" type="button" aria-label="Frena">BRK</button>
+          <button data-touch-control="handbrake" type="button" aria-label="Freno a mano">HB</button>
+          <button data-touch-control="throttle" type="button" aria-label="Accelera">GAS</button>
+        </div>
+      </section>
 
       <aside class="dev-panel" aria-label="Development tuning panel">
         <header>
