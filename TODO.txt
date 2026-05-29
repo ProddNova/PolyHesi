@@ -18,9 +18,14 @@ TODO
 
 fast-tk's
 
-- Fixare visuale terza persona e rotazione della telecamera sopratutto in terza persona : ora è rotta quando giro non rimane la macchina al centro della visuale tipo gta V, inoltre la terza persona si allontana troppo dalla macchina rendendo ingiocabile in terza persona
+- La visuale in terza persona è rotta: quando la macchina sterza o ruota, il veicolo non rimane correttamente centrato nell’inquadratura come in GTA V / giochi di guida arcade.
+La camera deve seguire la macchina in modo fluido, mantenendola sempre al centro o leggermente sotto il centro dello schermo.
+Inoltre attualmente la camera si allontana troppo dal veicolo, rendendo la terza persona difficile da usare: limita la distanza massima e rendi la visuale più stabile e giocabile.
 
-- Fixare inclinazione della macchina, attualmente quando giro la macchina rotea sull'asse delle y in modo eccessivo non segue la curva che sta facendo la macchina, per spiegarmi meglio quando giro a destra la macchina effettivamente si gira verso destra ma tantissimo, più di quanto stia effettivamente sterzando nel modo fisico va adattato altrimenti se uno si basa sull'incinazione dell'auto per capire quanto sta sterzando gioca di merda perchè sembra stia girando un sacco il veicolo ma nella realtà fisica non sta girando tanto
+- Quando sterzo, il modello della macchina ruota visivamente troppo sull’asse Y / yaw rispetto alla direzione fisica reale del veicolo.
+Il problema è che l’auto sembra girare molto più di quanto stia effettivamente sterzando nella fisica, quindi il feedback visivo è fuorviante.
+Riduci e stabilizza questa rotazione visiva: il modello deve seguire meglio la traiettoria reale della macchina, senza esagerare la rotazione laterale.
+La direzione visiva dell’auto deve comunicare correttamente quanto il veicolo sta davvero curvando.
 
 - Fare si che le auto del traffico siano le auto PSX
 
@@ -30,7 +35,23 @@ fast-tk's
 
 - Fixare le auto attualemente alcune hanno i vetri colorati, altre risultano brutte quasi per via del modo in cui vengono create penso non lo so ma risultano brutte
 
-- Fai si che in modalità remodel affianco ai tre veicoli del traffico per i quali si modificano le hitbox, ci siano tutte le auto psx presenti nel gioco (non quelel disabilitate) e che se selezionate faccia editare cose come, il loro assetto quindi altezza veicolo, posizione ruote e dimensione ruote, questo serve cosi io a mano vado a posizionare le ruote, il chassis perchè per alcune auto la posizione ruote deve essere diversa mentre ora è uguale per tutte, chiaramente una volta che si salva questa informazione deve essere sovrascritta a quelle precedenti proprio nei file di gioco, questa cosa serve a me admin capisci?
+- Aggiungi in modalità Remodel una sezione dedicata alle auto PSX giocabili/presenti nel gioco.
+
+Attualmente nel Remodel ci sono solo i 3 veicoli del traffico per modificare le hitbox.
+Voglio che accanto a questi compaiano anche tutte le auto PSX attive nel gioco, escludendo quelle disabilitate.
+
+Quando seleziono una di queste auto PSX, devo poter modificare manualmente:
+
+- altezza / assetto del veicolo
+- posizione delle ruote
+- dimensione delle ruote
+- posizione del chassis / body rispetto alle ruote
+
+Questa cosa serve perché ora molte auto usano gli stessi valori generici, ma in realtà ogni modello ha proporzioni diverse e quindi ruote, chassis e altezza devono poter essere regolati singolarmente.
+
+I valori modificati devono essere salvati in modo persistente, sovrascrivendo i dati precedenti nei file/config del gioco, non solo in memoria runtime.
+
+Questa funzione è pensata come tool admin/dev: mi serve per calibrare manualmente ogni auto dal gioco e poi salvare quei valori come configurazione definitiva.
 
 - 
 
