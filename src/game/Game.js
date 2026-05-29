@@ -12,7 +12,6 @@ import {
   SETTING_DEFS,
   createStarterVehicle,
   createVehicleFromListing,
-  isActivePsxCarPreset,
   sanitizeVehicleRigTune,
   getVehiclePreset,
 } from "./config.js";
@@ -900,43 +899,46 @@ export class Game {
   }
 
   initializeRemodelPsxCars() {
-    const cars = CAR_PRESETS
-      .filter(isActivePsxCarPreset)
+    const cars = this.getRemodelPsxCarPresets()
       .map((preset) => ({
         id: preset.id,
         label: `${preset.label}${preset.trafficEligible ? " [traffic]" : ""}${PLAYER_CAR_IDS.includes(preset.id) ? " [player]" : ""}`,
       }));
-    this.selectedRemodelPsxCarId = cars[0]?.id ?? null;
+    this.selectedRemodelPsxCarId = cars.find((car) => car.id === this.getActiveVehicle()?.carId)?.id ?? cars[0]?.id ?? null;
     this.hud?.setRemodelPsxCars(cars, this.selectedRemodelPsxCarId ?? "");
     if (this.selectedRemodelPsxCarId) {
       this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(this.selectedRemodelPsxCarId));
     }
     this.buildRemodelPsxLineup();
     this.updateRemodelPsxLineupVisibility();
-    this.syncRemodelPsxRigToActiveCar();
+    this.updateRemodelPsxLineupSelection();
     this.hud?.setRemodelPsxRigVisible(false);
   }
 
   selectRemodelPsxCar(carId) {
-    if (!carId || !CAR_PRESETS.some((preset) => preset.id === carId)) {
+    if (!carId || !this.getRemodelPsxCarPresets().some((preset) => preset.id === carId)) {
       return;
     }
     this.selectedRemodelPsxCarId = carId;
     this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(carId));
+    this.updateRemodelPsxLineupSelection();
   }
 
   syncRemodelPsxRigToActiveCar() {
     const activeCarId = this.getActiveVehicle()?.carId ?? null;
-    if (!activeCarId || !CAR_PRESETS.some((preset) => preset.id === activeCarId)) {
+    if (!activeCarId || !this.getRemodelPsxCarPresets().some((preset) => preset.id === activeCarId)) {
       return;
     }
     this.selectedRemodelPsxCarId = activeCarId;
-    const activePreset = CAR_PRESETS.find((preset) => preset.id === activeCarId);
     this.hud?.setRemodelPsxCars(
-      [{ id: activeCarId, label: activePreset?.label ?? activeCarId }],
+      this.getRemodelPsxCarPresets().map((preset) => ({
+        id: preset.id,
+        label: `${preset.label}${preset.trafficEligible ? " [traffic]" : ""}${PLAYER_CAR_IDS.includes(preset.id) ? " [player]" : ""}`,
+      })),
       activeCarId,
     );
     this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(activeCarId));
+    this.updateRemodelPsxLineupSelection();
   }
 
   shouldShowRemodelPsxRigForTarget(target) {
@@ -990,7 +992,7 @@ export class Game {
     const baseZ = anchorState?.position?.z ?? -88;
     const yaw = anchorState?.rotation?.y ?? 0;
     const spacing = 5.1;
-    const cars = CAR_PRESETS.filter(isActivePsxCarPreset);
+    const cars = this.getRemodelPsxCarPresets();
     const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
     const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
     for (let index = 0; index < cars.length; index += 1) {
@@ -1006,6 +1008,7 @@ export class Game {
     }
     this.scene.add(group);
     this.remodelPsxLineupGroup = group;
+    this.updateRemodelPsxLineupSelection();
   }
 
   updateRemodelPsxLineupVisibility() {
@@ -1013,6 +1016,25 @@ export class Game {
       return;
     }
     this.remodelPsxLineupGroup.visible = Boolean(this.settings.hitboxMode);
+    this.updateRemodelPsxLineupSelection();
+  }
+
+  getRemodelPsxCarPresets() {
+    return CAR_PRESETS.filter((preset) => preset.inGamePlayer);
+  }
+
+  updateRemodelPsxLineupSelection() {
+    if (!this.remodelPsxLineupGroup) {
+      return;
+    }
+
+    const selectedId = this.selectedRemodelPsxCarId ?? this.getActiveVehicle()?.carId ?? null;
+    for (const child of this.remodelPsxLineupGroup.children ?? []) {
+      if (!child?.userData) {
+        continue;
+      }
+      child.visible = child.userData.remodelPsxCarId === selectedId;
+    }
   }
 
   selectFirstOwnedVehicleForCar(carId) {
