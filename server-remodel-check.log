@@ -1,0 +1,6 @@
+
+> polyhesi@0.1.0 dev
+> node server/index.js
+
+◇ injected env (0) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+PolyHesi server listening on http://0.0.0.0:10001 (memory)

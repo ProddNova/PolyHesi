@@ -1851,7 +1851,7 @@ export class HighwayWorld {
   saveRemodelOverrides() {
     const targets = {};
     for (const [id, state] of Object.entries(this.remodelOverrides)) {
-      if (this.remodelTargetMap.has(id) && !id.startsWith("created:")) {
+      if (this.remodelTargetMap.has(id) && !id.startsWith("created:") && !id.startsWith("psx:")) {
         targets[id] = this.cloneState(state);
       }
     }

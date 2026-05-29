@@ -30,6 +30,7 @@ const WALKER_EYE_HEIGHT = 1.92;
 const DAMAGE_INVULNERABILITY_SECONDS = 5;
 const IMPACT_RECOVERY_SECONDS = 0.1;
 const CAMERA_MODES = ["hood", "roof", "chaseClose", "chaseFar", "cinematic"];
+const GARAGE_PSX_CAR_TARGET_ID = "psx:garage-player-car";
 const REMODEL_PRESETS = {
   stripe: {
     position: { x: 0, y: 0.08, z: 0 },
@@ -157,6 +158,8 @@ export class Game {
     this.world = new HighwayWorld(this.scene);
     this.player = new PlayerCar(this.scene, this.world.getStartPose());
     this.player.setCarPreset(this.getActiveVehiclePreset());
+    this.garagePsxRemodelTarget = null;
+    this.createGaragePsxRemodelTarget();
     this.traffic = new TrafficSystem(this.scene, this.world);
     this.debugOverlay = new DebugOverlay(this.scene, this.world);
     this.remodelOverlay = new RemodelOverlay(
@@ -459,7 +462,11 @@ export class Game {
   }
 
   updateGarage(dt, inputState, interact, garageMenuToggle) {
-    this.player.setCarPreset(this.getActiveVehiclePreset());
+    if (this.isGaragePsxCarEditorActive()) {
+      this.applyRemodelPsxPreviewCar();
+    } else {
+      this.player.setCarPreset(this.getActiveVehiclePreset());
+    }
 
     if (this.marketOpen) {
       this.hud.setInteraction("Chiudi browser");
@@ -909,6 +916,7 @@ export class Game {
     if (this.selectedRemodelPsxCarId) {
       this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(this.selectedRemodelPsxCarId));
     }
+    this.updateGaragePsxRemodelTarget({ rebuildOverlay: false });
     this.buildRemodelPsxLineup();
     this.updateRemodelPsxLineupVisibility();
     this.updateRemodelPsxLineupSelection();
@@ -921,7 +929,25 @@ export class Game {
     }
     this.selectedRemodelPsxCarId = carId;
     this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(carId));
+    this.applyRemodelPsxPreviewCar();
+    this.updateGaragePsxRemodelTarget();
     this.updateRemodelPsxLineupSelection();
+  }
+
+  syncRemodelPsxRigEditor() {
+    const cars = this.getRemodelPsxCarPresets().map((preset) => ({
+      id: preset.id,
+      label: `${preset.label}${preset.trafficEligible ? " [traffic]" : ""}${PLAYER_CAR_IDS.includes(preset.id) ? " [player]" : ""}`,
+    }));
+    if (!cars.some((car) => car.id === this.selectedRemodelPsxCarId)) {
+      this.selectedRemodelPsxCarId = cars.find((car) => car.id === this.getActiveVehicle()?.carId)?.id ?? cars[0]?.id ?? null;
+    }
+    this.hud?.setRemodelPsxCars(cars, this.selectedRemodelPsxCarId ?? "");
+    if (this.selectedRemodelPsxCarId) {
+      this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(this.selectedRemodelPsxCarId));
+      this.applyRemodelPsxPreviewCar();
+      this.updateGaragePsxRemodelTarget({ rebuildOverlay: false });
+    }
   }
 
   syncRemodelPsxRigToActiveCar() {
@@ -938,18 +964,19 @@ export class Game {
       activeCarId,
     );
     this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(activeCarId));
+    this.updateGaragePsxRemodelTarget();
     this.updateRemodelPsxLineupSelection();
   }
 
   shouldShowRemodelPsxRigForTarget(target) {
-    return Boolean(this.mode === "garage" && target?.id === "hitbox:player");
+    return Boolean(this.mode === "garage" && target?.id === GARAGE_PSX_CAR_TARGET_ID);
   }
 
   updateRemodelPsxRigVisibility(target) {
     const visible = this.shouldShowRemodelPsxRigForTarget(target);
     this.hud?.setRemodelPsxRigVisible(visible);
     if (visible) {
-      this.syncRemodelPsxRigToActiveCar();
+      this.syncRemodelPsxRigEditor();
     }
   }
 
@@ -961,7 +988,10 @@ export class Game {
     if (this.getActiveVehicle()?.carId === this.selectedRemodelPsxCarId) {
       this.syncActiveVehicleToSettings();
       this.player.setCarPreset(this.getActiveVehiclePreset());
+    } else if (this.isGaragePsxCarEditorActive()) {
+      this.applyRemodelPsxPreviewCar();
     }
+    this.updateGaragePsxRemodelTarget();
     this.buildRemodelPsxLineup();
     this.updateRemodelPsxLineupVisibility();
     this.hud?.setRemodelEditorStatus("PSX rig live");
@@ -996,7 +1026,7 @@ export class Game {
     const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
     const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
     for (let index = 0; index < cars.length; index += 1) {
-      const preset = this.applyVehicleRigToPreset(cars[index]);
+      const preset = this.getRemodelPsxPreviewPreset(cars[index].id);
       const carAsset = createPlayerCarAsset(preset);
       const laneOffset = spacing * index;
       const posX = startX + right.x * laneOffset + forward.x * 0.8;
@@ -1021,6 +1051,66 @@ export class Game {
 
   getRemodelPsxCarPresets() {
     return CAR_PRESETS.filter((preset) => preset.inGamePlayer);
+  }
+
+  getRemodelPsxPreviewPreset(carId = this.selectedRemodelPsxCarId) {
+    const preset = CAR_PRESETS.find((item) => item.id === carId) ?? CAR_PRESETS[0];
+    return this.applyVehicleRigToPreset({ ...preset, carId: preset.id });
+  }
+
+  applyRemodelPsxPreviewCar() {
+    if (!this.selectedRemodelPsxCarId) {
+      return;
+    }
+    this.player.setCarPreset(this.getRemodelPsxPreviewPreset(this.selectedRemodelPsxCarId));
+  }
+
+  isGaragePsxCarEditorActive() {
+    return Boolean(
+      this.mode === "garage" &&
+      this.settings.remodelMode &&
+      this.remodelOverlay?.getSelectedTarget?.()?.id === GARAGE_PSX_CAR_TARGET_ID
+    );
+  }
+
+  createGaragePsxRemodelTarget() {
+    if (!this.world?.remodelHitboxGroup) {
+      return;
+    }
+    const material = this.world.materials.remodelHitbox.clone();
+    material.opacity = 0.16;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+    mesh.name = "Garage PSX player car";
+    mesh.userData.remodelFixedId = GARAGE_PSX_CAR_TARGET_ID;
+    mesh.userData.remodelLabel = "Garage PSX car";
+    mesh.userData.remodelCategory = "hitbox";
+    this.world.remodelHitboxGroup.add(mesh);
+    this.garagePsxRemodelTarget = mesh;
+    this.updateGaragePsxRemodelTarget({ rebuildOverlay: false });
+    this.world.rebuildRemodelTargets();
+  }
+
+  updateGaragePsxRemodelTarget({ rebuildOverlay = true } = {}) {
+    if (!this.garagePsxRemodelTarget) {
+      return;
+    }
+    const preset = this.getRemodelPsxPreviewPreset(this.selectedRemodelPsxCarId ?? this.getActiveVehicle()?.carId);
+    const pose = this.world.getGarageCarPose();
+    const height = Math.max(1.35, (preset.bodyHeight ?? 0.68) + 0.9);
+    this.garagePsxRemodelTarget.position.set(pose.x, height * 0.5, pose.z);
+    this.garagePsxRemodelTarget.rotation.set(0, pose.yaw, 0);
+    this.garagePsxRemodelTarget.scale.set(
+      Math.max(1.2, preset.bodyWidth ?? 1.9),
+      height,
+      Math.max(3.2, preset.bodyLength ?? 4.4),
+    );
+    this.garagePsxRemodelTarget.updateMatrixWorld(true);
+    if (rebuildOverlay) {
+      this.world.rebuildRemodelTargets();
+      if (this.remodelOverlay?.visible) {
+        this.remodelOverlay.refresh(this.remodelOverlay.getSelectedTarget?.()?.id);
+      }
+    }
   }
 
   updateRemodelPsxLineupSelection() {
@@ -2026,6 +2116,8 @@ export class Game {
       this.input.releasePointerLock();
     } else {
       this.hud?.hideRemodelEditor();
+      this.hud?.setRemodelPsxRigVisible(false);
+      this.player.setCarPreset(this.getActiveVehiclePreset());
     }
     this.hud?.syncBooleanSetting?.("remodelMode");
   }
@@ -2044,10 +2136,14 @@ export class Game {
     if (!target || !state) {
       this.hud?.hideRemodelEditor();
       this.hud?.setRemodelPsxRigVisible(false);
+      this.player.setCarPreset(this.getActiveVehiclePreset());
       return;
     }
     this.updateRemodelPsxRigVisibility(target);
     this.hud?.showRemodelEditor(target, state);
+    if (target.id === GARAGE_PSX_CAR_TARGET_ID) {
+      this.hud?.setRemodelDeleteAvailable?.(false);
+    }
   }
 
   captureSelectedRemodelUndo() {
@@ -2174,6 +2270,11 @@ export class Game {
   }
 
   deleteSelectedRemodelTarget() {
+    const target = this.remodelOverlay.getSelectedTarget?.();
+    if (target?.id === GARAGE_PSX_CAR_TARGET_ID) {
+      this.hud.flashNotice("PSX rig", "garage car target is fixed");
+      return;
+    }
     this.captureSelectedRemodelUndo();
     const deleted = this.remodelOverlay.deleteSelected();
     if (!deleted) {
@@ -2238,6 +2339,7 @@ export class Game {
     this.remodelOverlay.clearSelection();
     this.hud.hideRemodelEditor();
     this.hud.setRemodelPsxRigVisible(false);
+    this.player.setCarPreset(this.getActiveVehiclePreset());
   }
 
   copyRemodelTarget() {
