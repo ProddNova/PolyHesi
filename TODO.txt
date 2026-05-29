@@ -35,24 +35,6 @@ La direzione visiva dell’auto deve comunicare correttamente quanto il veicolo 
 
 - Fixare le auto attualemente alcune hanno i vetri colorati, altre risultano brutte quasi per via del modo in cui vengono create penso non lo so ma risultano brutte
 
-- Aggiungi in modalità Remodel una sezione dedicata alle auto PSX giocabili/presenti nel gioco.
-
-Attualmente nel Remodel ci sono solo i 3 veicoli del traffico per modificare le hitbox.
-Voglio che accanto a questi compaiano anche tutte le auto PSX attive nel gioco, escludendo quelle disabilitate.
-
-Quando seleziono una di queste auto PSX, devo poter modificare manualmente:
-
-- altezza / assetto del veicolo
-- posizione delle ruote
-- dimensione delle ruote
-- posizione del chassis / body rispetto alle ruote
-
-Questa cosa serve perché ora molte auto usano gli stessi valori generici, ma in realtà ogni modello ha proporzioni diverse e quindi ruote, chassis e altezza devono poter essere regolati singolarmente.
-
-I valori modificati devono essere salvati in modo persistente, sovrascrivendo i dati precedenti nei file/config del gioco, non solo in memoria runtime.
-
-Questa funzione è pensata come tool admin/dev: mi serve per calibrare manualmente ogni auto dal gioco e poi salvare quei valori come configurazione definitiva.
-
 - Aggiungi anche un bottone impostazioni per le impsotazioni base e avanzate per la grafica del gioco
 
 slow-tk's
