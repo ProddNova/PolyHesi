@@ -12,6 +12,7 @@ import {
   PARTS_CATALOG,
   PROGRESS_VERSION,
   createStarterVehicle,
+  sanitizeVehicleRigTune,
 } from "../src/game/config.js";
 
 dotenv.config();
@@ -325,6 +326,11 @@ function sanitizeProgress(rawProgress) {
     ownedVehicles,
     upgrades,
     installedUpgrades,
+    vehicleRigOverrides: Object.fromEntries(
+      Object.entries(raw.vehicleRigOverrides ?? {})
+        .filter(([carId]) => CAR_IDS.has(carId))
+        .map(([carId, tune]) => [carId, sanitizeVehicleRigTune(tune)]),
+    ),
   };
 }
 

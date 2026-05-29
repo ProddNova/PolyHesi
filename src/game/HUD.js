@@ -1,10 +1,12 @@
 import {
   CAR_AUCTION_LISTINGS,
   CAR_PRESETS,
+  DEFAULT_VEHICLE_RIG_TUNE,
   PARTS_CATALOG,
   SETTING_DEFS,
   getCarPreset,
   getVehiclePreset,
+  sanitizeVehicleRigTune,
 } from "./config.js";
 import { getCarThumbnailUrl } from "./CarThumbnailRenderer.js";
 
@@ -58,6 +60,9 @@ export class HUD {
     onRemodelUndo,
     onRemodelCopy,
     onRemodelPaste,
+    onRemodelPsxCarSelect,
+    onRemodelPsxRigChange,
+    onRemodelPsxRigSave,
   ) {
     this.settings = settings;
     this.onSettingsChange = onSettingsChange;
@@ -79,6 +84,9 @@ export class HUD {
     this.onRemodelUndo = onRemodelUndo;
     this.onRemodelCopy = onRemodelCopy;
     this.onRemodelPaste = onRemodelPaste;
+    this.onRemodelPsxCarSelect = onRemodelPsxCarSelect;
+    this.onRemodelPsxRigChange = onRemodelPsxRigChange;
+    this.onRemodelPsxRigSave = onRemodelPsxRigSave;
     this.nearMissUntil = 0;
     this.marketSite = "cars";
     this.ownedCarsSignature = "";
@@ -149,6 +157,17 @@ export class HUD {
         rotZ: document.querySelector("#remodelRotZ"),
         color: document.querySelector("#remodelColor"),
       },
+      remodelPsxCarSelect: document.querySelector("#remodelPsxCarSelect"),
+      remodelPsxSaveButton: document.querySelector("#remodelPsxSaveButton"),
+      remodelPsxInputs: {
+        rideHeight: document.querySelector("#remodelPsxRideHeight"),
+        wheelOffsetX: document.querySelector("#remodelPsxWheelOffsetX"),
+        wheelOffsetY: document.querySelector("#remodelPsxWheelOffsetY"),
+        wheelOffsetZ: document.querySelector("#remodelPsxWheelOffsetZ"),
+        wheelScale: document.querySelector("#remodelPsxWheelScale"),
+        bodyOffsetY: document.querySelector("#remodelPsxBodyOffsetY"),
+        bodyOffsetZ: document.querySelector("#remodelPsxBodyOffsetZ"),
+      },
       mapOverlay: document.querySelector("#mapOverlay"),
       miniMapCanvas: document.querySelector("#miniMapCanvas"),
       remodelHoverLabel: document.querySelector("#remodelHoverLabel"),
@@ -196,6 +215,8 @@ export class HUD {
     this.nodes.remodelStripe?.addEventListener("click", () => this.onRemodelCreate?.("stripe"));
     this.nodes.remodelGuardrail?.addEventListener("click", () => this.onRemodelCreate?.("guardrail"));
     this.nodes.remodelClose?.addEventListener("click", () => this.onRemodelClose?.());
+    this.nodes.remodelPsxCarSelect?.addEventListener("change", () => this.onRemodelPsxCarSelect?.(this.nodes.remodelPsxCarSelect.value));
+    this.nodes.remodelPsxSaveButton?.addEventListener("click", () => this.onRemodelPsxRigSave?.());
     for (const input of Object.values(this.nodes.remodelInputs)) {
       input?.addEventListener("input", () => this.onRemodelChange?.(this.readRemodelState()));
       if (input?.type === "color") {
@@ -210,6 +231,12 @@ export class HUD {
     }
     for (const tab of this.nodes.marketTabs) {
       tab.addEventListener("click", () => this.setMarketSite(tab.dataset.marketTab));
+    }
+    for (const input of Object.values(this.nodes.remodelPsxInputs ?? {})) {
+      input?.addEventListener("input", () => this.onRemodelPsxRigChange?.(this.readRemodelPsxRigState()));
+      input?.addEventListener("wheel", (event) => this.handleRemodelInputWheel(event, input), {
+        passive: false,
+      });
     }
     this.buildPartsShop();
     for (const button of this.nodes.upgradeButtons) {
@@ -543,6 +570,43 @@ export class HUD {
     if (this.nodes.marketCarCount) {
       this.nodes.marketCarCount.textContent = `${CAR_AUCTION_LISTINGS.length} aste`;
     }
+  }
+
+  setRemodelPsxCars(cars = [], selectedCarId = "") {
+    const select = this.nodes.remodelPsxCarSelect;
+    if (!select) {
+      return;
+    }
+    select.innerHTML = "";
+    for (const car of cars) {
+      const option = document.createElement("option");
+      option.value = car.id;
+      option.textContent = car.label ?? car.id;
+      select.appendChild(option);
+    }
+    if (selectedCarId && cars.some((item) => item.id === selectedCarId)) {
+      select.value = selectedCarId;
+    } else if (cars.length) {
+      select.value = cars[0].id;
+    }
+  }
+
+  writeRemodelPsxRigState(state = DEFAULT_VEHICLE_RIG_TUNE) {
+    const tuned = sanitizeVehicleRigTune(state);
+    for (const [key, input] of Object.entries(this.nodes.remodelPsxInputs ?? {})) {
+      if (!input) {
+        continue;
+      }
+      input.value = Number(tuned[key] ?? 0).toFixed(2);
+    }
+  }
+
+  readRemodelPsxRigState() {
+    const raw = {};
+    for (const [key, input] of Object.entries(this.nodes.remodelPsxInputs ?? {})) {
+      raw[key] = Number(input?.value);
+    }
+    return sanitizeVehicleRigTune(raw);
   }
 
   buildPartsShop() {

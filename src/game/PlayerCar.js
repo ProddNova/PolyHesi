@@ -151,7 +151,17 @@ export class PlayerCar {
 
   setCarPreset(car) {
     const preset = typeof car === "string" || !car ? getCarPreset(car) : car;
-    const key = `${preset.id}:${preset.color}:${preset.secondaryColor}`;
+    const rig = preset.vehicleRig ?? {};
+    const rigKey = [
+      rig.rideHeight,
+      rig.wheelOffsetX,
+      rig.wheelOffsetY,
+      rig.wheelOffsetZ,
+      rig.wheelScale,
+      rig.bodyOffsetY,
+      rig.bodyOffsetZ,
+    ].join(":");
+    const key = `${preset.id}:${preset.color}:${preset.secondaryColor}:${rigKey}`;
     if (key === this.activePresetKey) {
       return;
     }

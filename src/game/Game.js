@@ -2,14 +2,18 @@ import * as THREE from "three";
 import {
   CAR_AUCTION_LISTINGS,
   CAR_PRESETS,
+  DEFAULT_VEHICLE_RIG_TUNE,
   DEFAULT_SETTINGS,
   DEV_STORAGE_KEY,
+  PLAYER_CAR_IDS,
   PARTS_CATALOG,
   PHYSICS_SETTING_KEYS,
   PROGRESS_VERSION,
   SETTING_DEFS,
   createStarterVehicle,
   createVehicleFromListing,
+  isActivePsxCarPreset,
+  sanitizeVehicleRigTune,
   getVehiclePreset,
 } from "./config.js";
 import { AudioSystem } from "./AudioSystem.js";
@@ -97,6 +101,8 @@ export class Game {
     this.cameraModeIndex = 0;
     this.remodelClipboard = null;
     this.remodelUndoStack = [];
+    this.vehicleRigOverrides = {};
+    this.selectedRemodelPsxCarId = null;
     this.mode = "garage";
     this.coins = 0;
     this.coinAccumulator = 0;
@@ -221,7 +227,11 @@ export class Game {
       () => this.undoRemodel(),
       () => this.copyRemodelTarget(),
       () => this.pasteRemodelTarget(),
+      (carId) => this.selectRemodelPsxCar(carId),
+      (state) => this.updateSelectedPsxCarRig(state),
+      () => this.saveSelectedPsxCarRig(),
     );
+    this.initializeRemodelPsxCars();
     this.hud.setAdminMode(this.isAdmin);
     this.hud.setRemodelAvailable(this.settings.noClip);
     this.setRemodelMode(this.settings.remodelMode);
@@ -859,13 +869,74 @@ export class Game {
   }
 
   getActiveVehiclePreset() {
-    return getVehiclePreset(this.getActiveVehicle());
+    return this.applyVehicleRigToPreset(getVehiclePreset(this.getActiveVehicle()));
   }
 
   syncActiveVehicleToSettings() {
     const vehicle = this.getActiveVehicle();
     this.settings.carPreset = vehicle.carId;
-    this.settings.activeVehiclePreset = getVehiclePreset(vehicle);
+    this.settings.activeVehiclePreset = this.applyVehicleRigToPreset(getVehiclePreset(vehicle));
+  }
+
+  applyVehicleRigToPreset(preset) {
+    if (!preset?.carId) {
+      return preset;
+    }
+    return {
+      ...preset,
+      vehicleRig: this.getVehicleRigForCar(preset.carId),
+    };
+  }
+
+  getVehicleRigForCar(carId) {
+    return sanitizeVehicleRigTune({
+      ...DEFAULT_VEHICLE_RIG_TUNE,
+      ...(this.vehicleRigOverrides?.[carId] ?? {}),
+    });
+  }
+
+  initializeRemodelPsxCars() {
+    const cars = CAR_PRESETS
+      .filter(isActivePsxCarPreset)
+      .map((preset) => ({
+        id: preset.id,
+        label: `${preset.label}${preset.trafficEligible ? " [traffic]" : ""}${PLAYER_CAR_IDS.includes(preset.id) ? " [player]" : ""}`,
+      }));
+    this.selectedRemodelPsxCarId = cars[0]?.id ?? null;
+    this.hud?.setRemodelPsxCars(cars, this.selectedRemodelPsxCarId ?? "");
+    if (this.selectedRemodelPsxCarId) {
+      this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(this.selectedRemodelPsxCarId));
+    }
+  }
+
+  selectRemodelPsxCar(carId) {
+    if (!carId || !CAR_PRESETS.some((preset) => preset.id === carId)) {
+      return;
+    }
+    this.selectedRemodelPsxCarId = carId;
+    this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(carId));
+  }
+
+  updateSelectedPsxCarRig(state) {
+    if (!this.selectedRemodelPsxCarId) {
+      return;
+    }
+    this.vehicleRigOverrides[this.selectedRemodelPsxCarId] = sanitizeVehicleRigTune(state);
+    if (this.getActiveVehicle()?.carId === this.selectedRemodelPsxCarId) {
+      this.syncActiveVehicleToSettings();
+      this.player.setCarPreset(this.getActiveVehiclePreset());
+    }
+    this.hud?.setRemodelEditorStatus("PSX rig live");
+  }
+
+  saveSelectedPsxCarRig() {
+    if (!this.selectedRemodelPsxCarId) {
+      return;
+    }
+    this.vehicleRigOverrides[this.selectedRemodelPsxCarId] = this.getVehicleRigForCar(this.selectedRemodelPsxCarId);
+    this.markProgressDirty({ immediate: true });
+    this.hud?.setRemodelEditorStatus("PSX rig saved");
+    this.hud?.flashNotice("PSX rig", "saved to config");
   }
 
   selectFirstOwnedVehicleForCar(carId) {
@@ -1432,6 +1503,7 @@ export class Game {
     this.bestScore = saved.bestScore;
     this.upgrades = saved.upgrades;
     this.installedUpgrades = saved.installedUpgrades;
+    this.vehicleRigOverrides = saved.vehicleRigOverrides;
     this.ownedVehicles = saved.ownedVehicles;
     this.activeVehicleId = saved.activeVehicleId;
     this.refreshOwnedCarSet();
@@ -1579,6 +1651,11 @@ export class Game {
       ownedVehicles,
       upgrades,
       installedUpgrades,
+      vehicleRigOverrides: Object.fromEntries(
+        Object.entries(raw.vehicleRigOverrides ?? {})
+          .filter(([carId]) => carIds.has(carId))
+          .map(([carId, tune]) => [carId, sanitizeVehicleRigTune(tune)]),
+      ),
     };
   }
 
@@ -1595,6 +1672,7 @@ export class Game {
       ownedVehicles: this.ownedVehicles.map((vehicle) => ({ ...vehicle })),
       upgrades: { ...this.upgrades },
       installedUpgrades: { ...this.installedUpgrades },
+      vehicleRigOverrides: { ...this.vehicleRigOverrides },
     };
   }
 

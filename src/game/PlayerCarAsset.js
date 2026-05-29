@@ -220,15 +220,24 @@ export function createPlayerCarAsset(preset) {
   const modelId = preset.psxModel ?? preset.id ?? "JapanSportCoupe";
   root.name = `PSXStyleCars_${modelId}`;
 
+  const rig = preset.vehicleRig ?? {};
+  const rideHeight = Number(rig.rideHeight ?? 0);
+  const wheelOffsetX = Number(rig.wheelOffsetX ?? 0);
+  const wheelOffsetY = Number(rig.wheelOffsetY ?? 0);
+  const wheelOffsetZ = Number(rig.wheelOffsetZ ?? 0);
+  const wheelScaleTuned = Math.max(0.4, Math.min(2.2, Number(rig.wheelScale ?? 1)));
+  const bodyOffsetY = Number(rig.bodyOffsetY ?? 0);
+  const bodyOffsetZ = Number(rig.bodyOffsetZ ?? 0);
+
   const bodyTemplate = getBodyTemplate(modelId);
   const bodyBounds = bodyTemplate.userData.nativeBounds;
   const scale = (preset.bodyLength * BODY_VISUAL_SCALE) / bodyBounds.length;
-  const wheelScale = scale * WHEEL_PREFAB_SCALE;
+  const wheelScale = scale * WHEEL_PREFAB_SCALE * wheelScaleTuned;
   const wheelRadius = WHEEL_NATIVE_RADIUS * wheelScale;
   const bodyGroundY = Math.max(GROUND_CLEARANCE, wheelRadius + GROUND_CLEARANCE - wheelRadius * CHASSIS_DROP_RATIO);
-  const lift = bodyGroundY - bodyBounds.min.y * scale;
+  const lift = bodyGroundY - bodyBounds.min.y * scale + rideHeight + bodyOffsetY;
   const centerX = -bodyBounds.center.x * scale;
-  const centerZ = -bodyBounds.center.z * scale;
+  const centerZ = -bodyBounds.center.z * scale + bodyOffsetZ;
   const visualWidth = bodyBounds.width * scale;
   const visualLength = bodyBounds.length * scale;
   const rearZ = (bodyBounds.min.z - bodyBounds.center.z) * scale;
@@ -244,7 +253,7 @@ export function createPlayerCarAsset(preset) {
   const wheelX = Math.max(visualWidth * 0.5 - wheelThickness * 0.36, visualWidth * 0.38);
   const frontWheelZ = frontZ - visualLength * FRONT_WHEEL_FROM_FRONT;
   const rearWheelZ = rearZ + visualLength * REAR_WHEEL_FROM_REAR;
-  const wheelY = wheelRadius + GROUND_CLEARANCE;
+  const wheelY = wheelRadius + GROUND_CLEARANCE + rideHeight + wheelOffsetY;
   const wheelPositions = [
     { side: -1, z: frontWheelZ, rotationY: 0 },
     { side: 1, z: frontWheelZ, rotationY: Math.PI },
@@ -269,7 +278,11 @@ export function createPlayerCarAsset(preset) {
     wheel.add(tire);
     wheel.add(rim);
     wheel.add(hub);
-    wheel.position.set(wheelConfig.side * wheelX, wheelY, wheelConfig.z);
+    wheel.position.set(
+      wheelConfig.side * (wheelX + wheelOffsetX),
+      wheelY,
+      wheelConfig.z + wheelOffsetZ,
+    );
     wheel.rotation.y = wheelConfig.rotationY;
     root.add(wheel);
   }

@@ -1696,6 +1696,34 @@ canvas {
   background: #eef5ff;
 }
 
+.remodel-select-wrap {
+  display: grid;
+  gap: 4px;
+  color: rgba(226, 221, 206, 0.68);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.remodel-select-wrap select,
+#remodelPsxSaveButton {
+  min-width: 0;
+  width: 100%;
+  height: 34px;
+  border: 1px solid rgba(224, 218, 200, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 0 7px;
+}
+
+#remodelPsxSaveButton {
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
 .browser-overlay.is-parts .browser-logo,
 .browser-overlay.is-parts .search-result-head strong,
 .browser-overlay.is-parts .upgrade-button > span strong {

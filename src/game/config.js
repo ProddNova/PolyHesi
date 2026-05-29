@@ -123,6 +123,15 @@ export const PLAYER_CAR_IDS = [
 ];
 
 export const TRAFFIC_CAR_IDS = ["JapanRallyLegacy", "JapanSedan", "KoreanHatch"];
+export const DEFAULT_VEHICLE_RIG_TUNE = Object.freeze({
+  rideHeight: 0,
+  wheelOffsetX: 0,
+  wheelOffsetY: 0,
+  wheelOffsetZ: 0,
+  wheelScale: 1,
+  bodyOffsetY: 0,
+  bodyOffsetZ: 0,
+});
 
 const PAINT_COLORS = [
   0xb43f38, 0xd6ad3d, 0x596064, 0x2f4a5f, 0x30a78f, 0xd4d1c8,
@@ -198,6 +207,7 @@ function createPsxPreset(id, index) {
     cabinOffset: -0.24,
     inGamePlayer: PLAYER_CAR_IDS.includes(id),
     trafficEligible: TRAFFIC_CAR_IDS.includes(id),
+    vehicleRig: { ...DEFAULT_VEHICLE_RIG_TUNE },
   };
 }
 
@@ -365,6 +375,26 @@ export function getVehiclePreset(vehicle) {
     color: vehicle?.color ?? preset.color,
     secondaryColor: vehicle?.secondaryColor ?? preset.secondaryColor,
   };
+}
+
+export function sanitizeVehicleRigTune(raw = {}) {
+  const finite = (value, fallback) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  return {
+    rideHeight: finite(raw.rideHeight, DEFAULT_VEHICLE_RIG_TUNE.rideHeight),
+    wheelOffsetX: finite(raw.wheelOffsetX, DEFAULT_VEHICLE_RIG_TUNE.wheelOffsetX),
+    wheelOffsetY: finite(raw.wheelOffsetY, DEFAULT_VEHICLE_RIG_TUNE.wheelOffsetY),
+    wheelOffsetZ: finite(raw.wheelOffsetZ, DEFAULT_VEHICLE_RIG_TUNE.wheelOffsetZ),
+    wheelScale: Math.max(0.4, Math.min(2.2, finite(raw.wheelScale, DEFAULT_VEHICLE_RIG_TUNE.wheelScale))),
+    bodyOffsetY: finite(raw.bodyOffsetY, DEFAULT_VEHICLE_RIG_TUNE.bodyOffsetY),
+    bodyOffsetZ: finite(raw.bodyOffsetZ, DEFAULT_VEHICLE_RIG_TUNE.bodyOffsetZ),
+  };
+}
+
+export function isActivePsxCarPreset(preset) {
+  return Boolean(preset && preset.enabled !== false && (preset.inGamePlayer || preset.trafficEligible));
 }
 
 export const PARTS_CATALOG = [
