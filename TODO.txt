@@ -53,7 +53,7 @@ I valori modificati devono essere salvati in modo persistente, sovrascrivendo i 
 
 Questa funzione è pensata come tool admin/dev: mi serve per calibrare manualmente ogni auto dal gioco e poi salvare quei valori come configurazione definitiva.
 
-- 
+- Aggiungi anche un bottone impostazioni per le impsotazioni base e avanzate per la grafica del gioco
 
 slow-tk's
 
