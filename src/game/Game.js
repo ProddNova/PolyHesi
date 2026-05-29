@@ -22,6 +22,7 @@ import { HighwayWorld } from "./HighwayWorld.js";
 import { HUD } from "./HUD.js";
 import { InputController } from "./Input.js";
 import { PlayerCar } from "./PlayerCar.js";
+import { createPlayerCarAsset } from "./PlayerCarAsset.js";
 import { RemodelOverlay } from "./RemodelOverlay.js";
 import { TrafficSystem } from "./TrafficSystem.js";
 import { clamp, damp } from "./utils.js";
@@ -103,6 +104,7 @@ export class Game {
     this.remodelUndoStack = [];
     this.vehicleRigOverrides = {};
     this.selectedRemodelPsxCarId = null;
+    this.remodelPsxLineupGroup = null;
     this.mode = "garage";
     this.coins = 0;
     this.coinAccumulator = 0;
@@ -235,6 +237,8 @@ export class Game {
     this.hud.setAdminMode(this.isAdmin);
     this.hud.setRemodelAvailable(this.settings.noClip);
     this.setRemodelMode(this.settings.remodelMode);
+    this.buildRemodelPsxLineup();
+    this.updateRemodelPsxLineupVisibility();
     this.setSaveStatus(this.authClient ? "pronto" : "");
 
     this.world.update();
@@ -907,6 +911,8 @@ export class Game {
     if (this.selectedRemodelPsxCarId) {
       this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(this.selectedRemodelPsxCarId));
     }
+    this.buildRemodelPsxLineup();
+    this.updateRemodelPsxLineupVisibility();
   }
 
   selectRemodelPsxCar(carId) {
@@ -926,6 +932,8 @@ export class Game {
       this.syncActiveVehicleToSettings();
       this.player.setCarPreset(this.getActiveVehiclePreset());
     }
+    this.buildRemodelPsxLineup();
+    this.updateRemodelPsxLineupVisibility();
     this.hud?.setRemodelEditorStatus("PSX rig live");
   }
 
@@ -937,6 +945,46 @@ export class Game {
     this.markProgressDirty({ immediate: true });
     this.hud?.setRemodelEditorStatus("PSX rig saved");
     this.hud?.flashNotice("PSX rig", "saved to config");
+  }
+
+  buildRemodelPsxLineup() {
+    if (!this.scene) {
+      return;
+    }
+    if (this.remodelPsxLineupGroup) {
+      this.scene.remove(this.remodelPsxLineupGroup);
+    }
+    const group = new THREE.Group();
+    group.name = "RemodelPsxLineup";
+
+    const anchorState = this.world.getRemodelTargetState("hitbox:traffic-car");
+    const startX = (anchorState?.position?.x ?? -57) + 8;
+    const baseZ = anchorState?.position?.z ?? -88;
+    const yaw = anchorState?.rotation?.y ?? 0;
+    const spacing = 5.1;
+    const cars = CAR_PRESETS.filter(isActivePsxCarPreset);
+    const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    for (let index = 0; index < cars.length; index += 1) {
+      const preset = this.applyVehicleRigToPreset(cars[index]);
+      const carAsset = createPlayerCarAsset(preset);
+      const laneOffset = spacing * index;
+      const posX = startX + right.x * laneOffset + forward.x * 0.8;
+      const posZ = baseZ + right.z * laneOffset + forward.z * 0.8;
+      carAsset.position.set(posX, 0, posZ);
+      carAsset.rotation.y = yaw;
+      carAsset.userData.remodelPsxCarId = preset.id;
+      group.add(carAsset);
+    }
+    this.scene.add(group);
+    this.remodelPsxLineupGroup = group;
+  }
+
+  updateRemodelPsxLineupVisibility() {
+    if (!this.remodelPsxLineupGroup) {
+      return;
+    }
+    this.remodelPsxLineupGroup.visible = Boolean(this.settings.hitboxMode);
   }
 
   selectFirstOwnedVehicleForCar(carId) {
@@ -1905,6 +1953,7 @@ export class Game {
     }
     if (changedKey === "hitboxMode") {
       this.hud.flashNotice("Hitbox mode", this.settings.hitboxMode ? "enabled" : "disabled");
+      this.updateRemodelPsxLineupVisibility();
     }
 
     const playerRoad = this.world.getNearestRoadInfo(this.player.position);
