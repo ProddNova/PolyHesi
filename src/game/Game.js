@@ -148,7 +148,7 @@ export class Game {
     this.camera.position.set(0, 5.2, -12);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+    this.renderer.setPixelRatio(this.getRendererPixelRatio());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = false;
@@ -1982,23 +1982,9 @@ export class Game {
       return;
     }
 
-    const payload = {
-      carPreset: this.settings.carPreset,
-      trafficEnabled: this.settings.trafficEnabled,
-      dayNightCycle: this.settings.dayNightCycle,
-      noClip: this.settings.noClip,
-      hitboxMode: this.settings.hitboxMode,
-      remodelMode: this.settings.remodelMode,
-      remodelSnapToGrid: this.settings.remodelSnapToGrid,
-    };
-    for (const def of SETTING_DEFS) {
-      payload[def.key] = this.settings[def.key];
-    }
-
-    try {
-      window.localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(payload));
+    if (this.persistSettings()) {
       this.hud.flashNotice("Dev saved", "loaded next session");
-    } catch {
+    } else {
       this.hud.flashNotice("Save failed", "localStorage blocked");
     }
   }
@@ -2025,6 +2011,7 @@ export class Game {
     this.syncActiveVehicleToSettings();
     this.player.setCarPreset(this.getActiveVehiclePreset());
     this.hud.syncSettings?.();
+    this.persistSettings();
     this.handleSettingsChanged();
     this.hud.flashNotice("Dev reset", "defaults restored");
   }
@@ -2092,6 +2079,9 @@ export class Game {
     if (changedKey === "remodelSnapToGrid" || changedKey === "remodelGridSize") {
       this.applyRemodelSnapSettings();
     }
+    if (changedKey === "renderScale") {
+      this.resize();
+    }
     if (changedKey === "hitboxMode") {
       this.hud.flashNotice("Hitbox mode", this.settings.hitboxMode ? "enabled" : "disabled");
       this.updateRemodelPsxLineupVisibility();
@@ -2100,6 +2090,7 @@ export class Game {
     const playerRoad = this.world.getNearestRoadInfo(this.player.position);
     this.traffic.syncDensity(this.settings, playerRoad?.s ?? 0);
     this.debugOverlay.setVisible(this.settings.hitboxMode);
+    this.persistSettings();
   }
 
   setRemodelMode(active) {
@@ -2418,7 +2409,29 @@ export class Game {
   resize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+    this.renderer.setPixelRatio(this.getRendererPixelRatio());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  getRendererPixelRatio() {
+    const scale = clamp(Number(this.settings.renderScale) || 1, 0.7, 1.25);
+    return Math.min(window.devicePixelRatio, 1.25) * scale;
+  }
+
+  persistSettings() {
+    const payload = {};
+    for (const def of SETTING_DEFS) {
+      payload[def.key] = this.settings[def.key];
+    }
+    for (const key of ["carPreset", "trafficEnabled", "dayNightCycle", "noClip", "hitboxMode", "remodelMode", "remodelSnapToGrid"]) {
+      payload[key] = this.settings[key];
+    }
+
+    try {
+      window.localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(payload));
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

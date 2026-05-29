@@ -104,6 +104,7 @@ export class HUD {
       nearMissLabel: document.querySelector("#nearMissToast span"),
       nearMissPoints: document.querySelector("#nearMissPoints"),
       fps: document.querySelector("#fpsValue"),
+      settingsButton: document.querySelector("#settingsButton"),
       devPanel: document.querySelector(".dev-panel"),
       devTabs: [...document.querySelectorAll("[data-dev-tab]")],
       devPages: [...document.querySelectorAll("[data-dev-page]")],
@@ -206,6 +207,7 @@ export class HUD {
 
     document.querySelector("#restartButton").addEventListener("click", () => this.onRestart());
     document.querySelector("#overlayRestartButton").addEventListener("click", () => this.onRestart());
+    this.nodes.settingsButton?.addEventListener("click", () => this.toggleDevPanel());
     this.nodes.marketClose?.addEventListener("click", () => this.onCloseMarket?.());
     this.nodes.garageClose?.addEventListener("click", () => this.onCloseGarageManager?.());
     this.nodes.saveDevSettings?.addEventListener("click", () => this.onSettingsSave?.());
@@ -930,6 +932,7 @@ export class HUD {
   setDevPanelVisible(visible) {
     this.devPanelVisible = visible;
     this.nodes.devPanel?.classList.toggle("is-hidden", !visible);
+    this.nodes.settingsButton?.classList.toggle("is-active", visible);
   }
 
   toggleDevPanel() {
