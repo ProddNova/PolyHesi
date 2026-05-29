@@ -8,7 +8,7 @@ export const PLAYER_START = {
   yaw: 0,
 };
 export const STARTER_CAR_ID = "JapanLegendaryDrifter";
-export const PROGRESS_VERSION = 3;
+export const PROGRESS_VERSION = 4;
 
 function formatTimeOfDay(value) {
   const normalized = ((Number(value) % 24) + 24) % 24;
@@ -125,9 +125,12 @@ export const PLAYER_CAR_IDS = [
 export const TRAFFIC_CAR_IDS = ["JapanRallyLegacy", "JapanSedan", "KoreanHatch"];
 export const DEFAULT_VEHICLE_RIG_TUNE = Object.freeze({
   rideHeight: 0,
-  wheelOffsetX: 0,
-  wheelOffsetY: 0,
-  wheelOffsetZ: 0,
+  frontWheelOffsetX: 0,
+  frontWheelOffsetY: 0,
+  frontWheelOffsetZ: 0,
+  rearWheelOffsetX: 0,
+  rearWheelOffsetY: 0,
+  rearWheelOffsetZ: 0,
   wheelScale: 1,
   bodyOffsetY: 0,
   bodyOffsetZ: 0,
@@ -382,11 +385,17 @@ export function sanitizeVehicleRigTune(raw = {}) {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
+  const legacyWheelOffsetX = finite(raw.wheelOffsetX, DEFAULT_VEHICLE_RIG_TUNE.frontWheelOffsetX);
+  const legacyWheelOffsetY = finite(raw.wheelOffsetY, DEFAULT_VEHICLE_RIG_TUNE.frontWheelOffsetY);
+  const legacyWheelOffsetZ = finite(raw.wheelOffsetZ, DEFAULT_VEHICLE_RIG_TUNE.frontWheelOffsetZ);
   return {
     rideHeight: finite(raw.rideHeight, DEFAULT_VEHICLE_RIG_TUNE.rideHeight),
-    wheelOffsetX: finite(raw.wheelOffsetX, DEFAULT_VEHICLE_RIG_TUNE.wheelOffsetX),
-    wheelOffsetY: finite(raw.wheelOffsetY, DEFAULT_VEHICLE_RIG_TUNE.wheelOffsetY),
-    wheelOffsetZ: finite(raw.wheelOffsetZ, DEFAULT_VEHICLE_RIG_TUNE.wheelOffsetZ),
+    frontWheelOffsetX: finite(raw.frontWheelOffsetX, legacyWheelOffsetX),
+    frontWheelOffsetY: finite(raw.frontWheelOffsetY, legacyWheelOffsetY),
+    frontWheelOffsetZ: finite(raw.frontWheelOffsetZ, legacyWheelOffsetZ),
+    rearWheelOffsetX: finite(raw.rearWheelOffsetX, legacyWheelOffsetX),
+    rearWheelOffsetY: finite(raw.rearWheelOffsetY, legacyWheelOffsetY),
+    rearWheelOffsetZ: finite(raw.rearWheelOffsetZ, legacyWheelOffsetZ),
     wheelScale: Math.max(0.4, Math.min(2.2, finite(raw.wheelScale, DEFAULT_VEHICLE_RIG_TUNE.wheelScale))),
     bodyOffsetY: finite(raw.bodyOffsetY, DEFAULT_VEHICLE_RIG_TUNE.bodyOffsetY),
     bodyOffsetZ: finite(raw.bodyOffsetZ, DEFAULT_VEHICLE_RIG_TUNE.bodyOffsetZ),

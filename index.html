@@ -258,38 +258,40 @@
           <span id="remodelTitle">Remodel</span>
           <button id="remodelCloseButton" type="button">Close</button>
         </header>
-        <small id="remodelTargetMeta">No model selected</small>
-        <div class="remodel-group">
-          <span>Position</span>
-          <div class="remodel-axis-grid">
-            <label><span>X</span><input id="remodelPosX" type="number" step="0.25" /></label>
-            <label><span>Y</span><input id="remodelPosY" type="number" step="0.25" /></label>
-            <label><span>Z</span><input id="remodelPosZ" type="number" step="0.25" /></label>
+        <div id="remodelGeneralGroup">
+          <small id="remodelTargetMeta">No model selected</small>
+          <div class="remodel-group">
+            <span>Position</span>
+            <div class="remodel-axis-grid">
+              <label><span>X</span><input id="remodelPosX" type="number" step="0.25" /></label>
+              <label><span>Y</span><input id="remodelPosY" type="number" step="0.25" /></label>
+              <label><span>Z</span><input id="remodelPosZ" type="number" step="0.25" /></label>
+            </div>
           </div>
-        </div>
-        <div class="remodel-group">
-          <span>Size</span>
-          <div class="remodel-axis-grid">
-            <label><span>X</span><input id="remodelSizeX" type="number" min="0.01" step="0.25" /></label>
-            <label><span>Y</span><input id="remodelSizeY" type="number" min="0.01" step="0.25" /></label>
-            <label><span>Z</span><input id="remodelSizeZ" type="number" min="0.01" step="0.25" /></label>
+          <div class="remodel-group">
+            <span>Size</span>
+            <div class="remodel-axis-grid">
+              <label><span>X</span><input id="remodelSizeX" type="number" min="0.01" step="0.25" /></label>
+              <label><span>Y</span><input id="remodelSizeY" type="number" min="0.01" step="0.25" /></label>
+              <label><span>Z</span><input id="remodelSizeZ" type="number" min="0.01" step="0.25" /></label>
+            </div>
           </div>
-        </div>
-        <div class="remodel-group">
-          <span>Rotation</span>
-          <div class="remodel-axis-grid">
-            <label><span>X</span><input id="remodelRotX" type="number" step="1" /></label>
-            <label><span>Y</span><input id="remodelRotY" type="number" step="1" /></label>
-            <label><span>Z</span><input id="remodelRotZ" type="number" step="1" /></label>
+          <div class="remodel-group">
+            <span>Rotation</span>
+            <div class="remodel-axis-grid">
+              <label><span>X</span><input id="remodelRotX" type="number" step="1" /></label>
+              <label><span>Y</span><input id="remodelRotY" type="number" step="1" /></label>
+              <label><span>Z</span><input id="remodelRotZ" type="number" step="1" /></label>
+            </div>
           </div>
-        </div>
-        <div class="remodel-group">
-          <span>Color</span>
-          <input id="remodelColor" class="remodel-color-input" type="color" value="#78e0c1" />
-        </div>
-        <div class="remodel-actions">
-          <button id="remodelSaveButton" type="button">Save map</button>
-          <button id="remodelResetButton" type="button">Reset model</button>
+          <div class="remodel-group">
+            <span>Color</span>
+            <input id="remodelColor" class="remodel-color-input" type="color" value="#78e0c1" />
+          </div>
+          <div class="remodel-actions">
+            <button id="remodelSaveButton" type="button">Save map</button>
+            <button id="remodelResetButton" type="button">Reset model</button>
+          </div>
         </div>
         <div id="remodelPsxRigGroup" class="remodel-group" hidden>
           <span>PSX Car Rig (Admin)</span>
@@ -299,9 +301,12 @@
           </label>
           <div class="remodel-axis-grid">
             <label><span>ride Y</span><input id="remodelPsxRideHeight" type="number" step="0.01" /></label>
-            <label><span>wheel X</span><input id="remodelPsxWheelOffsetX" type="number" step="0.01" /></label>
-            <label><span>wheel Y</span><input id="remodelPsxWheelOffsetY" type="number" step="0.01" /></label>
-            <label><span>wheel Z</span><input id="remodelPsxWheelOffsetZ" type="number" step="0.01" /></label>
+            <label><span>front wheel X</span><input id="remodelPsxFrontWheelOffsetX" type="number" step="0.01" /></label>
+            <label><span>front wheel Y</span><input id="remodelPsxFrontWheelOffsetY" type="number" step="0.01" /></label>
+            <label><span>front wheel Z</span><input id="remodelPsxFrontWheelOffsetZ" type="number" step="0.01" /></label>
+            <label><span>rear wheel X</span><input id="remodelPsxRearWheelOffsetX" type="number" step="0.01" /></label>
+            <label><span>rear wheel Y</span><input id="remodelPsxRearWheelOffsetY" type="number" step="0.01" /></label>
+            <label><span>rear wheel Z</span><input id="remodelPsxRearWheelOffsetZ" type="number" step="0.01" /></label>
             <label><span>wheel size</span><input id="remodelPsxWheelScale" type="number" min="0.4" max="2.2" step="0.01" /></label>
             <label><span>body Y</span><input id="remodelPsxBodyOffsetY" type="number" step="0.01" /></label>
             <label><span>body Z</span><input id="remodelPsxBodyOffsetZ" type="number" step="0.01" /></label>

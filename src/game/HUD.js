@@ -139,6 +139,7 @@ export class HUD {
       remodelStripe: document.querySelector("#remodelStripeButton"),
       remodelGuardrail: document.querySelector("#remodelGuardrailButton"),
       remodelPanel: document.querySelector("#remodelPanel"),
+      remodelGeneralGroup: document.querySelector("#remodelGeneralGroup"),
       remodelTitle: document.querySelector("#remodelTitle"),
       remodelTargetMeta: document.querySelector("#remodelTargetMeta"),
       remodelStatus: document.querySelector("#remodelStatus"),
@@ -162,9 +163,12 @@ export class HUD {
       remodelPsxSaveButton: document.querySelector("#remodelPsxSaveButton"),
       remodelPsxInputs: {
         rideHeight: document.querySelector("#remodelPsxRideHeight"),
-        wheelOffsetX: document.querySelector("#remodelPsxWheelOffsetX"),
-        wheelOffsetY: document.querySelector("#remodelPsxWheelOffsetY"),
-        wheelOffsetZ: document.querySelector("#remodelPsxWheelOffsetZ"),
+        frontWheelOffsetX: document.querySelector("#remodelPsxFrontWheelOffsetX"),
+        frontWheelOffsetY: document.querySelector("#remodelPsxFrontWheelOffsetY"),
+        frontWheelOffsetZ: document.querySelector("#remodelPsxFrontWheelOffsetZ"),
+        rearWheelOffsetX: document.querySelector("#remodelPsxRearWheelOffsetX"),
+        rearWheelOffsetY: document.querySelector("#remodelPsxRearWheelOffsetY"),
+        rearWheelOffsetZ: document.querySelector("#remodelPsxRearWheelOffsetZ"),
         wheelScale: document.querySelector("#remodelPsxWheelScale"),
         bodyOffsetY: document.querySelector("#remodelPsxBodyOffsetY"),
         bodyOffsetZ: document.querySelector("#remodelPsxBodyOffsetZ"),
@@ -593,6 +597,9 @@ export class HUD {
   }
 
   setRemodelPsxRigVisible(visible) {
+    if (this.nodes.remodelGeneralGroup) {
+      this.nodes.remodelGeneralGroup.hidden = Boolean(visible);
+    }
     if (this.nodes.remodelPsxRigGroup) {
       this.nodes.remodelPsxRigGroup.hidden = !visible;
     }

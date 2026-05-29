@@ -222,9 +222,12 @@ export function createPlayerCarAsset(preset) {
 
   const rig = preset.vehicleRig ?? {};
   const rideHeight = Number(rig.rideHeight ?? 0);
-  const wheelOffsetX = Number(rig.wheelOffsetX ?? 0);
-  const wheelOffsetY = Number(rig.wheelOffsetY ?? 0);
-  const wheelOffsetZ = Number(rig.wheelOffsetZ ?? 0);
+  const frontWheelOffsetX = Number(rig.frontWheelOffsetX ?? rig.wheelOffsetX ?? 0);
+  const frontWheelOffsetY = Number(rig.frontWheelOffsetY ?? rig.wheelOffsetY ?? 0);
+  const frontWheelOffsetZ = Number(rig.frontWheelOffsetZ ?? rig.wheelOffsetZ ?? 0);
+  const rearWheelOffsetX = Number(rig.rearWheelOffsetX ?? rig.wheelOffsetX ?? 0);
+  const rearWheelOffsetY = Number(rig.rearWheelOffsetY ?? rig.wheelOffsetY ?? 0);
+  const rearWheelOffsetZ = Number(rig.rearWheelOffsetZ ?? rig.wheelOffsetZ ?? 0);
   const wheelScaleTuned = Math.max(0.4, Math.min(2.2, Number(rig.wheelScale ?? 1)));
   const bodyOffsetY = Number(rig.bodyOffsetY ?? 0);
   const bodyOffsetZ = Number(rig.bodyOffsetZ ?? 0);
@@ -253,12 +256,12 @@ export function createPlayerCarAsset(preset) {
   const wheelX = Math.max(visualWidth * 0.5 - wheelThickness * 0.36, visualWidth * 0.38);
   const frontWheelZ = frontZ - visualLength * FRONT_WHEEL_FROM_FRONT;
   const rearWheelZ = rearZ + visualLength * REAR_WHEEL_FROM_REAR;
-  const wheelY = wheelRadius + GROUND_CLEARANCE + rideHeight + wheelOffsetY;
+  const wheelY = wheelRadius + GROUND_CLEARANCE + rideHeight;
   const wheelPositions = [
-    { side: -1, z: frontWheelZ, rotationY: 0 },
-    { side: 1, z: frontWheelZ, rotationY: Math.PI },
-    { side: -1, z: rearWheelZ, rotationY: 0 },
-    { side: 1, z: rearWheelZ, rotationY: Math.PI },
+    { side: -1, z: frontWheelZ, rotationY: 0, offsetX: frontWheelOffsetX, offsetY: frontWheelOffsetY, offsetZ: frontWheelOffsetZ },
+    { side: 1, z: frontWheelZ, rotationY: Math.PI, offsetX: frontWheelOffsetX, offsetY: frontWheelOffsetY, offsetZ: frontWheelOffsetZ },
+    { side: -1, z: rearWheelZ, rotationY: 0, offsetX: rearWheelOffsetX, offsetY: rearWheelOffsetY, offsetZ: rearWheelOffsetZ },
+    { side: 1, z: rearWheelZ, rotationY: Math.PI, offsetX: rearWheelOffsetX, offsetY: rearWheelOffsetY, offsetZ: rearWheelOffsetZ },
   ];
   const wheelMaterials = createWheelMaterials();
   for (const wheelConfig of wheelPositions) {
@@ -279,9 +282,9 @@ export function createPlayerCarAsset(preset) {
     wheel.add(rim);
     wheel.add(hub);
     wheel.position.set(
-      wheelConfig.side * (wheelX + wheelOffsetX),
-      wheelY,
-      wheelConfig.z + wheelOffsetZ,
+      wheelConfig.side * (wheelX + wheelConfig.offsetX),
+      wheelY + wheelConfig.offsetY,
+      wheelConfig.z + wheelConfig.offsetZ,
     );
     wheel.rotation.y = wheelConfig.rotationY;
     root.add(wheel);

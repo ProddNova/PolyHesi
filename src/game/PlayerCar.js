@@ -154,9 +154,12 @@ export class PlayerCar {
     const rig = preset.vehicleRig ?? {};
     const rigKey = [
       rig.rideHeight,
-      rig.wheelOffsetX,
-      rig.wheelOffsetY,
-      rig.wheelOffsetZ,
+      rig.frontWheelOffsetX,
+      rig.frontWheelOffsetY,
+      rig.frontWheelOffsetZ,
+      rig.rearWheelOffsetX,
+      rig.rearWheelOffsetY,
+      rig.rearWheelOffsetZ,
       rig.wheelScale,
       rig.bodyOffsetY,
       rig.bodyOffsetZ,
