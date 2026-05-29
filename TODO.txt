@@ -29,13 +29,13 @@ La direzione visiva dell’auto deve comunicare correttamente quanto il veicolo 
 
 - Fare si che le auto del traffico siano le auto PSX
 
-- Fixare ciclo giorno-notte e migliorare notte, aggiungere illuminazione attorno alla strada
+- Migliorare illuminazione ora non fa luce sembrano solo gialle le luci e basta non emettono luce reale nemmeno i fari nemmeno luci dentro a box e manco lampioni fanno luce reale
 
-- Far si che i cerchione delle auto siano quelli della cartella degli asset auto PSX, dentro ci sono anche le wheels
+- Dal remodel sui veicoli psx oltre a varie posizioni e cose poter impostare anche il tipo di cerchione del rig e il colore del cerchione e anche auto 8colore auto) tutto ovviamente deve venire salvato in modo persistente come il rig fa già
 
-- Fixare le auto attualemente alcune hanno i vetri colorati, altre risultano brutte quasi per via del modo in cui vengono create penso non lo so ma risultano brutte
+- Le auto psx hanno i vetri colorati invece che essere neri/trasparenti (meglio neri)
 
-- Aggiungi anche un bottone impostazioni per le impsotazioni base e avanzate per la grafica del gioco
+- Aggiungi nella dev menu un flag che se attivato mette la grafica al massimo tutto al massimo ora è tanto pixelato sopratutto in lontanaza, questa grafica ultra serve a me per fare i video del gioco
 
 slow-tk's
 
