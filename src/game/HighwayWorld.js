@@ -188,6 +188,7 @@ export class HighwayWorld {
     this.remodelCreatedGroup = null;
     this.remodelHitboxGroup = null;
     this.environment = null;
+    this.roadLights = [];
 
     this.materials = this.createMaterials();
     this.createRoute();
@@ -438,11 +439,11 @@ export class HighwayWorld {
         dawnSky: new THREE.Color(0xc77f69),
         daySky: new THREE.Color(0x80c8ff),
         duskSky: new THREE.Color(0x574876),
-        nightSky: new THREE.Color(0x0b1628),
+        nightSky: new THREE.Color(0x07101f),
         dayGround: new THREE.Color(0x1a211a),
         nightGround: new THREE.Color(0x0a0d13),
         dayHemi: new THREE.Color(0xe5f4ff),
-        nightHemi: new THREE.Color(0x33456d),
+        nightHemi: new THREE.Color(0x40537b),
         sun: new THREE.Color(0xfff3d1),
         moon: new THREE.Color(0x9eb8ff),
       },
@@ -461,6 +462,7 @@ export class HighwayWorld {
     const dusk = clamp(1 - Math.abs(hour - 18) / 2.8, 0, 1);
     const twilight = Math.max(dawn, dusk);
     const night = 1 - Math.max(daylight, twilight * 0.58);
+    const lampPower = clamp((night - 0.18) / 0.72, 0, 1);
     const { hemisphere, keyLight, fog, colors } = this.environment;
 
     const sky = colors.nightSky.clone().lerp(colors.daySky, daylight);
@@ -472,11 +474,11 @@ export class HighwayWorld {
     }
     this.scene.background.copy(sky);
     fog.color.copy(sky);
-    fog.density = 0.000012 + night * 0.000032 + twilight * 0.000014;
+    fog.density = 0.000012 + night * 0.00002 + twilight * 0.000012;
 
     hemisphere.color.copy(colors.nightHemi).lerp(colors.dayHemi, daylight);
     hemisphere.groundColor.copy(colors.nightGround).lerp(colors.dayGround, daylight);
-    hemisphere.intensity = 0.48 + daylight * 1.04 + twilight * 0.28;
+    hemisphere.intensity = 0.62 + daylight * 1.0 + twilight * 0.3;
 
     const sunAngle = ((hour - 6) / 24) * TWO_PI;
     const sunHeight = Math.sin(sunAngle);
@@ -492,8 +494,15 @@ export class HighwayWorld {
     );
     keyLight.color.copy(useMoon ? colors.moon : colors.sun);
     keyLight.intensity = useMoon
-      ? 0.34 + night * 0.3
+      ? 0.48 + night * 0.32
       : 0.18 + daylight * 1.16 + twilight * 0.24;
+
+    if (this.materials?.streetlightGlow) {
+      this.materials.streetlightGlow.color.setHex(lampPower > 0.02 ? 0xffd887 : 0x6f5a32);
+    }
+    for (const light of this.roadLights) {
+      light.intensity = lampPower * (light.userData.baseIntensity ?? 1);
+    }
   }
 
   createStaticHighway() {
@@ -874,6 +883,9 @@ export class HighwayWorld {
     const poles = [];
     const arms = [];
     const lamps = [];
+    const lightGroup = new THREE.Group();
+    lightGroup.name = "RoadStreetLightEmitters";
+    lightGroup.userData.remodelIgnore = true;
 
     for (let s = 0; s < this.trackLength; s += CITY_SIDEWALK_INTERVAL) {
       const frame = this.getFrameAtDistance(s);
@@ -913,6 +925,14 @@ export class HighwayWorld {
           yaw: frame.yaw,
           scale: { x: 0.44, y: 0.16, z: 0.34 },
         });
+        if (s % (CITY_STREETLIGHT_INTERVAL * 6) < 1 && Math.abs(side) === 1) {
+          const light = new THREE.PointLight(0xffd887, 0, 34, 1.65);
+          light.position.copy(lampPosition);
+          light.position.y -= 0.35;
+          light.userData.baseIntensity = 1.65;
+          this.roadLights.push(light);
+          lightGroup.add(light);
+        }
       }
     }
 
@@ -920,6 +940,7 @@ export class HighwayWorld {
     details.add(this.createScaledInstancedBoxes(poles, this.materials.streetlightPole));
     details.add(this.createScaledInstancedBoxes(arms, this.materials.streetlightPole));
     details.add(this.createScaledInstancedBoxes(lamps, this.materials.streetlightGlow));
+    details.add(lightGroup);
     parent.add(details);
   }
   createHorizonBuildings(parent) {

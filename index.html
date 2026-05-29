@@ -83,6 +83,7 @@
       <div id="remodelHoverLabel" class="remodel-hover-label" aria-hidden="true"></div>
 
       <button id="restartButton" class="restart-button" type="button">Restart</button>
+      <button id="playerSettingsButton" class="player-settings-button" type="button">Settings</button>
 
       <section id="touchControls" class="touch-controls" aria-label="Comandi touch">
         <div class="touch-actions">
@@ -100,6 +101,48 @@
           <button data-touch-control="brake" type="button" aria-label="Frena">BRK</button>
           <button data-touch-control="handbrake" type="button" aria-label="Freno a mano">HB</button>
           <button data-touch-control="throttle" type="button" aria-label="Accelera">GAS</button>
+        </div>
+      </section>
+
+      <section id="playerSettingsOverlay" class="player-settings-overlay" aria-label="Game settings">
+        <header>
+          <div>
+            <span>Impostazioni</span>
+            <small>Audio, grafica e guida</small>
+          </div>
+          <button id="playerSettingsCloseButton" type="button">Close</button>
+        </header>
+        <div class="player-settings-grid">
+          <label>
+            <span>Volume</span>
+            <output data-player-setting-out="masterVolume">34%</output>
+            <input data-player-setting="masterVolume" type="range" min="0" max="1" step="0.01" />
+          </label>
+          <label>
+            <span>Qualita grafica</span>
+            <output data-player-setting-out="graphicsQuality">Med</output>
+            <input data-player-setting="graphicsQuality" type="range" min="0" max="2" step="1" />
+          </label>
+          <label>
+            <span>Camera FOV</span>
+            <output data-player-setting-out="cameraFov">64</output>
+            <input data-player-setting="cameraFov" type="range" min="48" max="82" step="1" />
+          </label>
+          <label class="player-settings-toggle">
+            <span>Traffico</span>
+            <output data-player-setting-out="trafficEnabled">On</output>
+            <input data-player-setting="trafficEnabled" type="checkbox" checked />
+          </label>
+          <label class="player-settings-toggle">
+            <span>Ciclo giorno/notte</span>
+            <output data-player-setting-out="dayNightCycle">On</output>
+            <input data-player-setting="dayNightCycle" type="checkbox" checked />
+          </label>
+          <label>
+            <span>Ora</span>
+            <output data-player-setting-out="timeOfDay">18:15</output>
+            <input data-player-setting="timeOfDay" type="range" min="0" max="24" step="0.05" />
+          </label>
         </div>
       </section>
 

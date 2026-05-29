@@ -9,6 +9,11 @@ const bodyObjModules = import.meta.glob("../../PSXStyleCars-DevEdition/body/*/*.
   import: "default",
   query: "?raw",
 });
+const wheelObjModules = import.meta.glob("../../PSXStyleCars-DevEdition/Wheels/*.obj", {
+  eager: true,
+  import: "default",
+  query: "?raw",
+});
 
 const WHEEL_NATIVE_RADIUS = 0.270532;
 const WHEEL_PREFAB_SCALE = 0.86;
@@ -21,6 +26,7 @@ const REAR_WHEEL_FROM_REAR = 0.23;
 const objLoader = new OBJLoader();
 const textureLoader = new THREE.TextureLoader();
 const bodyTemplates = new Map();
+const wheelTemplates = new Map();
 const textureCache = new Map();
 const tireGeometry = new THREE.CylinderGeometry(1, 1, 1, 14);
 tireGeometry.rotateZ(Math.PI / 2);
@@ -86,6 +92,7 @@ function prepareTemplate(object) {
     }
 
     child.geometry.computeVertexNormals();
+    child.geometry.normalizeNormals();
     if (child.material) {
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       for (const material of materials) {
@@ -93,9 +100,68 @@ function prepareTemplate(object) {
         material.opacity = 1;
         material.depthWrite = true;
         material.side = THREE.DoubleSide;
+        material.flatShading = true;
+        material.needsUpdate = true;
       }
     }
   });
+}
+
+function getWheelTemplate(preset) {
+  const key = findWheelObjKey(preset);
+  if (!key) {
+    return null;
+  }
+
+  if (!wheelTemplates.has(key)) {
+    const template = objLoader.parse(removeObjLineElements(wheelObjModules[key]));
+    template.name = `${key.split("/").pop()?.replace(".obj", "") ?? "Wheel"}Template`;
+    prepareTemplate(template);
+    template.userData.nativeBounds = measureObject(template);
+    wheelTemplates.set(key, template);
+  }
+
+  return wheelTemplates.get(key);
+}
+
+function findWheelObjKey(preset) {
+  const preferred = [
+    preset?.wheelModel,
+    preset?.psxModel,
+    preset?.carId,
+    preset?.id,
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
+  const keys = Object.keys(wheelObjModules);
+  for (const needle of preferred) {
+    const direct = keys.find((key) => key.toLowerCase().includes(needle) && key.toLowerCase().endsWith("wheel.obj"));
+    if (direct) {
+      return direct;
+    }
+  }
+
+  const wheelNames = [
+    "sportWheel.obj",
+    "TunerWheel.obj",
+    "TuningWheel.obj",
+    "RallyWheels.obj",
+    "RallyWheelVer2.obj",
+    "retroSportWheel.obj",
+    "AluWheel.obj",
+    "luxurySportWheel.obj",
+    "StylishWheel.obj",
+  ];
+  const indexSeed = Math.abs(String(preset?.psxModel ?? preset?.id ?? "").split("").reduce((sum, char) => sum + char.charCodeAt(0), 0));
+  for (let i = 0; i < wheelNames.length; i += 1) {
+    const name = wheelNames[(indexSeed + i) % wheelNames.length].toLowerCase();
+    const match = keys.find((key) => key.toLowerCase().endsWith(`/wheels/${name.toLowerCase()}`));
+    if (match) {
+      return match;
+    }
+  }
+
+  return keys.find((key) => /wheel.*\.obj$/i.test(key)) ?? null;
 }
 
 function measureObject(object) {
@@ -127,9 +193,11 @@ function createBodyMaterials(preset) {
   });
   const glass = new THREE.MeshStandardMaterial({
     name: "psxGlass",
-    color: preset.secondaryColor,
-    roughness: 0.3,
-    metalness: 0.18,
+    color: 0x17212a,
+    emissive: 0x02060a,
+    emissiveIntensity: 0.08,
+    roughness: 0.5,
+    metalness: 0.04,
     flatShading: true,
   });
   const trim = new THREE.MeshStandardMaterial({
@@ -179,10 +247,58 @@ function applyMaterials(object, materials) {
 
     const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
     const mappedMaterials = sourceMaterials.map((material) => materials.get(material?.name) ?? material);
+    for (const material of mappedMaterials) {
+      if (!material) {
+        continue;
+      }
+      material.transparent = false;
+      material.opacity = 1;
+      material.depthWrite = true;
+      material.side = THREE.DoubleSide;
+      material.flatShading = true;
+      material.needsUpdate = true;
+    }
     child.material = Array.isArray(child.material) ? mappedMaterials : mappedMaterials[0];
     child.castShadow = true;
     child.receiveShadow = true;
   });
+}
+
+function createWheelAsset(preset, wheelRadius, wheelThickness) {
+  const wheelTemplate = getWheelTemplate(preset);
+  if (!wheelTemplate) {
+    return null;
+  }
+
+  const wheel = wheelTemplate.clone(true);
+  const bounds = wheelTemplate.userData.nativeBounds;
+  const nativeRadius = Math.max(bounds.size.y, bounds.size.z) * 0.5 || WHEEL_NATIVE_RADIUS;
+  const nativeThickness = Math.max(bounds.size.x, 0.001);
+  const radiusScale = wheelRadius / nativeRadius;
+  const thicknessScale = (wheelThickness * 1.06) / nativeThickness;
+  const rimMaterial = new THREE.MeshStandardMaterial({
+    name: "psxWheelMetal",
+    color: 0x9aa0a4,
+    roughness: 0.44,
+    metalness: 0.46,
+    flatShading: true,
+    side: THREE.DoubleSide,
+  });
+  wheel.traverse((child) => {
+    if (!child.isMesh) {
+      return;
+    }
+    child.material = rimMaterial;
+    child.castShadow = true;
+    child.receiveShadow = true;
+  });
+  wheel.position.set(
+    -bounds.center.x * thicknessScale,
+    -bounds.center.y * radiusScale,
+    -bounds.center.z * radiusScale,
+  );
+  wheel.scale.set(thicknessScale, radiusScale, radiusScale);
+  return wheel;
 }
 
 export function createPlayerCarAsset(preset) {
@@ -235,6 +351,7 @@ export function createPlayerCarAsset(preset) {
   ];
   for (const wheelConfig of wheelPositions) {
     const wheel = new THREE.Group();
+    const psxWheel = createWheelAsset(preset, wheelRadius, wheelThickness);
     const tire = new THREE.Mesh(tireGeometry, new THREE.MeshStandardMaterial({
       color: 0x050608,
       roughness: 0.94,
@@ -242,32 +359,36 @@ export function createPlayerCarAsset(preset) {
       flatShading: true,
       side: THREE.DoubleSide,
     }));
-    const rim = new THREE.Mesh(rimGeometry, new THREE.MeshStandardMaterial({
-      color: 0x8b9298,
-      roughness: 0.38,
-      metalness: 0.55,
-      flatShading: true,
-      side: THREE.DoubleSide,
-    }));
-    const hub = new THREE.Mesh(hubGeometry, new THREE.MeshStandardMaterial({
-      color: 0x545a60,
-      roughness: 0.48,
-      metalness: 0.42,
-      flatShading: true,
-      side: THREE.DoubleSide,
-    }));
     tire.scale.set(wheelThickness, wheelRadius, wheelRadius);
-    rim.scale.set(wheelThickness * 1.08, wheelRadius * 0.58, wheelRadius * 0.58);
-    hub.scale.set(wheelThickness * 1.18, wheelRadius * 0.26, wheelRadius * 0.26);
     tire.castShadow = true;
-    rim.castShadow = true;
-    hub.castShadow = true;
     tire.receiveShadow = true;
-    rim.receiveShadow = true;
-    hub.receiveShadow = true;
     wheel.add(tire);
-    wheel.add(rim);
-    wheel.add(hub);
+    if (psxWheel) {
+      wheel.add(psxWheel);
+    } else {
+      const rim = new THREE.Mesh(rimGeometry, new THREE.MeshStandardMaterial({
+        color: 0x8b9298,
+        roughness: 0.38,
+        metalness: 0.55,
+        flatShading: true,
+        side: THREE.DoubleSide,
+      }));
+      const hub = new THREE.Mesh(hubGeometry, new THREE.MeshStandardMaterial({
+        color: 0x545a60,
+        roughness: 0.48,
+        metalness: 0.42,
+        flatShading: true,
+        side: THREE.DoubleSide,
+      }));
+      rim.scale.set(wheelThickness * 1.08, wheelRadius * 0.58, wheelRadius * 0.58);
+      hub.scale.set(wheelThickness * 1.18, wheelRadius * 0.26, wheelRadius * 0.26);
+      rim.castShadow = true;
+      hub.castShadow = true;
+      rim.receiveShadow = true;
+      hub.receiveShadow = true;
+      wheel.add(rim);
+      wheel.add(hub);
+    }
     wheel.position.set(
       wheelConfig.side * (wheelX + wheelConfig.offsetX),
       wheelY + wheelConfig.offsetY,

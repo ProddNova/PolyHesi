@@ -137,6 +137,7 @@ export class Game {
     };
     this.noClipCurrentSpeedKmh = 0;
     this.audio = new AudioSystem();
+    this.audio.setMasterVolume(this.settings.masterVolume);
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(
@@ -148,7 +149,7 @@ export class Game {
     this.camera.position.set(0, 5.2, -12);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+    this.renderer.setPixelRatio(this.getRenderPixelRatio());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.shadowMap.enabled = false;
@@ -2096,6 +2097,16 @@ export class Game {
       this.hud.flashNotice("Hitbox mode", this.settings.hitboxMode ? "enabled" : "disabled");
       this.updateRemodelPsxLineupVisibility();
     }
+    if (changedKey === "masterVolume") {
+      this.audio.setMasterVolume(this.settings.masterVolume);
+    }
+    if (changedKey === "graphicsQuality") {
+      this.applyGraphicsQuality();
+    }
+    if (changedKey === "cameraFov") {
+      this.camera.fov = this.settings.cameraFov;
+      this.camera.updateProjectionMatrix();
+    }
 
     const playerRoad = this.world.getNearestRoadInfo(this.player.position);
     this.traffic.syncDensity(this.settings, playerRoad?.s ?? 0);
@@ -2418,7 +2429,18 @@ export class Game {
   resize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+    this.renderer.setPixelRatio(this.getRenderPixelRatio());
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  getRenderPixelRatio() {
+    const quality = Math.round(Number(this.settings.graphicsQuality) || 1);
+    const cap = quality <= 0 ? 0.82 : quality >= 2 ? 1.5 : 1.15;
+    return Math.min(window.devicePixelRatio, cap);
+  }
+
+  applyGraphicsQuality() {
+    this.renderer.setPixelRatio(this.getRenderPixelRatio());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 }

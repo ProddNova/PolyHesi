@@ -8,6 +8,7 @@ export class AudioSystem {
     this.noiseSource = null;
     this.started = false;
     this.engineVolume = 0;
+    this.masterVolume = 0.34;
   }
 
   ensure() {
@@ -22,12 +23,19 @@ export class AudioSystem {
     }
     this.context = new AudioContextClass();
     this.master = this.context.createGain();
-    this.master.gain.value = 0.34;
+    this.master.gain.value = this.masterVolume;
     this.master.connect(this.context.destination);
     this.started = true;
   }
 
   update() {}
+
+  setMasterVolume(value) {
+    this.masterVolume = Math.max(0, Math.min(1, Number(value) || 0));
+    if (this.master) {
+      this.master.gain.value = this.masterVolume;
+    }
+  }
 
   blip(frequency, duration = 0.08, gain = 0.16, type = "sine") {
     this.ensure();

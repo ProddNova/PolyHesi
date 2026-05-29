@@ -112,6 +112,9 @@ export class HUD {
       crashOverlay: document.querySelector("#crashOverlay"),
       finalScore: document.querySelector("#finalScoreValue"),
       restart: document.querySelector("#restartButton"),
+      playerSettingsButton: document.querySelector("#playerSettingsButton"),
+      playerSettingsOverlay: document.querySelector("#playerSettingsOverlay"),
+      playerSettingsClose: document.querySelector("#playerSettingsCloseButton"),
       carPreset: document.querySelector("#carPreset"),
       carPresetOut: document.querySelector("#carPresetOut"),
       trafficEnabled: document.querySelector("#trafficEnabled"),
@@ -206,6 +209,8 @@ export class HUD {
 
     document.querySelector("#restartButton").addEventListener("click", () => this.onRestart());
     document.querySelector("#overlayRestartButton").addEventListener("click", () => this.onRestart());
+    this.nodes.playerSettingsButton?.addEventListener("click", () => this.setPlayerSettingsVisible(true));
+    this.nodes.playerSettingsClose?.addEventListener("click", () => this.setPlayerSettingsVisible(false));
     this.nodes.marketClose?.addEventListener("click", () => this.onCloseMarket?.());
     this.nodes.garageClose?.addEventListener("click", () => this.onCloseGarageManager?.());
     this.nodes.saveDevSettings?.addEventListener("click", () => this.onSettingsSave?.());
@@ -248,6 +253,7 @@ export class HUD {
       button.addEventListener("click", () => this.onUpgrade?.(button.dataset.upgrade));
     }
     this.bindSettings();
+    this.bindPlayerSettings();
     this.buildCarShop();
     this.setMarketSite("cars");
   }
@@ -316,6 +322,52 @@ export class HUD {
     });
   }
 
+  bindPlayerSettings() {
+    for (const input of document.querySelectorAll("[data-player-setting]")) {
+      const key = input.dataset.playerSetting;
+      const output = document.querySelector(`[data-player-setting-out="${key}"]`);
+      const def = SETTING_DEFS.find((item) => item.key === key);
+      const sync = () => {
+        if (input.type === "checkbox") {
+          input.checked = this.settings[key] !== false;
+          if (output) {
+            output.value = input.checked ? "On" : "Off";
+          }
+          return;
+        }
+        input.value = this.settings[key];
+        if (output) {
+          output.value = def?.format ? def.format(this.settings[key]) : String(this.settings[key]);
+        }
+      };
+      sync();
+      input.addEventListener(input.type === "checkbox" ? "change" : "input", () => {
+        this.settings[key] = input.type === "checkbox" ? input.checked : Number(input.value);
+        sync();
+        this.onSettingsChange(this.settings, key);
+      });
+    }
+  }
+
+  syncPlayerSettings() {
+    for (const input of document.querySelectorAll("[data-player-setting]")) {
+      const key = input.dataset.playerSetting;
+      const output = document.querySelector(`[data-player-setting-out="${key}"]`);
+      const def = SETTING_DEFS.find((item) => item.key === key);
+      if (input.type === "checkbox") {
+        input.checked = this.settings[key] !== false;
+        if (output) {
+          output.value = input.checked ? "On" : "Off";
+        }
+      } else {
+        input.value = this.settings[key];
+        if (output) {
+          output.value = def?.format ? def.format(this.settings[key]) : String(this.settings[key]);
+        }
+      }
+    }
+  }
+
   syncSettings() {
     if (this.nodes.carPreset) {
       this.nodes.carPreset.value = this.settings.carPreset;
@@ -341,6 +393,7 @@ export class HUD {
       this.syncBooleanSetting("hitboxMode");
       this.setRemodelAvailable(Boolean(this.settings.noClip));
     }
+    this.syncPlayerSettings();
   }
 
   syncBooleanSetting(key) {
@@ -360,11 +413,13 @@ export class HUD {
     const input = document.querySelector(`#${key}`);
     const output = document.querySelector(`#${key}Out`);
     if (!def || !input || !output) {
+      this.syncPlayerSettings();
       return;
     }
 
     input.value = value;
     output.value = def.format(value);
+    this.syncPlayerSettings();
   }
 
   setRemodelAvailable(available) {
@@ -575,6 +630,10 @@ export class HUD {
     if (this.nodes.marketCarCount) {
       this.nodes.marketCarCount.textContent = `${CAR_AUCTION_LISTINGS.length} aste`;
     }
+  }
+
+  setPlayerSettingsVisible(visible) {
+    this.nodes.playerSettingsOverlay?.classList.toggle("is-active", Boolean(visible));
   }
 
   setRemodelPsxCars(cars = [], selectedCarId = "") {
