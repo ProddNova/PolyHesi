@@ -83,7 +83,6 @@
       <div id="remodelHoverLabel" class="remodel-hover-label" aria-hidden="true"></div>
 
       <button id="restartButton" class="restart-button" type="button">Restart</button>
-      <button id="settingsButton" class="settings-button" type="button">Settings</button>
 
       <section id="touchControls" class="touch-controls" aria-label="Comandi touch">
         <div class="touch-actions">
@@ -106,12 +105,12 @@
 
       <aside class="dev-panel" aria-label="Development tuning panel">
         <header>
-          <span>Impostazioni <kbd>O</kbd></span>
+          <span>Dev Panel <kbd>O</kbd></span>
           <strong id="fpsValue">60</strong>
         </header>
         <nav class="dev-tabs" aria-label="Dev panel tabs">
-          <button class="is-active" data-dev-tab="gameplay" type="button">Base</button>
-          <button data-dev-tab="physics" type="button">Avanzate</button>
+          <button class="is-active" data-dev-tab="gameplay" type="button">Game</button>
+          <button data-dev-tab="physics" type="button">Guida</button>
           <button data-dev-tab="debug" type="button">Debug</button>
         </nav>
 
@@ -141,11 +140,6 @@
             <output id="cameraFovOut">64</output>
             <input id="cameraFov" type="range" min="48" max="82" step="1" />
           </label>
-          <label>
-            <span>Render scale</span>
-            <output id="renderScaleOut">1.00x</output>
-            <input id="renderScale" type="range" min="0.70" max="1.25" step="0.01" />
-          </label>
           <label class="dev-toggle">
             <span>Day/night cycle</span>
             <output id="dayNightCycleOut">On</output>
@@ -160,16 +154,6 @@
             <span>Cycle speed</span>
             <output id="dayNightSpeedOut">18 min/s</output>
             <input id="dayNightSpeed" type="range" min="0" max="120" step="1" />
-          </label>
-          <label>
-            <span>Night brightness</span>
-            <output id="nightBrightnessOut">1.00x</output>
-            <input id="nightBrightness" type="range" min="0.50" max="1.60" step="0.01" />
-          </label>
-          <label>
-            <span>Road light</span>
-            <output id="roadLightIntensityOut">1.00x</output>
-            <input id="roadLightIntensity" type="range" min="0.20" max="2.00" step="0.01" />
           </label>
         </div>
 

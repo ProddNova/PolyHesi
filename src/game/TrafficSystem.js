@@ -1,6 +1,5 @@
 import * as THREE from "three";
-import { LANES, TRAFFIC_CAR_IDS, getCarPreset } from "./config.js";
-import { createPlayerCarAsset } from "./PlayerCarAsset.js";
+import { LANES, TRAFFIC_CAR_IDS } from "./config.js";
 import { choice, clamp, damp, makeBox, rand } from "./utils.js";
 
 const TRAFFIC_COLORS = [0xb8b4a8, 0xd6d3c8, 0x4c5459, 0x273c4d, 0x7d2520, 0x4d594c];
@@ -277,24 +276,57 @@ export class TrafficSystem {
   }
 
   createVehicle() {
+    const isTruck = false;
     const trafficModel = choice(TRAFFIC_CAR_IDS);
-    const preset = getCarPreset(trafficModel);
     const color = choice(TRAFFIC_COLORS);
-    const trafficPreset = {
-      ...preset,
+    const bodyMaterial = new THREE.MeshStandardMaterial({
       color,
-      secondaryColor: choice([0x101316, 0x151a1f, 0x20262b]),
-    };
-    const group = createPlayerCarAsset(trafficPreset);
-    group.name = "TrafficCar";
+      roughness: 0.5,
+      metalness: 0.12,
+      flatShading: true,
+    });
+    const panelMaterial = new THREE.MeshStandardMaterial({
+      color: 0x41484a,
+      roughness: 0.72,
+      metalness: 0.08,
+      flatShading: true,
+    });
+    const glassMaterial = new THREE.MeshStandardMaterial({
+      color: 0x111820,
+      roughness: 0.22,
+      metalness: 0.22,
+      flatShading: true,
+    });
+    const headlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffefd0 });
+    const tailMaterial = new THREE.MeshBasicMaterial({ color: 0xb42520 });
+
+    const group = new THREE.Group();
+    group.name = isTruck ? "TrafficTruck" : "TrafficCar";
+    const bodyLength = isTruck ? rand(9.8, 12.8) : rand(3.95, 4.9);
+    const bodyWidth = isTruck ? rand(2.36, 2.56) : rand(1.74, 1.96);
+
+    if (isTruck) {
+      group.add(makeBox(bodyWidth, 2.15, bodyLength * 0.62, panelMaterial, new THREE.Vector3(0, 1.54, -bodyLength * 0.12), true));
+      group.add(makeBox(bodyWidth * 0.94, 1.55, bodyLength * 0.25, bodyMaterial, new THREE.Vector3(0, 1.18, bodyLength * 0.33), true));
+      group.add(makeBox(bodyWidth * 0.72, 0.48, bodyLength * 0.1, glassMaterial, new THREE.Vector3(0, 1.85, bodyLength * 0.43), true));
+      group.add(makeBox(bodyWidth * 0.9, 0.2, bodyLength * 0.86, panelMaterial, new THREE.Vector3(0, 0.36, -bodyLength * 0.02), true));
+    } else {
+      group.add(makeBox(bodyWidth, 0.66, bodyLength, bodyMaterial, new THREE.Vector3(0, 0.66, 0), true));
+      group.add(makeBox(bodyWidth * 0.72, 0.48, bodyLength * 0.36, glassMaterial, new THREE.Vector3(0, 1.14, -0.18), true));
+      group.add(makeBox(bodyWidth * 0.95, 0.12, 1.25, bodyMaterial, new THREE.Vector3(0, 0.51, bodyLength * 0.28), true));
+      group.add(makeBox(bodyWidth * 0.94, 0.16, bodyLength * 0.86, panelMaterial, new THREE.Vector3(0, 0.3, -0.05), true));
+    }
+
+    group.add(makeBox(bodyWidth * 0.62, 0.1, 0.08, headlightMaterial, new THREE.Vector3(0, 0.76, bodyLength / 2 + 0.02)));
+    group.add(makeBox(bodyWidth * 0.68, 0.11, 0.08, tailMaterial, new THREE.Vector3(0, 0.76, -bodyLength / 2 - 0.02)));
 
     return {
       id: this.nextId++,
       trafficModel,
-      kind: "car",
+      kind: isTruck ? "truck" : "car",
       group,
-      width: preset.bodyWidth,
-      length: preset.bodyLength,
+      width: bodyWidth,
+      length: bodyLength,
       lane: 1,
       lateralOffset: LANES[1],
       s: 0,

@@ -9,11 +9,6 @@ const bodyObjModules = import.meta.glob("../../PSXStyleCars-DevEdition/body/*/*.
   import: "default",
   query: "?raw",
 });
-const wheelObjModules = import.meta.glob("../../PSXStyleCars-DevEdition/Wheels/*.obj", {
-  eager: true,
-  import: "default",
-  query: "?raw",
-});
 
 const WHEEL_NATIVE_RADIUS = 0.270532;
 const WHEEL_PREFAB_SCALE = 0.86;
@@ -64,42 +59,12 @@ function getBodyTemplate(modelId = "JapanSportCoupe") {
   return bodyTemplates.get(key);
 }
 
-function getWheelTemplate(wheelId = "sportWheel") {
-  const key = findWheelObjKey(wheelId);
-  if (!key) {
-    throw new Error(`Missing PSX wheel model: ${wheelId}`);
-  }
-
-  if (!bodyTemplates.has(`wheel:${key}`)) {
-    const template = objLoader.parse(removeObjLineElements(wheelObjModules[key]));
-    template.name = `${wheelId}WheelTemplate`;
-    prepareTemplate(template);
-    template.userData.nativeBounds = measureObject(template);
-    bodyTemplates.set(`wheel:${key}`, template);
-  }
-
-  return bodyTemplates.get(`wheel:${key}`);
-}
-
 function findBodyObjKey(modelId) {
   const normalizedId = String(modelId).replaceAll("\\", "/").toLowerCase();
   const folderNeedle = `/body/${normalizedId}/`;
   for (const key of Object.keys(bodyObjModules)) {
     const normalizedKey = key.replaceAll("\\", "/").toLowerCase();
     if (normalizedKey.includes(folderNeedle)) {
-      return key;
-    }
-  }
-
-  return null;
-}
-
-function findWheelObjKey(wheelId) {
-  const normalizedId = String(wheelId).replaceAll("\\", "/").toLowerCase();
-  const folderNeedle = `/wheels/${normalizedId}.obj`;
-  for (const key of Object.keys(wheelObjModules)) {
-    const normalizedKey = key.replaceAll("\\", "/").toLowerCase();
-    if (normalizedKey.endsWith(folderNeedle)) {
       return key;
     }
   }
@@ -162,12 +127,9 @@ function createBodyMaterials(preset) {
   });
   const glass = new THREE.MeshStandardMaterial({
     name: "psxGlass",
-    color: 0x13202c,
-    roughness: 0.16,
-    metalness: 0.08,
-    transparent: true,
-    opacity: 0.78,
-    depthWrite: false,
+    color: preset.secondaryColor,
+    roughness: 0.3,
+    metalness: 0.18,
     flatShading: true,
   });
   const trim = new THREE.MeshStandardMaterial({
@@ -199,7 +161,6 @@ function createBodyMaterials(preset) {
   });
 
   return new Map([
-    ["Material", body],
     ["Material.001", body],
     ["Material.002", glass],
     ["Material.003", trim],
@@ -208,35 +169,6 @@ function createBodyMaterials(preset) {
     ["Material.006", trim],
     ["Material.007", trim],
   ]);
-}
-
-function createWheelMaterials() {
-  const tire = new THREE.MeshStandardMaterial({
-    name: "psxTire",
-    color: 0x050608,
-    roughness: 0.94,
-    metalness: 0.02,
-    flatShading: true,
-    side: THREE.DoubleSide,
-  });
-  const rim = new THREE.MeshStandardMaterial({
-    name: "psxRim",
-    color: 0x8b9298,
-    roughness: 0.38,
-    metalness: 0.55,
-    flatShading: true,
-    side: THREE.DoubleSide,
-  });
-  const hub = new THREE.MeshStandardMaterial({
-    name: "psxWheelHub",
-    color: 0x545a60,
-    roughness: 0.48,
-    metalness: 0.42,
-    flatShading: true,
-    side: THREE.DoubleSide,
-  });
-
-  return { tire, rim, hub };
 }
 
 function applyMaterials(object, materials) {
@@ -253,57 +185,10 @@ function applyMaterials(object, materials) {
   });
 }
 
-function applyWheelMaterials(object, materials) {
-  object.traverse((child) => {
-    if (!child.isMesh) {
-      return;
-    }
-
-    const sourceMaterials = Array.isArray(child.material) ? child.material : [child.material];
-    const mappedMaterials = sourceMaterials.map((material, index) => {
-      const name = String(material?.name ?? "").toLowerCase();
-      if (name === "material" || index === 0) {
-        return materials.tire;
-      }
-      if (name.endsWith(".001") || index === 1) {
-        return materials.rim;
-      }
-      if (name.endsWith(".002")) {
-        return materials.hub;
-      }
-      return materials.hub;
-    });
-    child.material = Array.isArray(child.material) ? mappedMaterials : mappedMaterials[0];
-    child.castShadow = true;
-    child.receiveShadow = true;
-  });
-}
-
-function pickWheelModelId(modelId) {
-  const key = String(modelId).toLowerCase();
-  if (key.includes("kei") || key.includes("hatch") || key.includes("small")) {
-    return key.includes("korean") ? "StylishWheel" : "TunerWheel";
-  }
-  if (key.includes("suv") || key.includes("estate") || key.includes("wagen")) {
-    return "luxuryWheel";
-  }
-  if (key.includes("hyper") || key.includes("super") || key.includes("limited")) {
-    return key.includes("royal") ? "RoyalSportCarLimitedEditionWheel" : "luxurySportWheel";
-  }
-  if (key.includes("rally") || key.includes("drift") || key.includes("tuner")) {
-    return key.includes("legacy") ? "RallyWheelVer2" : "RallyWheels";
-  }
-  if (key.includes("sedan") || key.includes("muscle") || key.includes("eagle")) {
-    return "sportWheel";
-  }
-  return "sportWheel";
-}
-
 export function createPlayerCarAsset(preset) {
   const root = new THREE.Group();
   const modelId = preset.psxModel ?? preset.id ?? "JapanSportCoupe";
   root.name = `PSXStyleCars_${modelId}`;
-  const wheelModelId = pickWheelModelId(modelId);
 
   const rig = preset.vehicleRig ?? {};
   const rideHeight = Number(rig.rideHeight ?? 0);
@@ -330,10 +215,6 @@ export function createPlayerCarAsset(preset) {
   const visualLength = bodyBounds.length * scale;
   const rearZ = (bodyBounds.min.z - bodyBounds.center.z) * scale;
   const frontZ = (bodyBounds.max.z - bodyBounds.center.z) * scale;
-  const wheelTemplate = getWheelTemplate(wheelModelId);
-  const wheelBounds = wheelTemplate.userData.nativeBounds;
-  const wheelSourceRadius = Math.max(wheelBounds.size.y, wheelBounds.size.z) * 0.5;
-  const wheelModelScale = wheelSourceRadius > 0.001 ? wheelRadius / wheelSourceRadius : 1;
 
   const body = bodyTemplate.clone(true);
   applyMaterials(body, createBodyMaterials(preset));
@@ -352,19 +233,46 @@ export function createPlayerCarAsset(preset) {
     { side: -1, z: rearWheelZ, rotationY: 0, offsetX: rearWheelOffsetX, offsetY: rearWheelOffsetY, offsetZ: rearWheelOffsetZ },
     { side: 1, z: rearWheelZ, rotationY: Math.PI, offsetX: rearWheelOffsetX, offsetY: rearWheelOffsetY, offsetZ: rearWheelOffsetZ },
   ];
-  const wheelMaterials = createWheelMaterials();
   for (const wheelConfig of wheelPositions) {
-    const wheel = wheelTemplate.clone(true);
-    applyWheelMaterials(wheel, wheelMaterials);
-    wheel.scale.setScalar(wheelScale * wheelModelScale);
+    const wheel = new THREE.Group();
+    const tire = new THREE.Mesh(tireGeometry, new THREE.MeshStandardMaterial({
+      color: 0x050608,
+      roughness: 0.94,
+      metalness: 0.02,
+      flatShading: true,
+      side: THREE.DoubleSide,
+    }));
+    const rim = new THREE.Mesh(rimGeometry, new THREE.MeshStandardMaterial({
+      color: 0x8b9298,
+      roughness: 0.38,
+      metalness: 0.55,
+      flatShading: true,
+      side: THREE.DoubleSide,
+    }));
+    const hub = new THREE.Mesh(hubGeometry, new THREE.MeshStandardMaterial({
+      color: 0x545a60,
+      roughness: 0.48,
+      metalness: 0.42,
+      flatShading: true,
+      side: THREE.DoubleSide,
+    }));
+    tire.scale.set(wheelThickness, wheelRadius, wheelRadius);
+    rim.scale.set(wheelThickness * 1.08, wheelRadius * 0.58, wheelRadius * 0.58);
+    hub.scale.set(wheelThickness * 1.18, wheelRadius * 0.26, wheelRadius * 0.26);
+    tire.castShadow = true;
+    rim.castShadow = true;
+    hub.castShadow = true;
+    tire.receiveShadow = true;
+    rim.receiveShadow = true;
+    hub.receiveShadow = true;
+    wheel.add(tire);
+    wheel.add(rim);
+    wheel.add(hub);
     wheel.position.set(
       wheelConfig.side * (wheelX + wheelConfig.offsetX),
       wheelY + wheelConfig.offsetY,
       wheelConfig.z + wheelConfig.offsetZ,
     );
-    wheel.position.x -= wheelBounds.center.x * wheelScale * wheelModelScale;
-    wheel.position.y -= wheelBounds.center.y * wheelScale * wheelModelScale;
-    wheel.position.z -= wheelBounds.center.z * wheelScale * wheelModelScale;
     wheel.rotation.y = wheelConfig.rotationY;
     root.add(wheel);
   }

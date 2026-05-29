@@ -187,7 +187,6 @@ export class HighwayWorld {
     this.remodelTargetMap = new Map();
     this.remodelCreatedGroup = null;
     this.remodelHitboxGroup = null;
-    this.roadLights = [];
     this.environment = null;
 
     this.materials = this.createMaterials();
@@ -457,8 +456,6 @@ export class HighwayWorld {
     }
 
     const hour = ((Number(settings.timeOfDay ?? 12) % 24) + 24) % 24;
-    const nightBrightness = clamp(Number(settings.nightBrightness ?? 1), 0.5, 1.6);
-    const roadLightIntensity = clamp(Number(settings.roadLightIntensity ?? 1), 0, 2);
     const daylight = clamp(Math.sin(((hour - 6) / 12) * Math.PI), 0, 1);
     const dawn = clamp(1 - Math.abs(hour - 6) / 2.6, 0, 1);
     const dusk = clamp(1 - Math.abs(hour - 18) / 2.8, 0, 1);
@@ -475,11 +472,11 @@ export class HighwayWorld {
     }
     this.scene.background.copy(sky);
     fog.color.copy(sky);
-    fog.density = (0.000012 + night * 0.000032 + twilight * 0.000014) * (0.9 + nightBrightness * 0.1);
+    fog.density = 0.000012 + night * 0.000032 + twilight * 0.000014;
 
     hemisphere.color.copy(colors.nightHemi).lerp(colors.dayHemi, daylight);
     hemisphere.groundColor.copy(colors.nightGround).lerp(colors.dayGround, daylight);
-    hemisphere.intensity = (0.48 + daylight * 1.04 + twilight * 0.28) * (1 + (nightBrightness - 1) * night * 0.9);
+    hemisphere.intensity = 0.48 + daylight * 1.04 + twilight * 0.28;
 
     const sunAngle = ((hour - 6) / 24) * TWO_PI;
     const sunHeight = Math.sin(sunAngle);
@@ -495,13 +492,8 @@ export class HighwayWorld {
     );
     keyLight.color.copy(useMoon ? colors.moon : colors.sun);
     keyLight.intensity = useMoon
-      ? (0.34 + night * 0.3) * nightBrightness
+      ? 0.34 + night * 0.3
       : 0.18 + daylight * 1.16 + twilight * 0.24;
-
-    const roadLightBase = (0.03 + night * 0.95 + twilight * 0.12) * roadLightIntensity * nightBrightness;
-    for (const light of this.roadLights) {
-      light.intensity = roadLightBase;
-    }
   }
 
   createStaticHighway() {
@@ -928,24 +920,6 @@ export class HighwayWorld {
     details.add(this.createScaledInstancedBoxes(poles, this.materials.streetlightPole));
     details.add(this.createScaledInstancedBoxes(arms, this.materials.streetlightPole));
     details.add(this.createScaledInstancedBoxes(lamps, this.materials.streetlightGlow));
-
-    const roadLights = [];
-    const ROAD_LIGHT_INTERVAL = CITY_STREETLIGHT_INTERVAL * 5;
-    for (let s = 72; s < this.trackLength; s += ROAD_LIGHT_INTERVAL) {
-      const frame = this.getFrameAtDistance(s);
-      for (const side of [-1, 1]) {
-        if (this.isCityServiceClearance(frame.s, side)) {
-          continue;
-        }
-        const lampPosition = this.offsetPoint(frame, side * (ROAD_HALF_WIDTH + 10.4), 5.96);
-        const roadLight = new THREE.PointLight(0xffdba0, 0, 84, 2);
-        roadLight.position.copy(lampPosition);
-        roadLight.userData.roadLight = true;
-        roadLights.push(roadLight);
-        details.add(roadLight);
-      }
-    }
-    this.roadLights = roadLights;
     parent.add(details);
   }
   createHorizonBuildings(parent) {
