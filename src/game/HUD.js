@@ -158,6 +158,7 @@ export class HUD {
         color: document.querySelector("#remodelColor"),
       },
       remodelPsxCarSelect: document.querySelector("#remodelPsxCarSelect"),
+      remodelPsxRigGroup: document.querySelector("#remodelPsxRigGroup"),
       remodelPsxSaveButton: document.querySelector("#remodelPsxSaveButton"),
       remodelPsxInputs: {
         rideHeight: document.querySelector("#remodelPsxRideHeight"),
@@ -588,6 +589,12 @@ export class HUD {
       select.value = selectedCarId;
     } else if (cars.length) {
       select.value = cars[0].id;
+    }
+  }
+
+  setRemodelPsxRigVisible(visible) {
+    if (this.nodes.remodelPsxRigGroup) {
+      this.nodes.remodelPsxRigGroup.hidden = !visible;
     }
   }
 

@@ -913,6 +913,8 @@ export class Game {
     }
     this.buildRemodelPsxLineup();
     this.updateRemodelPsxLineupVisibility();
+    this.syncRemodelPsxRigToActiveCar();
+    this.hud?.setRemodelPsxRigVisible(false);
   }
 
   selectRemodelPsxCar(carId) {
@@ -921,6 +923,32 @@ export class Game {
     }
     this.selectedRemodelPsxCarId = carId;
     this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(carId));
+  }
+
+  syncRemodelPsxRigToActiveCar() {
+    const activeCarId = this.getActiveVehicle()?.carId ?? null;
+    if (!activeCarId || !CAR_PRESETS.some((preset) => preset.id === activeCarId)) {
+      return;
+    }
+    this.selectedRemodelPsxCarId = activeCarId;
+    const activePreset = CAR_PRESETS.find((preset) => preset.id === activeCarId);
+    this.hud?.setRemodelPsxCars(
+      [{ id: activeCarId, label: activePreset?.label ?? activeCarId }],
+      activeCarId,
+    );
+    this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(activeCarId));
+  }
+
+  shouldShowRemodelPsxRigForTarget(target) {
+    return Boolean(this.mode === "garage" && target?.id === "hitbox:player");
+  }
+
+  updateRemodelPsxRigVisibility(target) {
+    const visible = this.shouldShowRemodelPsxRigForTarget(target);
+    this.hud?.setRemodelPsxRigVisible(visible);
+    if (visible) {
+      this.syncRemodelPsxRigToActiveCar();
+    }
   }
 
   updateSelectedPsxCarRig(state) {
@@ -1123,6 +1151,7 @@ export class Game {
     this.activeVehicleId = vehicle.id;
     this.syncActiveVehicleToSettings();
     this.player.setCarPreset(this.getActiveVehiclePreset());
+    this.syncRemodelPsxRigToActiveCar();
     this.hud.syncSettings?.();
     this.markProgressDirty({ immediate: true });
   }
@@ -1992,9 +2021,10 @@ export class Game {
   handleRemodelSelection(target, state) {
     if (!target || !state) {
       this.hud?.hideRemodelEditor();
+      this.hud?.setRemodelPsxRigVisible(false);
       return;
     }
-
+    this.updateRemodelPsxRigVisibility(target);
     this.hud?.showRemodelEditor(target, state);
   }
 
@@ -2022,6 +2052,7 @@ export class Game {
     if (applied) {
       const target = this.remodelOverlay.getSelectedTarget?.();
       if (target) {
+        this.updateRemodelPsxRigVisibility(target);
         this.hud.showRemodelEditor(target, applied);
       }
       this.hud.setRemodelEditorStatus("Live edit");
@@ -2064,6 +2095,7 @@ export class Game {
       return;
     }
 
+    this.updateRemodelPsxRigVisibility(result.target);
     this.hud.showRemodelEditor(result.target, result.state);
     this.remodelUndoStack.push({ type: "created", id: result.target.id, label: result.target.label });
     this.hud.setRemodelEditorStatus(preset ? `New ${preset}` : "New piece");
@@ -2110,6 +2142,7 @@ export class Game {
     }
 
     if (lastResult?.target && lastResult.state) {
+      this.updateRemodelPsxRigVisibility(lastResult.target);
       this.hud.showRemodelEditor(lastResult.target, lastResult.state);
       this.hud.setRemodelEditorStatus("New guardrail");
       this.hud.flashNotice("Created", "guardrail module");
@@ -2127,6 +2160,7 @@ export class Game {
     }
 
     this.hud.hideRemodelEditor();
+    this.hud.setRemodelPsxRigVisible(false);
     this.hud.flashNotice("Deleted", deleted.label ?? "piece removed");
   }
 
@@ -2173,6 +2207,7 @@ export class Game {
       return;
     }
 
+    this.updateRemodelPsxRigVisibility(result.target);
     this.hud.showRemodelEditor(result.target, result.state);
     this.hud.flashNotice("Model reset", "save map to persist");
   }
@@ -2180,6 +2215,7 @@ export class Game {
   closeRemodelEditor() {
     this.remodelOverlay.clearSelection();
     this.hud.hideRemodelEditor();
+    this.hud.setRemodelPsxRigVisible(false);
   }
 
   copyRemodelTarget() {
@@ -2214,6 +2250,7 @@ export class Game {
     }
 
     this.remodelUndoStack.push({ type: "created", id: result.target.id, label: result.target.label });
+    this.updateRemodelPsxRigVisibility(result.target);
     this.hud.showRemodelEditor(result.target, result.state);
     this.hud.flashNotice("Pasted", result.target.label ?? "new box");
   }
@@ -2231,6 +2268,7 @@ export class Game {
         this.remodelOverlay.refresh(null);
       }
       this.hud.hideRemodelEditor();
+      this.hud.setRemodelPsxRigVisible(false);
       this.hud.flashNotice("Undo", "creation removed");
       return;
     }
@@ -2239,6 +2277,7 @@ export class Game {
     this.remodelOverlay.refresh(entry.id);
     const target = this.world.getRemodelTarget(entry.id);
     if (target && applied) {
+      this.updateRemodelPsxRigVisibility(target);
       this.hud.showRemodelEditor(target, applied);
     }
     this.hud.flashNotice("Undo", entry.label ?? "state restored");
