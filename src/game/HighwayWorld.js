@@ -189,6 +189,8 @@ export class HighwayWorld {
     this.remodelHitboxGroup = null;
     this.environment = null;
     this.roadLights = [];
+    this.garageLights = [];
+    this.ultraGraphics = false;
 
     this.materials = this.createMaterials();
     this.createRoute();
@@ -422,11 +424,19 @@ export class HighwayWorld {
   createEnvironment() {
     this.scene.background = new THREE.Color(0x80c8ff);
 
-    const hemisphere = new THREE.HemisphereLight(0xe5f4ff, 0x1a211a, 1.46);
+    const hemisphere = new THREE.HemisphereLight(0xe5f4ff, 0x1a211a, 1.26);
     this.scene.add(hemisphere);
 
-    const keyLight = new THREE.DirectionalLight(0xfff3d1, 1.22);
+    const keyLight = new THREE.DirectionalLight(0xfff3d1, 1.34);
     keyLight.position.set(-220, 360, -180);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(2048, 2048);
+    keyLight.shadow.camera.near = 20;
+    keyLight.shadow.camera.far = 900;
+    keyLight.shadow.camera.left = -180;
+    keyLight.shadow.camera.right = 180;
+    keyLight.shadow.camera.top = 180;
+    keyLight.shadow.camera.bottom = -180;
     this.scene.add(keyLight);
 
     const fog = new THREE.FogExp2(0x80c8ff, 0.000012);
@@ -462,7 +472,7 @@ export class HighwayWorld {
     const dusk = clamp(1 - Math.abs(hour - 18) / 2.8, 0, 1);
     const twilight = Math.max(dawn, dusk);
     const night = 1 - Math.max(daylight, twilight * 0.58);
-    const lampPower = clamp((night - 0.18) / 0.72, 0, 1);
+    const lampPower = clamp((night - 0.04) / 0.62, 0, 1);
     const { hemisphere, keyLight, fog, colors } = this.environment;
 
     const sky = colors.nightSky.clone().lerp(colors.daySky, daylight);
@@ -474,11 +484,11 @@ export class HighwayWorld {
     }
     this.scene.background.copy(sky);
     fog.color.copy(sky);
-    fog.density = 0.000012 + night * 0.00002 + twilight * 0.000012;
+    fog.density = (this.ultraGraphics ? 0.0000025 : 0.000012) + night * 0.000018 + twilight * 0.00001;
 
     hemisphere.color.copy(colors.nightHemi).lerp(colors.dayHemi, daylight);
     hemisphere.groundColor.copy(colors.nightGround).lerp(colors.dayGround, daylight);
-    hemisphere.intensity = 0.62 + daylight * 1.0 + twilight * 0.3;
+    hemisphere.intensity = 0.48 + daylight * 1.0 + twilight * 0.24;
 
     const sunAngle = ((hour - 6) / 24) * TWO_PI;
     const sunHeight = Math.sin(sunAngle);
@@ -496,12 +506,33 @@ export class HighwayWorld {
     keyLight.intensity = useMoon
       ? 0.48 + night * 0.32
       : 0.18 + daylight * 1.16 + twilight * 0.24;
-
     if (this.materials?.streetlightGlow) {
       this.materials.streetlightGlow.color.setHex(lampPower > 0.02 ? 0xffd887 : 0x6f5a32);
     }
     for (const light of this.roadLights) {
-      light.intensity = lampPower * (light.userData.baseIntensity ?? 1);
+      light.intensity = lampPower * (light.userData.baseIntensity ?? 1) * (this.ultraGraphics ? 1.3 : 1);
+    }
+    for (const light of this.garageLights) {
+      light.intensity = (light.userData.baseIntensity ?? 1) * (0.95 + night * 0.72);
+    }
+  }
+
+  setUltraGraphics(enabled) {
+    this.ultraGraphics = Boolean(enabled);
+    if (this.environment?.keyLight) {
+      const shadowSize = this.ultraGraphics ? 4096 : 2048;
+      this.environment.keyLight.shadow.mapSize.set(shadowSize, shadowSize);
+      this.environment.keyLight.shadow.needsUpdate = true;
+    }
+    for (const texture of [
+      this.materials?.cityGround?.map,
+      this.materials?.asphalt?.map,
+      this.materials?.concrete?.map,
+    ]) {
+      if (texture) {
+        texture.anisotropy = this.ultraGraphics ? 16 : 1;
+        texture.needsUpdate = true;
+      }
     }
   }
 
@@ -755,8 +786,14 @@ export class HighwayWorld {
       for (const z of [-50.0, -40.0]) {
         parent.add(makeBox(3.8, 0.12, 0.82, ceilingLightHousing, new THREE.Vector3(x, 6.34, z), true));
         parent.add(makeBox(3.25, 0.07, 0.48, ceilingLight, new THREE.Vector3(x, 6.26, z)));
-        const light = new THREE.PointLight(0xffdca3, 0.92, 16, 1.9);
+        const light = new THREE.PointLight(0xffdca3, 6.8, 34, 1.28);
         light.position.set(x, 5.8, z);
+        light.castShadow = true;
+        light.shadow.mapSize.set(512, 512);
+        light.shadow.camera.near = 0.35;
+        light.shadow.camera.far = 36;
+        light.userData.baseIntensity = 6.8;
+        this.garageLights.push(light);
         parent.add(light);
       }
     }
@@ -908,8 +945,8 @@ export class HighwayWorld {
           continue;
         }
         const polePosition = this.offsetPoint(frame, side * (ROAD_HALF_WIDTH + 10.2), 3.05);
-        const armPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 0.76, 0, 5.96);
-        const lampPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 1.55, 0, 5.88);
+        const armPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 0.76, 2.78, 5.96);
+        const lampPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 1.55, 2.74, 5.88);
         poles.push({
           position: polePosition,
           yaw: frame.yaw,
@@ -925,11 +962,11 @@ export class HighwayWorld {
           yaw: frame.yaw,
           scale: { x: 0.44, y: 0.16, z: 0.34 },
         });
-        if (s % (CITY_STREETLIGHT_INTERVAL * 6) < 1 && Math.abs(side) === 1) {
-          const light = new THREE.PointLight(0xffd887, 0, 34, 1.65);
+        if (s % (CITY_STREETLIGHT_INTERVAL * 3) < 1 && Math.abs(side) === 1) {
+          const light = new THREE.PointLight(0xffd887, 0, 82, 1.12);
           light.position.copy(lampPosition);
-          light.position.y -= 0.35;
-          light.userData.baseIntensity = 1.65;
+          light.position.y -= 0.55;
+          light.userData.baseIntensity = 7.8;
           this.roadLights.push(light);
           lightGroup.add(light);
         }

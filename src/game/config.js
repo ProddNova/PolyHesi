@@ -30,6 +30,7 @@ export const DEFAULT_SETTINGS = {
   dayNightSpeed: 18,
   masterVolume: 0.34,
   graphicsQuality: 1,
+  ultraGraphics: false,
   handling: 0.85,
   brakePower: 1,
   powerMultiplier: 1,
@@ -134,9 +135,27 @@ export const DEFAULT_VEHICLE_RIG_TUNE = Object.freeze({
   rearWheelOffsetY: 0,
   rearWheelOffsetZ: 0,
   wheelScale: 1,
+  wheelModel: "",
+  wheelColor: 0x9aa0a4,
+  bodyColor: null,
   bodyOffsetY: 0,
   bodyOffsetZ: 0,
 });
+
+export const WHEEL_MODEL_OPTIONS = [
+  { id: "", label: "Auto" },
+  { id: "sportWheel.obj", label: "Sport" },
+  { id: "TunerWheel.obj", label: "Tuner" },
+  { id: "TuningWheel.obj", label: "Tuning" },
+  { id: "RallyWheels.obj", label: "Rally" },
+  { id: "RallyWheelVer2.obj", label: "Rally V2" },
+  { id: "retroSportWheel.obj", label: "Retro Sport" },
+  { id: "AluWheel.obj", label: "Alu" },
+  { id: "luxurySportWheel.obj", label: "Luxury Sport" },
+  { id: "luxuryWheel.obj", label: "Luxury" },
+  { id: "StylishWheel.obj", label: "Stylish" },
+  { id: "RoyalSportCarLimitedEditionWheel.obj", label: "Royal Sport" },
+];
 
 const PAINT_COLORS = [
   0xb43f38, 0xd6ad3d, 0x596064, 0x2f4a5f, 0x30a78f, 0xd4d1c8,
@@ -390,6 +409,16 @@ export function sanitizeVehicleRigTune(raw = {}) {
   const legacyWheelOffsetX = finite(raw.wheelOffsetX, DEFAULT_VEHICLE_RIG_TUNE.frontWheelOffsetX);
   const legacyWheelOffsetY = finite(raw.wheelOffsetY, DEFAULT_VEHICLE_RIG_TUNE.frontWheelOffsetY);
   const legacyWheelOffsetZ = finite(raw.wheelOffsetZ, DEFAULT_VEHICLE_RIG_TUNE.frontWheelOffsetZ);
+  const colorOrNull = (value) => {
+    if (value === null || value === undefined || value === "") {
+      return null;
+    }
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.max(0, Math.min(0xffffff, Math.round(parsed))) : null;
+  };
+  const wheelModel = WHEEL_MODEL_OPTIONS.some((option) => option.id === raw.wheelModel)
+    ? raw.wheelModel
+    : DEFAULT_VEHICLE_RIG_TUNE.wheelModel;
   return {
     rideHeight: finite(raw.rideHeight, DEFAULT_VEHICLE_RIG_TUNE.rideHeight),
     frontWheelOffsetX: finite(raw.frontWheelOffsetX, legacyWheelOffsetX),
@@ -399,6 +428,9 @@ export function sanitizeVehicleRigTune(raw = {}) {
     rearWheelOffsetY: finite(raw.rearWheelOffsetY, legacyWheelOffsetY),
     rearWheelOffsetZ: finite(raw.rearWheelOffsetZ, legacyWheelOffsetZ),
     wheelScale: Math.max(0.4, Math.min(2.2, finite(raw.wheelScale, DEFAULT_VEHICLE_RIG_TUNE.wheelScale))),
+    wheelModel,
+    wheelColor: colorOrNull(raw.wheelColor) ?? DEFAULT_VEHICLE_RIG_TUNE.wheelColor,
+    bodyColor: colorOrNull(raw.bodyColor),
     bodyOffsetY: finite(raw.bodyOffsetY, DEFAULT_VEHICLE_RIG_TUNE.bodyOffsetY),
     bodyOffsetZ: finite(raw.bodyOffsetZ, DEFAULT_VEHICLE_RIG_TUNE.bodyOffsetZ),
   };

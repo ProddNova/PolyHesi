@@ -135,7 +135,9 @@ function findWheelObjKey(preset) {
     .map((value) => String(value).toLowerCase());
   const keys = Object.keys(wheelObjModules);
   for (const needle of preferred) {
-    const direct = keys.find((key) => key.toLowerCase().includes(needle) && key.toLowerCase().endsWith("wheel.obj"));
+    const direct = keys.find((key) => key.toLowerCase().endsWith(`/wheels/${needle}`) || (
+      key.toLowerCase().includes(needle) && key.toLowerCase().endsWith("wheel.obj")
+    ));
     if (direct) {
       return direct;
     }
@@ -184,20 +186,21 @@ function measureObject(object) {
 }
 
 function createBodyMaterials(preset) {
+  const rig = preset.vehicleRig ?? {};
   const body = new THREE.MeshStandardMaterial({
     name: "psxBodyPaint",
-    color: preset.color,
+    color: rig.bodyColor ?? preset.color,
     roughness: 0.56,
     metalness: 0.18,
     flatShading: true,
   });
   const glass = new THREE.MeshStandardMaterial({
     name: "psxGlass",
-    color: 0x17212a,
-    emissive: 0x02060a,
-    emissiveIntensity: 0.08,
-    roughness: 0.5,
-    metalness: 0.04,
+    color: 0x05070a,
+    emissive: 0x000000,
+    emissiveIntensity: 0,
+    roughness: 0.28,
+    metalness: 0.12,
     flatShading: true,
   });
   const trim = new THREE.MeshStandardMaterial({
@@ -230,6 +233,7 @@ function createBodyMaterials(preset) {
 
   return new Map([
     ["Material.001", body],
+    ["Material", glass],
     ["Material.002", glass],
     ["Material.003", trim],
     ["Material.004", headlight],
@@ -278,7 +282,7 @@ function createWheelAsset(preset, wheelRadius, wheelThickness) {
   const thicknessScale = (wheelThickness * 1.06) / nativeThickness;
   const rimMaterial = new THREE.MeshStandardMaterial({
     name: "psxWheelMetal",
-    color: 0x9aa0a4,
+    color: preset.wheelColor ?? preset.vehicleRig?.wheelColor ?? 0x9aa0a4,
     roughness: 0.44,
     metalness: 0.46,
     flatShading: true,
@@ -317,6 +321,12 @@ export function createPlayerCarAsset(preset) {
   const wheelScaleTuned = Math.max(0.4, Math.min(2.2, Number(rig.wheelScale ?? 1)));
   const bodyOffsetY = Number(rig.bodyOffsetY ?? 0);
   const bodyOffsetZ = Number(rig.bodyOffsetZ ?? 0);
+  preset = {
+    ...preset,
+    color: rig.bodyColor ?? preset.color,
+    wheelModel: rig.wheelModel || preset.wheelModel,
+    wheelColor: rig.wheelColor,
+  };
 
   const bodyTemplate = getBodyTemplate(modelId);
   const bodyBounds = bodyTemplate.userData.nativeBounds;

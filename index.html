@@ -274,6 +274,11 @@
             <output id="hitboxModeOut">Off</output>
             <input id="hitboxMode" type="checkbox" />
           </label>
+          <label class="dev-toggle">
+            <span>Ultra graphics</span>
+            <output id="ultraGraphicsOut">Off</output>
+            <input id="ultraGraphics" type="checkbox" />
+          </label>
         </div>
 
         <div class="dev-actions">
@@ -343,6 +348,9 @@
             <select id="remodelPsxCarSelect"></select>
           </label>
           <div class="remodel-axis-grid">
+            <label><span>wheel type</span><select id="remodelPsxWheelModel"></select></label>
+            <label><span>wheel color</span><input id="remodelPsxWheelColor" type="color" value="#9aa0a4" /></label>
+            <label><span>body color</span><input id="remodelPsxBodyColor" type="color" value="#b43f38" /></label>
             <label><span>ride Y</span><input id="remodelPsxRideHeight" type="number" step="0.01" /></label>
             <label><span>front wheel X</span><input id="remodelPsxFrontWheelOffsetX" type="number" step="0.01" /></label>
             <label><span>front wheel Y</span><input id="remodelPsxFrontWheelOffsetY" type="number" step="0.01" /></label>

@@ -133,18 +133,26 @@ export class PlayerCar {
       this.group.add(makeBox(0.12, 0.46, 0.12, trimMaterial, new THREE.Vector3(width * 0.36, 0.94, rear - 0.08), true));
     }
 
-    const headLight = new THREE.SpotLight(0xfff0d7, 4.8, 110, Math.PI / 6.2, 0.54, 1.4);
+    const headLight = new THREE.SpotLight(0xfff0d7, 34, 220, Math.PI / 5.7, 0.42, 1.25);
     headLight.position.set(0, 1.02, front - 0.28);
-    headLight.target.position.set(0, 0.28, 46);
+    headLight.target.position.set(0, 0.18, 72);
+    headLight.castShadow = true;
+    headLight.shadow.mapSize.set(1024, 1024);
+    headLight.shadow.camera.near = 0.4;
+    headLight.shadow.camera.far = 120;
     this.group.add(headLight);
     this.group.add(headLight.target);
   }
 
   addHeadLight(length) {
     const front = length * 0.5;
-    const headLight = new THREE.SpotLight(0xfff0d7, 4.8, 110, Math.PI / 6.2, 0.54, 1.4);
+    const headLight = new THREE.SpotLight(0xfff0d7, 34, 220, Math.PI / 5.7, 0.42, 1.25);
     headLight.position.set(0, 1.02, front - 0.28);
-    headLight.target.position.set(0, 0.28, 46);
+    headLight.target.position.set(0, 0.18, 72);
+    headLight.castShadow = true;
+    headLight.shadow.mapSize.set(1024, 1024);
+    headLight.shadow.camera.near = 0.4;
+    headLight.shadow.camera.far = 120;
     this.group.add(headLight);
     this.group.add(headLight.target);
   }
@@ -161,6 +169,9 @@ export class PlayerCar {
       rig.rearWheelOffsetY,
       rig.rearWheelOffsetZ,
       rig.wheelScale,
+      rig.wheelModel,
+      rig.wheelColor,
+      rig.bodyColor,
       rig.bodyOffsetY,
       rig.bodyOffsetZ,
     ].join(":");

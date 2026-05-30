@@ -144,19 +144,23 @@ export class Game {
       this.settings.cameraFov,
       window.innerWidth / window.innerHeight,
       0.1,
-      900,
+      this.settings.ultraGraphics ? 1800 : 900,
     );
     this.camera.position.set(0, 5.2, -12);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(this.getRenderPixelRatio());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.renderer.shadowMap.enabled = false;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = this.settings.ultraGraphics ? 1.12 : 1;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.root.appendChild(this.renderer.domElement);
 
     this.input = new InputController(this.renderer.domElement);
     this.world = new HighwayWorld(this.scene);
+    this.world.setUltraGraphics(Boolean(this.settings.ultraGraphics));
     this.player = new PlayerCar(this.scene, this.world.getStartPose());
     this.player.setCarPreset(this.getActiveVehiclePreset());
     this.garagePsxRemodelTarget = null;
@@ -893,17 +897,26 @@ export class Game {
     if (!preset?.carId) {
       return preset;
     }
+    const rig = this.getVehicleRigForCar(preset.carId);
     return {
       ...preset,
-      vehicleRig: this.getVehicleRigForCar(preset.carId),
+      color: rig.bodyColor ?? preset.color,
+      wheelModel: rig.wheelModel || preset.wheelModel,
+      wheelColor: rig.wheelColor,
+      vehicleRig: rig,
     };
   }
 
   getVehicleRigForCar(carId) {
-    return sanitizeVehicleRigTune({
+    const preset = CAR_PRESETS.find((car) => car.id === carId);
+    const tuned = sanitizeVehicleRigTune({
       ...DEFAULT_VEHICLE_RIG_TUNE,
       ...(this.vehicleRigOverrides?.[carId] ?? {}),
     });
+    return {
+      ...tuned,
+      bodyColor: tuned.bodyColor ?? preset?.color ?? DEFAULT_VEHICLE_RIG_TUNE.wheelColor,
+    };
   }
 
   initializeRemodelPsxCars() {
@@ -1957,7 +1970,7 @@ export class Game {
         }
       }
 
-      for (const key of ["trafficEnabled", "dayNightCycle", "noClip", "hitboxMode", "remodelMode", "remodelSnapToGrid"]) {
+      for (const key of ["trafficEnabled", "dayNightCycle", "noClip", "hitboxMode", "remodelMode", "remodelSnapToGrid", "ultraGraphics"]) {
         if (typeof saved[key] === "boolean") {
           settings[key] = saved[key];
         }
@@ -1991,6 +2004,7 @@ export class Game {
       hitboxMode: this.settings.hitboxMode,
       remodelMode: this.settings.remodelMode,
       remodelSnapToGrid: this.settings.remodelSnapToGrid,
+      ultraGraphics: this.settings.ultraGraphics,
     };
     for (const def of SETTING_DEFS) {
       payload[def.key] = this.settings[def.key];
@@ -2102,6 +2116,10 @@ export class Game {
     }
     if (changedKey === "graphicsQuality") {
       this.applyGraphicsQuality();
+    }
+    if (changedKey === "ultraGraphics") {
+      this.applyGraphicsQuality();
+      this.hud.flashNotice("Ultra graphics", this.settings.ultraGraphics ? "video mode on" : "video mode off");
     }
     if (changedKey === "cameraFov") {
       this.camera.fov = this.settings.cameraFov;
@@ -2428,19 +2446,27 @@ export class Game {
 
   resize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
+    this.camera.far = this.settings.ultraGraphics ? 1800 : 900;
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(this.getRenderPixelRatio());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
   getRenderPixelRatio() {
+    if (this.settings.ultraGraphics) {
+      return Math.min(window.devicePixelRatio || 1, 4);
+    }
     const quality = Math.round(Number(this.settings.graphicsQuality) || 1);
     const cap = quality <= 0 ? 0.82 : quality >= 2 ? 1.5 : 1.15;
     return Math.min(window.devicePixelRatio, cap);
   }
 
   applyGraphicsQuality() {
+    this.camera.far = this.settings.ultraGraphics ? 1800 : 900;
+    this.camera.updateProjectionMatrix();
+    this.renderer.toneMappingExposure = this.settings.ultraGraphics ? 1.12 : 1;
     this.renderer.setPixelRatio(this.getRenderPixelRatio());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.world?.setUltraGraphics?.(Boolean(this.settings.ultraGraphics));
   }
 }

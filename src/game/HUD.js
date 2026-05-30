@@ -4,6 +4,7 @@ import {
   DEFAULT_VEHICLE_RIG_TUNE,
   PARTS_CATALOG,
   SETTING_DEFS,
+  WHEEL_MODEL_OPTIONS,
   getCarPreset,
   getVehiclePreset,
   sanitizeVehicleRigTune,
@@ -166,6 +167,9 @@ export class HUD {
       remodelPsxSaveButton: document.querySelector("#remodelPsxSaveButton"),
       remodelPsxInputs: {
         rideHeight: document.querySelector("#remodelPsxRideHeight"),
+        wheelModel: document.querySelector("#remodelPsxWheelModel"),
+        wheelColor: document.querySelector("#remodelPsxWheelColor"),
+        bodyColor: document.querySelector("#remodelPsxBodyColor"),
         frontWheelOffsetX: document.querySelector("#remodelPsxFrontWheelOffsetX"),
         frontWheelOffsetY: document.querySelector("#remodelPsxFrontWheelOffsetY"),
         frontWheelOffsetZ: document.querySelector("#remodelPsxFrontWheelOffsetZ"),
@@ -227,6 +231,7 @@ export class HUD {
     this.nodes.remodelClose?.addEventListener("click", () => this.onRemodelClose?.());
     this.nodes.remodelPsxCarSelect?.addEventListener("change", () => this.onRemodelPsxCarSelect?.(this.nodes.remodelPsxCarSelect.value));
     this.nodes.remodelPsxSaveButton?.addEventListener("click", () => this.onRemodelPsxRigSave?.());
+    this.populateRemodelWheelModels();
     for (const input of Object.values(this.nodes.remodelInputs)) {
       input?.addEventListener("input", () => this.onRemodelChange?.(this.readRemodelState()));
       if (input?.type === "color") {
@@ -298,6 +303,7 @@ export class HUD {
     this.bindBooleanSetting("remodelMode");
     this.bindBooleanSetting("remodelSnapToGrid");
     this.bindBooleanSetting("hitboxMode");
+    this.bindBooleanSetting("ultraGraphics");
     this.setRemodelAvailable(Boolean(this.settings.noClip));
   }
 
@@ -391,6 +397,7 @@ export class HUD {
       this.syncBooleanSetting("remodelMode");
       this.syncBooleanSetting("remodelSnapToGrid");
       this.syncBooleanSetting("hitboxMode");
+      this.syncBooleanSetting("ultraGraphics");
       this.setRemodelAvailable(Boolean(this.settings.noClip));
     }
     this.syncPlayerSettings();
@@ -664,20 +671,46 @@ export class HUD {
     }
   }
 
+  populateRemodelWheelModels() {
+    const select = this.nodes.remodelPsxInputs?.wheelModel;
+    if (!select) {
+      return;
+    }
+    select.innerHTML = "";
+    for (const optionDef of WHEEL_MODEL_OPTIONS) {
+      const option = document.createElement("option");
+      option.value = optionDef.id;
+      option.textContent = optionDef.label;
+      select.appendChild(option);
+    }
+  }
+
   writeRemodelPsxRigState(state = DEFAULT_VEHICLE_RIG_TUNE) {
     const tuned = sanitizeVehicleRigTune(state);
     for (const [key, input] of Object.entries(this.nodes.remodelPsxInputs ?? {})) {
       if (!input) {
         continue;
       }
-      input.value = Number(tuned[key] ?? 0).toFixed(2);
+      if (input.type === "color") {
+        input.value = formatColorSwatch(tuned[key] ?? DEFAULT_VEHICLE_RIG_TUNE[key] ?? 0);
+      } else if (input.tagName === "SELECT") {
+        input.value = tuned[key] ?? "";
+      } else {
+        input.value = Number(tuned[key] ?? 0).toFixed(2);
+      }
     }
   }
 
   readRemodelPsxRigState() {
     const raw = {};
     for (const [key, input] of Object.entries(this.nodes.remodelPsxInputs ?? {})) {
-      raw[key] = Number(input?.value);
+      if (input?.type === "color") {
+        raw[key] = Number.parseInt(input.value.replace("#", ""), 16);
+      } else if (input?.tagName === "SELECT") {
+        raw[key] = input.value;
+      } else {
+        raw[key] = Number(input?.value);
+      }
     }
     return sanitizeVehicleRigTune(raw);
   }
