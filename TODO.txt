@@ -16,6 +16,11 @@ MACRO AREE
 
 TODO
 
+micro-task
+
+- Non limitare gli fps
+
+
 fast-tk's
 
 - La visuale in terza persona è rotta: quando la macchina sterza o ruota, il veicolo non rimane correttamente centrato nell’inquadratura come in GTA V / giochi di guida arcade.
@@ -29,13 +34,17 @@ La direzione visiva dell’auto deve comunicare correttamente quanto il veicolo 
 
 - Fare si che le auto del traffico siano le auto PSX
 
-- Migliorare illuminazione ora non fa luce sembrano solo gialle le luci e basta non emettono luce reale nemmeno i fari nemmeno luci dentro a box e manco lampioni fanno luce reale
-
 - Dal remodel sui veicoli psx oltre a varie posizioni e cose poter impostare anche il tipo di cerchione del rig e il colore del cerchione e anche auto 8colore auto) tutto ovviamente deve venire salvato in modo persistente come il rig fa già
 
 - Le auto psx hanno i vetri colorati invece che essere neri/trasparenti (meglio neri)
 
-- Aggiungi nella dev menu un flag che se attivato mette la grafica al massimo tutto al massimo ora è tanto pixelato sopratutto in lontanaza, questa grafica ultra serve a me per fare i video del gioco
+- Migliorare mappa deve essere piu grande e stoppare il gioco inoltre se dev cliccando nella mappa con il mouse si ci potra teletrasportare
+
+- Inserire dei cartelli stradali fatti bene con il palo il cartello verde e scritte in giapponese come la shutoku expressway, sia cartelli singoli lato strada sia cartelli che stanno sopra quindi un palo a destra uno asinistra e il cartello che copre la strada diciamo
+
+- Migliora le finestre dei palazzi ora sono fatte male non ordinate e poi sono sottili non sembrano finestre
+
+- Fai alcune gallerie molto lunghe anche e segna sulla mappa solo dev la posizione di tutte le gallerie
 
 slow-tk's
 
