@@ -64,6 +64,7 @@ export class HUD {
     onRemodelPsxCarSelect,
     onRemodelPsxRigChange,
     onRemodelPsxRigSave,
+    onMapTeleport,
   ) {
     this.settings = settings;
     this.onSettingsChange = onSettingsChange;
@@ -88,10 +89,12 @@ export class HUD {
     this.onRemodelPsxCarSelect = onRemodelPsxCarSelect;
     this.onRemodelPsxRigChange = onRemodelPsxRigChange;
     this.onRemodelPsxRigSave = onRemodelPsxRigSave;
+    this.onMapTeleport = onMapTeleport;
     this.nearMissUntil = 0;
     this.marketSite = "cars";
     this.ownedCarsSignature = "";
     this.installedUpgradeSignature = "";
+    this.isAdmin = false;
 
     this.nodes = {
       shell: document.querySelector(".hud-shell"),
@@ -208,6 +211,7 @@ export class HUD {
     this.mapContext = this.nodes.miniMapCanvas?.getContext("2d") ?? null;
     this.mapVisible = false;
     this.mapBounds = null;
+    this.lastMapWorld = null;
     this.devPanelVisible = false;
     this.setDevPanelVisible(false);
 
@@ -231,6 +235,7 @@ export class HUD {
     this.nodes.remodelClose?.addEventListener("click", () => this.onRemodelClose?.());
     this.nodes.remodelPsxCarSelect?.addEventListener("change", () => this.onRemodelPsxCarSelect?.(this.nodes.remodelPsxCarSelect.value));
     this.nodes.remodelPsxSaveButton?.addEventListener("click", () => this.onRemodelPsxRigSave?.());
+    this.nodes.miniMapCanvas?.addEventListener("pointerdown", (event) => this.handleMapPointerDown(event));
     this.populateRemodelWheelModels();
     for (const input of Object.values(this.nodes.remodelInputs)) {
       input?.addEventListener("input", () => this.onRemodelChange?.(this.readRemodelState()));
@@ -793,6 +798,7 @@ export class HUD {
   }
 
   setAdminMode(isAdmin) {
+    this.isAdmin = Boolean(isAdmin);
     this.nodes.shell?.classList.toggle("is-admin", Boolean(isAdmin));
     if (!isAdmin) {
       this.setDevPanelVisible(false);
@@ -1040,16 +1046,22 @@ export class HUD {
   setMapVisible(visible) {
     this.mapVisible = visible;
     this.nodes.mapOverlay?.classList.toggle("is-active", visible);
+    return this.mapVisible;
   }
 
   toggleMap() {
-    this.setMapVisible(!this.mapVisible);
+    return this.setMapVisible(!this.mapVisible);
+  }
+
+  isMapVisible() {
+    return this.mapVisible;
   }
 
   updateMiniMap(world, player, traffic) {
     if (!this.mapVisible || !this.mapContext || !world.roadSamples.length) {
       return;
     }
+    this.lastMapWorld = world;
 
     if (!this.mapBounds) {
       this.mapBounds = this.computeMapBounds(world);
@@ -1073,6 +1085,10 @@ export class HUD {
     ctx.lineWidth = 4;
     this.drawMapRoute(ctx, world, width, height);
 
+    if (this.isAdmin) {
+      this.drawTunnelMarkers(ctx, world, width, height);
+    }
+
     ctx.fillStyle = "rgba(195, 72, 58, 0.82)";
     for (const car of traffic.cars) {
       const point = this.worldToMap(car, width, height);
@@ -1091,6 +1107,20 @@ export class HUD {
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+  }
+
+  handleMapPointerDown(event) {
+    if (!this.mapVisible || !this.isAdmin || event.button !== 0 || !this.nodes.miniMapCanvas || !this.mapBounds) {
+      return;
+    }
+
+    const canvas = this.nodes.miniMapCanvas;
+    const rect = canvas.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((event.clientY - rect.top) / rect.height) * canvas.height;
+    this.onMapTeleport?.(this.mapToWorld(x, y, canvas.width, canvas.height));
+    event.preventDefault();
+    event.stopPropagation();
   }
 
   computeMapBounds(world) {
@@ -1133,6 +1163,46 @@ export class HUD {
     }
   }
 
+  drawTunnelMarkers(ctx, world, width, height) {
+    const tunnels = world.tunnelRuns ?? [];
+    if (!tunnels.length) {
+      return;
+    }
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(120, 224, 193, 0.9)";
+    ctx.lineWidth = 7;
+    ctx.fillStyle = "rgba(120, 224, 193, 0.95)";
+    ctx.font = "700 10px Inter, sans-serif";
+    ctx.textBaseline = "middle";
+
+    for (const run of tunnels) {
+      const steps = Math.max(8, Math.ceil(run.length / 120));
+      ctx.beginPath();
+      for (let i = 0; i <= steps; i += 1) {
+        const frame = world.getFrameAtDistance(run.start + (run.length * i) / steps);
+        const point = this.worldToMap(frame.center, width, height);
+        if (i === 0) {
+          ctx.moveTo(point.x, point.y);
+        } else {
+          ctx.lineTo(point.x, point.y);
+        }
+      }
+      ctx.stroke();
+
+      const start = this.worldToMap(world.getFrameAtDistance(run.start).center, width, height);
+      const end = this.worldToMap(world.getFrameAtDistance(run.start + run.length).center, width, height);
+      ctx.beginPath();
+      ctx.arc(start.x, start.y, 3.5, 0, Math.PI * 2);
+      ctx.arc(end.x, end.y, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillText(run.name ?? "Tunnel", start.x + 7, start.y);
+    }
+    ctx.restore();
+  }
+
   worldToMap(position, width, height) {
     const bounds = this.mapBounds;
     const spanX = bounds.maxX - bounds.minX;
@@ -1143,6 +1213,19 @@ export class HUD {
     return {
       x: (width - mapWidth) * 0.5 + (position.x - bounds.minX) * scale,
       y: (height - mapHeight) * 0.5 + (position.z - bounds.minZ) * scale,
+    };
+  }
+
+  mapToWorld(x, y, width, height) {
+    const bounds = this.mapBounds;
+    const spanX = bounds.maxX - bounds.minX;
+    const spanZ = bounds.maxZ - bounds.minZ;
+    const scale = Math.min((width - 36) / spanX, (height - 36) / spanZ);
+    const mapWidth = spanX * scale;
+    const mapHeight = spanZ * scale;
+    return {
+      x: bounds.minX + (x - (width - mapWidth) * 0.5) / scale,
+      z: bounds.minZ + (y - (height - mapHeight) * 0.5) / scale,
     };
   }
 }

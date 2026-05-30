@@ -239,6 +239,7 @@ export class Game {
       (carId) => this.selectRemodelPsxCar(carId),
       (state) => this.updateSelectedPsxCarRig(state),
       () => this.saveSelectedPsxCarRig(),
+      (position) => this.teleportFromMap(position),
     );
     this.initializeRemodelPsxCars();
     this.hud.setAdminMode(this.isAdmin);
@@ -265,26 +266,10 @@ export class Game {
 
   tick() {
     const rawDt = this.clock.getDelta();
-    const dt = Math.min(rawDt, 1 / 30);
+    const dt = Math.max(0, rawDt);
     const inputState = this.input.getState();
     const interact = this.input.consumeInteract();
     const garageMenuToggle = this.input.consumeGarageMenuToggle();
-    this.hitCooldown = Math.max(0, this.hitCooldown - dt);
-    this.hitRecoveryTimer = Math.max(0, this.hitRecoveryTimer - dt);
-    this.invulnerableTimer = Math.max(0, this.invulnerableTimer - dt);
-    this.player.setInvulnerable(this.invulnerableTimer > 0, performance.now() * 0.001);
-
-    if (
-      interact ||
-      garageMenuToggle ||
-      inputState.throttle ||
-      inputState.brake ||
-      inputState.steer !== 0 ||
-      inputState.walkForward !== 0 ||
-      inputState.walkStrafe !== 0
-    ) {
-      this.audio.ensure();
-    }
 
     if (this.input.consumeRestart()) {
       this.requestRestart();
@@ -297,7 +282,10 @@ export class Game {
       this.setCameraMode(cameraViewSelection - 1);
     }
     if (this.input.consumeMapToggle()) {
-      this.hud.toggleMap();
+      const visible = this.hud.toggleMap();
+      if (visible) {
+        this.input.releasePointerLock();
+      }
     }
     if (this.input.consumeDevPanelToggle()) {
       if (this.isAdmin) {
@@ -319,6 +307,30 @@ export class Game {
       } else {
         this.hud.flashNotice("Admin", "accesso riservato");
       }
+    }
+
+    const mapPaused = this.hud.isMapVisible?.() ?? false;
+    if (mapPaused) {
+      this.updateHud(rawDt);
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
+    this.hitCooldown = Math.max(0, this.hitCooldown - dt);
+    this.hitRecoveryTimer = Math.max(0, this.hitRecoveryTimer - dt);
+    this.invulnerableTimer = Math.max(0, this.invulnerableTimer - dt);
+    this.player.setInvulnerable(this.invulnerableTimer > 0, performance.now() * 0.001);
+
+    if (
+      interact ||
+      garageMenuToggle ||
+      inputState.throttle ||
+      inputState.brake ||
+      inputState.steer !== 0 ||
+      inputState.walkForward !== 0 ||
+      inputState.walkStrafe !== 0
+    ) {
+      this.audio.ensure();
     }
 
     if (this.settings.noClip) {
@@ -838,6 +850,48 @@ export class Game {
     this.player.reset(this.world.getGarageCarPose());
     const playerRoad = this.world.getNearestRoadInfo(this.player.position);
     this.traffic.reset(this.settings, playerRoad?.s ?? 0);
+  }
+
+  teleportFromMap(position) {
+    if (!this.isAdmin || !position) {
+      this.hud.flashNotice("Admin", "accesso riservato");
+      return;
+    }
+
+    const target = new THREE.Vector3(position.x, 0, position.z);
+    const road = this.world.getNearestRoadInfo(target);
+    const yaw = road?.yaw ?? this.player.yaw;
+
+    this.mode = "driving";
+    this.marketOpen = false;
+    this.garageManagerOpen = false;
+    this.cameraLookAtInitialized = false;
+    this.cameraYawOffset = 0;
+    this.cameraPitchOffset = 0;
+    this.hitRecoveryTimer = 0;
+    this.invulnerableTimer = 0;
+    this.player.setInvulnerable(false);
+    this.hud.setMode("driving");
+    this.hud.setMarketVisible(false);
+    this.hud.setGarageManagerVisible(false);
+    this.hud.setInteraction(null);
+    this.world.setGarageDoorOpen(true);
+
+    if (this.settings.noClip) {
+      if (!this.noClipRig.active) {
+        this.enterNoClip();
+      }
+      this.noClipRig.position.set(target.x, Math.max(this.noClipRig.position.y, 2.4), target.z);
+      this.noClipRig.yaw = yaw;
+      this.syncPlayerToNoClip();
+    } else {
+      this.player.reset({ x: target.x, z: target.z, yaw });
+    }
+
+    this.player.stop?.();
+    this.player.applyTransform?.(0, 1 / 60);
+    this.traffic.reset(this.settings, road?.s ?? 0);
+    this.hud.flashNotice("Map teleport", `${Math.round(target.x)}, ${Math.round(target.z)}`);
   }
 
   openMarket() {

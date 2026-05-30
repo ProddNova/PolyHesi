@@ -143,9 +143,10 @@ const CITY_SIDEWALK_INTERVAL = 24;
 const CITY_STREETLIGHT_INTERVAL = 112;
 
 const TUNNEL_RUNS = [
-  { start: 6040, length: 260, name: "North Gallery" },
-  { start: 22660, length: 330, name: "Hill Tunnel" },
-  { start: 39920, length: 240, name: "West Gallery" },
+  { start: 6040, length: 920, name: "North Gallery" },
+  { start: 22660, length: 1380, name: "Hill Tunnel" },
+  { start: 39920, length: 760, name: "West Gallery" },
+  { start: 51080, length: 1120, name: "South Long Gallery" },
 ];
 const TUNNEL_MODULE_LENGTH = 18;
 
@@ -191,6 +192,7 @@ export class HighwayWorld {
     this.roadLights = [];
     this.garageLights = [];
     this.ultraGraphics = false;
+    this.tunnelRuns = TUNNEL_RUNS.map((run) => ({ ...run }));
 
     this.materials = this.createMaterials();
     this.createRoute();
@@ -1186,32 +1188,32 @@ export class HighwayWorld {
     const groundMargin = cityRange(seed + 11.1, 3.1, 5.4);
     const roofMargin = cityRange(seed + 12.7, 2.0, 4.8);
     const usableHeight = Math.max(4.8, bodyHeight - groundMargin - roofMargin);
-    const floorHeight = cityRange(seed + 13.6, 4.4, 6.2);
-    const maxRows = rowIndex === 0 ? 7 : 9;
-    const rowCount = Math.floor(clamp(usableHeight / (floorHeight * 1.22), 3, maxRows));
+    const floorHeight = cityRange(seed + 13.6, 4.2, 5.6);
+    const maxRows = rowIndex === 0 ? 8 : 13;
+    const rowCount = Math.floor(clamp(usableHeight / floorHeight, 3, maxRows));
     const facadeDepth = depth * cityRange(seed + 14.4, 0.68, 0.92);
     const facadeStartZ = -facadeDepth * 0.5;
     const style = cityNoise(seed + 15.3);
 
     if (style < 0.56) {
-      const bandHeight = cityRange(seed + 16.8, 0.28, 0.54);
-      const segmentCount = Math.floor(clamp(facadeDepth / cityRange(seed + 17.2, 5.4, 7.4), 3, rowIndex === 0 ? 5 : 4));
-      const segmentDepth = Math.max(0.74, (facadeDepth / segmentCount) * cityRange(seed + 17.6, 0.42, 0.58));
+      const bandHeight = cityRange(seed + 16.8, 0.82, 1.16);
+      const segmentCount = Math.floor(clamp(facadeDepth / cityRange(seed + 17.2, 4.2, 5.8), 3, rowIndex === 0 ? 6 : 8));
+      const segmentDepth = Math.max(1.15, (facadeDepth / segmentCount) * cityRange(seed + 17.6, 0.54, 0.7));
       for (let row = 0; row < rowCount; row += 1) {
-        if (cityNoise(seed + row * 5.83 + 17.9) < 0.16) {
-          continue;
-        }
         const y = groundMargin + (usableHeight * (row + 0.5)) / rowCount;
         for (let segment = 0; segment < segmentCount; segment += 1) {
-          if (cityNoise(seed + row * 6.31 + segment * 9.43 + 18.6) < 0.22) {
-            continue;
-          }
           const z = facadeStartZ + (facadeDepth * (segment + 0.5)) / segmentCount;
           const target = cityNoise(seed + row * 7.17 + segment * 4.91 + 19.4) > 0.86 ? warmWindows : glass;
-          target.push({
-            position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.015, z, y),
+          trim.push({
+            position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.006, z, y),
             yaw,
-            scale: { x: 0.11, y: bandHeight, z: segmentDepth },
+            scale: { x: 0.08, y: bandHeight + 0.2, z: segmentDepth + 0.28 },
+            remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window-frame"),
+          });
+          target.push({
+            position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.026, z, y),
+            yaw,
+            scale: { x: 0.18, y: bandHeight, z: segmentDepth },
             remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window"),
           });
         }
@@ -1230,21 +1232,24 @@ export class HighwayWorld {
       return;
     }
 
-    const columnCount = Math.floor(clamp(facadeDepth / cityRange(seed + 20.9, 5.6, 7.4), 3, rowIndex === 0 ? 5 : 4));
-    const windowDepth = Math.max(0.82, (facadeDepth / columnCount) * cityRange(seed + 21.8, 0.44, 0.62));
-    const windowHeight = cityRange(seed + 22.5, 0.38, 0.72);
+    const columnCount = Math.floor(clamp(facadeDepth / cityRange(seed + 20.9, 4.3, 5.8), 3, rowIndex === 0 ? 6 : 8));
+    const windowDepth = Math.max(1.12, (facadeDepth / columnCount) * cityRange(seed + 21.8, 0.5, 0.66));
+    const windowHeight = cityRange(seed + 22.5, 0.92, 1.28);
     for (let row = 0; row < rowCount; row += 1) {
       const y = groundMargin + (usableHeight * (row + 0.5)) / rowCount;
       for (let column = 0; column < columnCount; column += 1) {
-        if (cityNoise(seed + row * 8.9 + column * 13.1 + 23.2) < 0.22) {
-          continue;
-        }
         const z = facadeStartZ + (facadeDepth * (column + 0.5)) / columnCount;
         const target = cityNoise(seed + row * 11.7 + column * 4.3 + 24.1) > 0.86 ? warmWindows : glass;
-        target.push({
-          position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.015, z, y),
+        trim.push({
+          position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.006, z, y),
           yaw,
-          scale: { x: 0.11, y: windowHeight, z: windowDepth },
+          scale: { x: 0.08, y: windowHeight + 0.22, z: windowDepth + 0.26 },
+          remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window-frame"),
+        });
+        target.push({
+          position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.026, z, y),
+          yaw,
+          scale: { x: 0.18, y: windowHeight, z: windowDepth },
           remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window"),
         });
       }
@@ -1386,9 +1391,7 @@ export class HighwayWorld {
     if (type.id === "warehouse") {
       this.addLocalBox(group, w, h, d, material, 0, h * 0.5, 0);
       this.addLocalBox(group, w * 1.04, 0.7, d * 1.05, roofMaterial, 0, h + 0.35, 0);
-      this.addLocalBox(group, 0.12, h * 0.46, d * 0.18, this.materials.buildingGlassDark, -side * (w * 0.5 + 0.08), h * 0.34, -d * 0.28);
-      this.addLocalBox(group, 0.12, h * 0.46, d * 0.18, this.materials.buildingGlassDark, -side * (w * 0.5 + 0.08), h * 0.34, 0);
-      this.addLocalBox(group, 0.12, h * 0.46, d * 0.18, this.materials.buildingGlassDark, -side * (w * 0.5 + 0.08), h * 0.34, d * 0.28);
+      this.addFacadeWindows(group, w, h * 0.72, d, 4, Math.max(5, type.columns), side, 1.05);
       this.addLocalBox(group, 0.16, 0.34, d * 0.82, trim, -side * (w * 0.5 + 0.1), h * 0.78, 0);
       return;
     }
@@ -1415,7 +1418,7 @@ export class HighwayWorld {
     if (type.id === "mall") {
       this.addLocalBox(group, w, h, d, material, 0, h * 0.5, 0);
       this.addLocalBox(group, w * 1.02, 0.55, d * 1.04, roofMaterial, 0, h + 0.27, 0);
-      this.addLocalBox(group, 0.16, 1.4 * scale, d * 0.74, this.materials.buildingGlassDark, -side * (w * 0.5 + 0.09), 2.2 * scale, 0);
+      this.addFacadeWindows(group, w, h * 0.62, d, 3, Math.max(6, type.columns), side, 1.12);
       this.addLocalBox(group, 0.2, 0.52 * scale, d * 0.42, this.materials.tunnelSign, -side * (w * 0.5 + 0.12), h * 0.66, 0);
       this.addLocalBox(group, 2.2 * scale, 0.24 * scale, d * 0.7, trim, -side * (w * 0.5 + 1.1 * scale), 3.15 * scale, 0);
       return;
@@ -1470,27 +1473,37 @@ export class HighwayWorld {
     return this.facadeMaterialCache.get(key);
   }
 
-  addFacadeWindows(group, width, height, depth, floors, columns, side, windowHeight = 0.34) {
+  addFacadeWindows(group, width, height, depth, floors, columns, side, windowHeight = 0.96) {
     const facadeX = -side * (width * 0.5 + 0.055);
     const usableHeight = Math.max(1, height - 5);
     const usableDepth = depth * 0.72;
     const startZ = -usableDepth * 0.5;
     const rowCount = Math.max(2, Math.floor(floors));
     const columnCount = Math.max(2, Math.floor(columns));
-    const windowDepth = Math.max(0.5, usableDepth / (columnCount * 1.75));
+    const windowDepth = Math.max(1.05, usableDepth / (columnCount * 1.9));
 
     for (let row = 0; row < rowCount; row += 1) {
-      const y = 3 + (usableHeight * (row + 0.35)) / rowCount;
+      const y = 3 + (usableHeight * (row + 0.5)) / rowCount;
       for (let column = 0; column < columnCount; column += 1) {
         const z = startZ + (usableDepth * (column + 0.5)) / columnCount;
         const lit = (row + column) % 5 === 0;
         this.addLocalBox(
           group,
           0.08,
+          windowHeight + 0.18,
+          windowDepth + 0.28,
+          this.materials.buildingGlassDark,
+          facadeX - side * 0.006,
+          y,
+          z,
+        );
+        this.addLocalBox(
+          group,
+          0.18,
           windowHeight,
           windowDepth,
           lit ? this.materials.buildingWindowWarm : this.materials.buildingWindow,
-          facadeX,
+          facadeX - side * 0.03,
           y,
           z,
         );
