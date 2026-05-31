@@ -142,8 +142,13 @@ const CITY_BLOCK_ROWS = [
 ];
 const CITY_MANUAL_CLEARANCE = 46;
 const CITY_DISTRICT_HALF_WIDTH = 520;
-const CITY_GROUND_ELEVATION = -1.18;
+const CITY_GROUND_ELEVATION = -2.65;
 const CITY_RELATIVE_ELEVATION = -2.65;
+const ROAD_SURFACE_ELEVATION = 0.055;
+const ROAD_SHOULDER_ELEVATION = 0.035;
+const ROAD_MARKING_ELEVATION = 0.115;
+const HIGHWAY_DECK_ELEVATION = -0.26;
+const HIGHWAY_SUPPORT_INTERVAL = 260;
 const CITY_BUILDING_HEIGHT_SCALE = 1.44;
 const CITY_SIDEWALK_INTERVAL = 24;
 const CITY_STREETLIGHT_INTERVAL = 112;
@@ -196,6 +201,15 @@ function cityNoise(seed) {
 
 function cityRange(seed, min, max) {
   return min + (max - min) * cityNoise(seed);
+}
+
+function smoothstep(edge0, edge1, value) {
+  const t = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function hourDistance(hour, target) {
+  return Math.abs(((hour - target + 12) % 24) - 12);
 }
 
 export class HighwayWorld {
@@ -496,28 +510,24 @@ export class HighwayWorld {
       return;
     }
 
-    const smooth = clamp(1 - Math.exp(-3.2 * Math.min(dt, 0.12)), 0, 1);
+    const smooth = clamp(1 - Math.exp(-2.15 * Math.min(dt, 0.18)), 0, 1);
     const hour = ((Number(settings.timeOfDay ?? 12) % 24) + 24) % 24;
-    const daylight = clamp(Math.sin(((hour - 6) / 12) * Math.PI), 0, 1);
-    const dawn = clamp(1 - Math.abs(hour - 6) / 2.6, 0, 1);
-    const dusk = clamp(1 - Math.abs(hour - 18) / 2.8, 0, 1);
+    const daylight = smoothstep(5.35, 7.55, hour) * (1 - smoothstep(17.15, 19.55, hour));
+    const dawn = 1 - smoothstep(0, 2.7, hourDistance(hour, 6.35));
+    const dusk = 1 - smoothstep(0, 3.1, hourDistance(hour, 18.25));
     const twilight = Math.max(dawn, dusk);
-    const night = 1 - Math.max(daylight, twilight * 0.58);
-    const lampPower = clamp((night - 0.04) / 0.62, 0, 1);
+    const night = clamp(1 - daylight, 0, 1);
+    const lampPower = smoothstep(0.22, 0.74, night);
     const { hemisphere, keyLight, fog, colors } = this.environment;
 
-    const sky = colors.nightSky.clone().lerp(colors.daySky, daylight);
-    if (dawn > 0) {
-      sky.lerp(colors.dawnSky, dawn * 0.5);
-    }
-    if (dusk > 0) {
-      sky.lerp(colors.duskSky, dusk * 0.6);
-    }
+    const sky = colors.nightSky.clone();
+    sky.lerp(dawn > dusk ? colors.dawnSky : colors.duskSky, twilight * 0.68);
+    sky.lerp(colors.daySky, daylight);
     this.scene.background.lerp(sky, smooth);
     fog.color.lerp(sky, smooth);
     fog.density = THREE.MathUtils.lerp(
       fog.density,
-      (this.ultraGraphics ? 0.0000025 : 0.000012) + night * 0.000018 + twilight * 0.00001,
+      (this.ultraGraphics ? 0.0000025 : 0.000012) + night * 0.000014 + twilight * 0.000006,
       smooth,
     );
 
@@ -525,11 +535,15 @@ export class HighwayWorld {
     const groundColor = colors.nightGround.clone().lerp(colors.dayGround, daylight);
     hemisphere.color.lerp(hemiColor, smooth);
     hemisphere.groundColor.lerp(groundColor, smooth);
-    hemisphere.intensity = THREE.MathUtils.lerp(hemisphere.intensity, 0.5 + daylight * 1.04 + twilight * 0.28, smooth);
+    hemisphere.intensity = THREE.MathUtils.lerp(
+      hemisphere.intensity,
+      0.46 + daylight * 1.05 + twilight * 0.32,
+      smooth,
+    );
 
     const sunAngle = ((hour - 6) / 24) * TWO_PI;
     const moonAngle = sunAngle + Math.PI;
-    const moonBlend = clamp((-Math.sin(sunAngle) + 0.16) / 0.42, 0, 1);
+    const moonBlend = smoothstep(0.34, 0.86, night);
     const lightAngle = THREE.MathUtils.lerp(sunAngle, moonAngle, moonBlend);
     const lightHeight = Math.max(0.14, Math.abs(Math.sin(lightAngle)));
     const lightRadius = 360;
@@ -542,7 +556,7 @@ export class HighwayWorld {
     keyLight.color.lerp(lightColor, smooth);
     keyLight.intensity = THREE.MathUtils.lerp(
       keyLight.intensity,
-      THREE.MathUtils.lerp(0.2 + daylight * 1.2 + twilight * 0.26, 0.72 + night * 0.48, moonBlend),
+      THREE.MathUtils.lerp(0.24 + daylight * 1.08 + twilight * 0.3, 0.48 + night * 0.26, moonBlend),
       smooth,
     );
     if (this.materials?.streetlightGlow) {
@@ -587,8 +601,10 @@ export class HighwayWorld {
     const highway = new THREE.Group();
     highway.name = "StaticHighwayLoop";
     highway.add(this.createRibbonMesh(CITY_DISTRICT_HALF_WIDTH, CITY_GROUND_ELEVATION, this.materials.cityGround, ROAD_RIBBON_SEGMENTS));
-    highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 5.2, CITY_GROUND_ELEVATION + 0.03, this.materials.shoulder, ROAD_RIBBON_SEGMENTS));
-    highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH, 0.045, this.materials.asphalt, ROAD_RIBBON_SEGMENTS));
+    highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 5.8, HIGHWAY_DECK_ELEVATION, this.materials.concrete, ROAD_RIBBON_SEGMENTS));
+    highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 5.2, ROAD_SHOULDER_ELEVATION, this.materials.shoulder, ROAD_RIBBON_SEGMENTS));
+    highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH, ROAD_SURFACE_ELEVATION, this.materials.asphalt, ROAD_RIBBON_SEGMENTS));
+    this.createElevatedHighwaySupports(highway);
     this.addBranchHighways(highway);
 
     const laneMarkers = [];
@@ -596,7 +612,7 @@ export class HighwayWorld {
       for (let s = 9; s < this.trackLength; s += 34) {
         const frame = this.getFrameAtDistance(s);
         laneMarkers.push({
-          position: this.offsetPoint(frame, laneOffset, 0.105),
+          position: this.offsetPoint(frame, laneOffset, ROAD_MARKING_ELEVATION),
           yaw: frame.yaw,
         });
       }
@@ -608,7 +624,7 @@ export class HighwayWorld {
       for (let s = 0; s < this.trackLength; s += 52) {
         const frame = this.getFrameAtDistance(s);
         edgeMarkers.push({
-          position: this.offsetPoint(frame, edgeOffset, 0.11),
+          position: this.offsetPoint(frame, edgeOffset, ROAD_MARKING_ELEVATION),
           yaw: frame.yaw,
         });
       }
@@ -637,8 +653,9 @@ export class HighwayWorld {
 
   addBranchHighways(parent) {
     for (const route of this.branchRoutes) {
-      parent.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 4.2, CITY_GROUND_ELEVATION + 0.03, this.materials.shoulder, 260, route.curve, route.length, false));
-      parent.add(this.createRibbonMesh(ROAD_HALF_WIDTH, 0.05, this.materials.asphalt, 260, route.curve, route.length, false));
+      parent.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 4.8, HIGHWAY_DECK_ELEVATION, this.materials.concrete, 260, route.curve, route.length, false));
+      parent.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 4.2, ROAD_SHOULDER_ELEVATION, this.materials.shoulder, 260, route.curve, route.length, false));
+      parent.add(this.createRibbonMesh(ROAD_HALF_WIDTH, ROAD_SURFACE_ELEVATION, this.materials.asphalt, 260, route.curve, route.length, false));
 
       for (const laneOffset of [-2, 2]) {
         for (let s = 12; s < route.length - 12; s += 30) {
@@ -649,7 +666,7 @@ export class HighwayWorld {
             0.038,
             8.2,
             this.materials.lane,
-            this.offsetPoint(frame, laneOffset, 0.105),
+            this.offsetPoint(frame, laneOffset, ROAD_MARKING_ELEVATION),
             frame.yaw,
           );
         }
@@ -662,6 +679,36 @@ export class HighwayWorld {
         }
       }
     }
+  }
+
+  createElevatedHighwaySupports(parent) {
+    const supports = new THREE.Group();
+    supports.name = "ElevatedHighwaySupports";
+    const pillars = [];
+    const crossheads = [];
+    const pillarHeight = Math.max(0.4, HIGHWAY_DECK_ELEVATION - CITY_GROUND_ELEVATION);
+    const pillarY = CITY_GROUND_ELEVATION + pillarHeight * 0.5;
+
+    for (let s = 80; s < this.trackLength; s += HIGHWAY_SUPPORT_INTERVAL) {
+      const frame = this.getFrameAtDistance(s);
+      crossheads.push({
+        position: this.offsetPoint(frame, 0, HIGHWAY_DECK_ELEVATION + 0.1),
+        yaw: frame.yaw,
+        scale: { x: ROAD_WIDTH + 8.8, y: 0.28, z: 2.4 },
+      });
+
+      for (const side of [-1, 1]) {
+        pillars.push({
+          position: this.offsetPoint(frame, side * (ROAD_HALF_WIDTH + 3.55), pillarY),
+          yaw: frame.yaw,
+          scale: { x: 0.92, y: pillarHeight, z: 0.92 },
+        });
+      }
+    }
+
+    supports.add(this.createScaledInstancedBoxes(crossheads, this.materials.concrete));
+    supports.add(this.createScaledInstancedBoxes(pillars, this.materials.concrete));
+    parent.add(supports);
   }
 
   createRibbonMesh(halfWidth, y, material, segments, curve = this.curve, length = this.trackLength, closed = true) {

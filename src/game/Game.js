@@ -28,7 +28,8 @@ import { clamp, damp } from "./utils.js";
 
 const WALKER_EYE_HEIGHT = 1.92;
 const DAMAGE_INVULNERABILITY_SECONDS = 5;
-const IMPACT_RECOVERY_SECONDS = 0.1;
+const IMPACT_RECOVERY_SECONDS = 0.035;
+const MAX_SIMULATION_DT = 1 / 30;
 const CAMERA_MODES = ["hood", "roof", "chaseClose", "chaseFar", "cinematic"];
 const GARAGE_PSX_CAR_TARGET_ID = "psx:garage-player-car";
 const REMODEL_PRESETS = {
@@ -266,7 +267,7 @@ export class Game {
 
   tick() {
     const rawDt = this.clock.getDelta();
-    const dt = Math.max(0, rawDt);
+    const dt = Math.min(Math.max(0, rawDt), MAX_SIMULATION_DT);
     const inputState = this.input.getState();
     const interact = this.input.consumeInteract();
     const garageMenuToggle = this.input.consumeGarageMenuToggle();

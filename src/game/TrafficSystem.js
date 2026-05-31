@@ -12,8 +12,9 @@ const SAFE_BACK_SPAWN = 85;
 const DENSITY_TO_ACTIVE_CARS = 0.145;
 const MIN_ACTIVE_CARS = 12;
 const MAX_ACTIVE_CARS = 72;
-const LANE_CHANGE_SIGNAL_LEAD = 0.75;
-const LANE_CHANGE_SIGNAL_HOLD = 0.65;
+const LANE_CHANGE_SIGNAL_LEAD = 1.15;
+const LANE_CHANGE_SIGNAL_HOLD = 0.55;
+const LANE_CHANGE_FINISH_EPSILON = 0.16;
 
 export class TrafficSystem {
   constructor(scene, world) {
@@ -130,6 +131,7 @@ export class TrafficSystem {
     car.targetLane = null;
     car.signalTimer = 0;
     car.signalHoldTimer = 0;
+    car.signalDirection = 0;
     this.updateIndicators(car, 0);
     this.randomizeSpeed(car, settings);
     this.applyFrame(car, 1, true);
@@ -159,6 +161,7 @@ export class TrafficSystem {
     for (const lane of candidates) {
       if (this.hasLaneOpening(car, lane)) {
         car.targetLane = lane;
+        car.signalDirection = Math.sign(LANES[lane] - LANES[car.lane]);
         car.signalTimer = LANE_CHANGE_SIGNAL_LEAD;
         car.laneChangeCooldown = rand(4.2, 8.2);
         return true;
@@ -174,15 +177,24 @@ export class TrafficSystem {
       car.signalTimer = Math.max(0, car.signalTimer - dt);
       if (car.signalTimer <= 0) {
         if (this.hasLaneOpening(car, car.targetLane)) {
+          car.signalDirection = Math.sign(LANES[car.targetLane] - LANES[car.lane]);
           car.lane = car.targetLane;
           car.signalHoldTimer = LANE_CHANGE_SIGNAL_HOLD;
         } else {
+          car.signalDirection = 0;
           car.laneChangeCooldown = rand(1.4, 2.8);
         }
         car.targetLane = null;
       }
     } else {
-      car.signalHoldTimer = Math.max(0, car.signalHoldTimer - dt);
+      const laneTargetOffset = LANES[clamp(car.lane, 0, LANES.length - 1)];
+      const laneChangeStillMoving = Math.abs(laneTargetOffset - car.lateralOffset) > LANE_CHANGE_FINISH_EPSILON;
+      if (car.signalDirection !== 0 && (laneChangeStillMoving || car.signalHoldTimer > 0)) {
+        car.signalHoldTimer = Math.max(0, car.signalHoldTimer - dt);
+      } else {
+        car.signalDirection = 0;
+        car.signalHoldTimer = 0;
+      }
     }
     car.signalClock += dt;
   }
@@ -283,7 +295,7 @@ export class TrafficSystem {
   applyFrame(car, dt = 1 / 60, snap = false) {
     const frame = this.world.getFrameAtDistance(car.s);
     const targetOffset = LANES[clamp(car.lane, 0, LANES.length - 1)];
-    const laneChangeResponse = car.kind === "truck" ? 0.55 : 0.72;
+    const laneChangeResponse = car.kind === "truck" ? 0.95 : 1.35;
     car.lateralOffset = snap ? targetOffset : damp(car.lateralOffset, targetOffset, laneChangeResponse, dt);
     const position = this.world.offsetPoint(frame, car.lateralOffset, 0);
     car.x = position.x;
@@ -307,8 +319,10 @@ export class TrafficSystem {
     const offsetDelta = targetOffset - car.lateralOffset;
     const signalDirection = car.targetLane !== null
       ? Math.sign(LANES[car.targetLane] - LANES[car.lane])
-      : Math.abs(offsetDelta) > 0.22 || car.signalHoldTimer > 0
-        ? Math.sign(offsetDelta || (targetOffset - LANES[car.lane]))
+      : car.signalDirection !== 0
+        ? car.signalDirection
+        : Math.abs(offsetDelta) > 0.22 || car.signalHoldTimer > 0
+          ? Math.sign(offsetDelta || (targetOffset - LANES[car.lane]))
         : 0;
     const blinkOn = signalDirection !== 0 && Math.sin(car.signalClock * Math.PI * 4.2) > -0.1;
     car.indicators.left.forEach((mesh) => {
@@ -343,7 +357,7 @@ export class TrafficSystem {
     });
     const headlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffefd0 });
     const tailMaterial = new THREE.MeshBasicMaterial({ color: 0xb42520 });
-    const indicatorMaterial = new THREE.MeshBasicMaterial({ color: 0xffa11a });
+    const indicatorMaterial = new THREE.MeshBasicMaterial({ color: 0xffb21a });
 
     const group = new THREE.Group();
     group.name = isTruck ? "TrafficTruck" : "TrafficCar";
@@ -366,12 +380,12 @@ export class TrafficSystem {
     group.add(makeBox(bodyWidth * 0.68, 0.11, 0.08, tailMaterial, new THREE.Vector3(0, 0.76, -bodyLength / 2 - 0.02)));
     const indicatorInset = bodyWidth * 0.36;
     const leftIndicators = [
-      makeBox(0.18, 0.12, 0.1, indicatorMaterial, new THREE.Vector3(-indicatorInset, 0.81, bodyLength / 2 + 0.05)),
-      makeBox(0.18, 0.12, 0.1, indicatorMaterial, new THREE.Vector3(-indicatorInset, 0.81, -bodyLength / 2 - 0.05)),
+      makeBox(0.24, 0.14, 0.12, indicatorMaterial, new THREE.Vector3(-indicatorInset, 0.81, bodyLength / 2 + 0.05)),
+      makeBox(0.24, 0.14, 0.12, indicatorMaterial, new THREE.Vector3(-indicatorInset, 0.81, -bodyLength / 2 - 0.05)),
     ];
     const rightIndicators = [
-      makeBox(0.18, 0.12, 0.1, indicatorMaterial, new THREE.Vector3(indicatorInset, 0.81, bodyLength / 2 + 0.05)),
-      makeBox(0.18, 0.12, 0.1, indicatorMaterial, new THREE.Vector3(indicatorInset, 0.81, -bodyLength / 2 - 0.05)),
+      makeBox(0.24, 0.14, 0.12, indicatorMaterial, new THREE.Vector3(indicatorInset, 0.81, bodyLength / 2 + 0.05)),
+      makeBox(0.24, 0.14, 0.12, indicatorMaterial, new THREE.Vector3(indicatorInset, 0.81, -bodyLength / 2 - 0.05)),
     ];
     [...leftIndicators, ...rightIndicators].forEach((mesh) => {
       mesh.visible = false;
@@ -400,6 +414,7 @@ export class TrafficSystem {
       targetLane: null,
       signalTimer: 0,
       signalHoldTimer: 0,
+      signalDirection: 0,
       signalClock: rand(0, 1),
       indicators: {
         left: leftIndicators,
