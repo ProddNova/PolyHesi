@@ -726,7 +726,7 @@ canvas {
   grid-template-columns: minmax(118px, 1fr) 54px 44px;
 }
 
-.dev-panel .dev-toggle input {
+.dev-panel .dev-toggle input[type="checkbox"] {
   grid-column: auto;
   width: 22px;
   height: 22px;

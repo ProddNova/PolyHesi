@@ -298,7 +298,7 @@ export class HUD {
       input.addEventListener("input", () => {
         const value = Number(input.value);
         this.settings[def.key] = value;
-        output.value = def.format(value);
+        this.updateSettingValue(def.key, value);
         this.onSettingsChange(this.settings, def.key);
       });
     }
@@ -355,7 +355,11 @@ export class HUD {
       sync();
       input.addEventListener(input.type === "checkbox" ? "change" : "input", () => {
         this.settings[key] = input.type === "checkbox" ? input.checked : Number(input.value);
-        sync();
+        if (input.type === "checkbox") {
+          sync();
+        } else {
+          this.updateSettingValue(key, this.settings[key]);
+        }
         this.onSettingsChange(this.settings, key);
       });
     }
@@ -423,15 +427,19 @@ export class HUD {
 
   updateSettingValue(key, value) {
     const def = SETTING_DEFS.find((item) => item.key === key);
-    const input = document.querySelector(`#${key}`);
-    const output = document.querySelector(`#${key}Out`);
-    if (!def || !input || !output) {
+    if (!def) {
       this.syncPlayerSettings();
       return;
     }
 
-    input.value = value;
-    output.value = def.format(value);
+    const input = document.querySelector(`#${key}`);
+    const output = document.querySelector(`#${key}Out`);
+    if (input) {
+      input.value = value;
+    }
+    if (output) {
+      output.value = def.format(value);
+    }
     this.syncPlayerSettings();
   }
 

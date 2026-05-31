@@ -13,6 +13,9 @@ const REMODEL_HITBOX_GROUP = "RemodelHitboxTemplates";
 const REMODEL_ROOT_NAMES = new Set([
   "StaticHighwayLoop",
   "FixedRoadsideCityscape",
+  "RoadsideCityInfrastructure",
+  "ShutokuExpresswaySigns",
+  "FixedHighwayTunnels",
   "SpawnServiceLot",
   "GarageDoor",
   REMODEL_CREATED_GROUP,
@@ -939,7 +942,6 @@ export class HighwayWorld {
   createRoadsideInfrastructure(parent) {
     const details = new THREE.Group();
     details.name = "RoadsideCityInfrastructure";
-    details.userData.remodelIgnore = true;
 
     const sidewalks = [];
     const poles = [];
@@ -976,16 +978,19 @@ export class HighwayWorld {
           position: polePosition,
           yaw: frame.yaw,
           scale: { x: 0.14, y: 6.1, z: 0.14 },
+          remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight pole"),
         });
         arms.push({
           position: armPosition,
           yaw: frame.yaw,
           scale: { x: 1.62, y: 0.11, z: 0.11 },
+          remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight arm"),
         });
         lamps.push({
           position: lampPosition,
           yaw: frame.yaw,
           scale: { x: 0.44, y: 0.16, z: 0.34 },
+          remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight lamp"),
         });
         if (s % (CITY_STREETLIGHT_INTERVAL * 3) < 1 && Math.abs(side) === 1) {
           const light = new THREE.PointLight(0xffd887, 0, 82, 1.12);
@@ -999,17 +1004,24 @@ export class HighwayWorld {
     }
 
     details.add(this.createScaledInstancedBoxes(sidewalks, this.materials.concrete));
-    details.add(this.createScaledInstancedBoxes(poles, this.materials.streetlightPole));
-    details.add(this.createScaledInstancedBoxes(arms, this.materials.streetlightPole));
-    details.add(this.createScaledInstancedBoxes(lamps, this.materials.streetlightGlow));
+    details.add(this.createScaledInstancedBoxes(poles, this.materials.streetlightPole, false, false));
+    details.add(this.createScaledInstancedBoxes(arms, this.materials.streetlightPole, false, false));
+    details.add(this.createScaledInstancedBoxes(lamps, this.materials.streetlightGlow, false, false));
     details.add(lightGroup);
     parent.add(details);
+  }
+
+  makeInfrastructureRemodelMeta(s, side, label) {
+    return {
+      remodelCategory: "infrastructure",
+      remodelFixedId: `streetlight:${Math.round(s)}:${side}:${label.toLowerCase().replaceAll(" ", "-")}`,
+      remodelLabel: label,
+    };
   }
 
   createExpresswaySigns(parent) {
     const signs = new THREE.Group();
     signs.name = "ShutokuExpresswaySigns";
-    signs.userData.remodelIgnore = true;
 
     const poleMaterial = this.materials.streetlightPole;
     const frameMaterial = new THREE.MeshStandardMaterial({
@@ -1041,7 +1053,7 @@ export class HighwayWorld {
 
     this.addLocalBox(group, 0.28, 5.2, 0.28, poleMaterial, 0, 2.6, 0);
     this.addLocalBox(group, 0.72, 0.28, 0.2, frameMaterial, -side * 0.36, 5.1, 0);
-    this.addLocalBox(group, 4.9, 0.22, 0.16, frameMaterial, -side * 2.6, 5.1, 0);
+    this.addLocalBox(group, 4.45, 0.22, 0.16, frameMaterial, -side * 2.38, 5.1, 0);
     this.addSignBoard(
       group,
       -side * 3.65,
@@ -2235,6 +2247,15 @@ export class HighwayWorld {
     if (rootName === "FixedRoadsideCityscape" || object.userData?.remodelCategory === "building") {
       return "building";
     }
+    if (rootName === "RoadsideCityInfrastructure" || meta?.remodelCategory === "infrastructure") {
+      return "infrastructure";
+    }
+    if (rootName === "ShutokuExpresswaySigns") {
+      return "sign";
+    }
+    if (rootName === "FixedHighwayTunnels") {
+      return "tunnel";
+    }
     return "default";
   }
 
@@ -2247,6 +2268,9 @@ export class HighwayWorld {
       created: "Created box",
       hitbox: "Hitbox",
       building: "Building",
+      infrastructure: "Infrastructure",
+      sign: "Road sign",
+      tunnel: "Tunnel",
       default: "Map model",
     }[category] ?? "Map model";
   }
