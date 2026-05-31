@@ -587,7 +587,7 @@ export class HighwayWorld {
     const highway = new THREE.Group();
     highway.name = "StaticHighwayLoop";
     highway.add(this.createRibbonMesh(CITY_DISTRICT_HALF_WIDTH, CITY_GROUND_ELEVATION, this.materials.cityGround, ROAD_RIBBON_SEGMENTS));
-    highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 5.2, 0.0, this.materials.shoulder, ROAD_RIBBON_SEGMENTS));
+    highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 5.2, CITY_GROUND_ELEVATION + 0.03, this.materials.shoulder, ROAD_RIBBON_SEGMENTS));
     highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH, 0.045, this.materials.asphalt, ROAD_RIBBON_SEGMENTS));
     this.addBranchHighways(highway);
 
@@ -637,7 +637,7 @@ export class HighwayWorld {
 
   addBranchHighways(parent) {
     for (const route of this.branchRoutes) {
-      parent.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 4.2, 0.0, this.materials.shoulder, 260, route.curve, route.length, false));
+      parent.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 4.2, CITY_GROUND_ELEVATION + 0.03, this.materials.shoulder, 260, route.curve, route.length, false));
       parent.add(this.createRibbonMesh(ROAD_HALF_WIDTH, 0.05, this.materials.asphalt, 260, route.curve, route.length, false));
 
       for (const laneOffset of [-2, 2]) {

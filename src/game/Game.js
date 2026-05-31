@@ -1470,8 +1470,8 @@ export class Game {
 
     const cameraRig =
       this.cameraMode === "chaseClose"
-        ? { back: 7.2, maxBack: 10.8, height: 3.15, maxDistance: 12.8 }
-        : { back: 12.6, maxBack: 16.8, height: 5.45, maxDistance: 19.2 };
+        ? { back: 7.2, height: 3.15 }
+        : { back: 12.6, height: 5.45 };
 
     const forward = this.player.getForwardVector();
     const right = this.player.getRightVector?.() ?? { x: Math.cos(this.player.yaw), z: -Math.sin(this.player.yaw) };
@@ -1490,13 +1490,7 @@ export class Game {
       this.player.position.z + Math.cos(cameraYaw) * cameraBack,
     );
 
-    const followResponse = 10.5;
-    this.camera.position.lerp(desired, 1 - Math.exp(-followResponse * dt));
-    const cameraOffset = this.camera.position.clone().sub(this.player.position);
-    const cameraDistance = cameraOffset.length();
-    if (cameraDistance > cameraRig.maxDistance) {
-      this.camera.position.copy(this.player.position).add(cameraOffset.multiplyScalar(cameraRig.maxDistance / cameraDistance));
-    }
+    this.camera.position.copy(desired);
 
     const orbitAnchor = this.cameraMode === "chaseClose" ? 0.85 : 1.1;
     const lookAt = new THREE.Vector3(
@@ -1504,12 +1498,8 @@ export class Game {
       this.player.position.y + orbitAnchor,
       this.player.position.z,
     );
-    if (!this.cameraLookAtInitialized || this.cameraLookAt.distanceToSquared(lookAt) > 7200) {
-      this.cameraLookAt.copy(lookAt);
-      this.cameraLookAtInitialized = true;
-    } else {
-      this.cameraLookAt.lerp(lookAt, 1 - Math.exp(-12.5 * dt));
-    }
+    this.cameraLookAt.copy(lookAt);
+    this.cameraLookAtInitialized = true;
 
     if (this.cameraShake > 0.001) {
       const shake = this.cameraShake * 0.12;
