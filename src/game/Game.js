@@ -1536,14 +1536,15 @@ export class Game {
       0,
       THREE.MathUtils.lerp(forward.z, velocityForward.z, slipLookBlend),
     ).normalize();
+    const orbitAnchor = this.cameraMode === "chaseClose" ? 0.85 : 1.1;
     const lookAhead = this.cameraMode === "chaseClose"
-      ? 3.6 + speedRatio * 2.8
-      : 4.8 + speedRatio * 4.2;
+      ? 0.45 + speedRatio * 0.7
+      : 0.6 + speedRatio * 1.05;
     const lookAt = new THREE.Vector3(
       this.player.position.x +
         lookDir.x * lookAhead +
         right.x * clamp((this.player.lateralSpeed ?? 0) * 0.032, -0.9, 0.9),
-      this.player.position.y + 1.35 + speedRatio * 0.16,
+      this.player.position.y + orbitAnchor + speedRatio * 0.08,
       this.player.position.z +
         lookDir.z * lookAhead +
         right.z * clamp((this.player.lateralSpeed ?? 0) * 0.032, -0.9, 0.9),
