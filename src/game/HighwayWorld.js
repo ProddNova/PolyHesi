@@ -143,7 +143,7 @@ const CITY_BLOCK_ROWS = [
 const CITY_MANUAL_CLEARANCE = 46;
 const CITY_DISTRICT_HALF_WIDTH = 520;
 const CITY_GROUND_ELEVATION = -1.18;
-const CITY_RELATIVE_ELEVATION = -1.45;
+const CITY_RELATIVE_ELEVATION = -2.65;
 const CITY_BUILDING_HEIGHT_SCALE = 1.44;
 const CITY_SIDEWALK_INTERVAL = 24;
 const CITY_STREETLIGHT_INTERVAL = 112;
@@ -496,7 +496,7 @@ export class HighwayWorld {
       return;
     }
 
-    const smooth = clamp(1 - Math.exp(-4.6 * Math.min(dt, 0.12)), 0, 1);
+    const smooth = clamp(1 - Math.exp(-3.2 * Math.min(dt, 0.12)), 0, 1);
     const hour = ((Number(settings.timeOfDay ?? 12) % 24) + 24) % 24;
     const daylight = clamp(Math.sin(((hour - 6) / 12) * Math.PI), 0, 1);
     const dawn = clamp(1 - Math.abs(hour - 6) / 2.6, 0, 1);
@@ -528,10 +528,9 @@ export class HighwayWorld {
     hemisphere.intensity = THREE.MathUtils.lerp(hemisphere.intensity, 0.5 + daylight * 1.04 + twilight * 0.28, smooth);
 
     const sunAngle = ((hour - 6) / 24) * TWO_PI;
-    const sunHeight = Math.sin(sunAngle);
     const moonAngle = sunAngle + Math.PI;
-    const useMoon = sunHeight < -0.06;
-    const lightAngle = useMoon ? moonAngle : sunAngle;
+    const moonBlend = clamp((-Math.sin(sunAngle) + 0.16) / 0.42, 0, 1);
+    const lightAngle = THREE.MathUtils.lerp(sunAngle, moonAngle, moonBlend);
     const lightHeight = Math.max(0.14, Math.abs(Math.sin(lightAngle)));
     const lightRadius = 360;
     keyLight.position.set(
@@ -539,10 +538,11 @@ export class HighwayWorld {
       lightHeight * lightRadius,
       Math.sin(lightAngle) * -220,
     );
-    keyLight.color.lerp(useMoon ? colors.moon : colors.sun, smooth);
+    const lightColor = colors.sun.clone().lerp(colors.moon, moonBlend);
+    keyLight.color.lerp(lightColor, smooth);
     keyLight.intensity = THREE.MathUtils.lerp(
       keyLight.intensity,
-      useMoon ? 0.72 + night * 0.48 : 0.2 + daylight * 1.2 + twilight * 0.26,
+      THREE.MathUtils.lerp(0.2 + daylight * 1.2 + twilight * 0.26, 0.72 + night * 0.48, moonBlend),
       smooth,
     );
     if (this.materials?.streetlightGlow) {

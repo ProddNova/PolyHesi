@@ -12,6 +12,8 @@ const SAFE_BACK_SPAWN = 85;
 const DENSITY_TO_ACTIVE_CARS = 0.145;
 const MIN_ACTIVE_CARS = 12;
 const MAX_ACTIVE_CARS = 72;
+const LANE_CHANGE_SIGNAL_LEAD = 0.75;
+const LANE_CHANGE_SIGNAL_HOLD = 0.65;
 
 export class TrafficSystem {
   constructor(scene, world) {
@@ -81,6 +83,7 @@ export class TrafficSystem {
     for (const car of this.cars) {
       car.nearMissCooldown = Math.max(0, car.nearMissCooldown - dt);
       car.laneChangeCooldown = Math.max(0, car.laneChangeCooldown - dt);
+      this.updateLaneChangeSignal(car, dt);
       this.updateSpeed(car, dt, settings);
       car.s = (car.s + car.speed * dt) % this.world.trackLength;
       if (this.isOutsideActiveWindow(car.s, focusS)) {
@@ -124,6 +127,10 @@ export class TrafficSystem {
     car.lateralOffset = LANES[car.lane];
     car.nearMissCooldown = 0.5;
     car.overtakeArmed = false;
+    car.targetLane = null;
+    car.signalTimer = 0;
+    car.signalHoldTimer = 0;
+    this.updateIndicators(car, 0);
     this.randomizeSpeed(car, settings);
     this.applyFrame(car, 1, true);
   }
@@ -136,7 +143,7 @@ export class TrafficSystem {
     if (blocker) {
       const safeSpeed = Math.max(8, blocker.speed - 2.2);
       targetSpeed = Math.min(targetSpeed, safeSpeed);
-      if (car.laneChangeCooldown <= 0) {
+      if (car.laneChangeCooldown <= 0 && car.targetLane === null) {
         this.tryLaneChange(car);
       }
     }
@@ -151,7 +158,8 @@ export class TrafficSystem {
 
     for (const lane of candidates) {
       if (this.hasLaneOpening(car, lane)) {
-        car.lane = lane;
+        car.targetLane = lane;
+        car.signalTimer = LANE_CHANGE_SIGNAL_LEAD;
         car.laneChangeCooldown = rand(4.2, 8.2);
         return true;
       }
@@ -159,6 +167,24 @@ export class TrafficSystem {
 
     car.laneChangeCooldown = rand(2.2, 4.2);
     return false;
+  }
+
+  updateLaneChangeSignal(car, dt) {
+    if (car.targetLane !== null) {
+      car.signalTimer = Math.max(0, car.signalTimer - dt);
+      if (car.signalTimer <= 0) {
+        if (this.hasLaneOpening(car, car.targetLane)) {
+          car.lane = car.targetLane;
+          car.signalHoldTimer = LANE_CHANGE_SIGNAL_HOLD;
+        } else {
+          car.laneChangeCooldown = rand(1.4, 2.8);
+        }
+        car.targetLane = null;
+      }
+    } else {
+      car.signalHoldTimer = Math.max(0, car.signalHoldTimer - dt);
+    }
+    car.signalClock += dt;
   }
 
   hasLaneOpening(car, lane) {
@@ -268,6 +294,29 @@ export class TrafficSystem {
       : dampAngle(car.visualYaw, frame.yaw, car.kind === "truck" ? 2.2 : 2.8, dt);
     car.group.position.set(car.x, 0, car.z);
     car.group.rotation.y = car.visualYaw;
+    this.updateIndicators(car, dt);
+  }
+
+  updateIndicators(car, dt) {
+    if (!car.indicators) {
+      return;
+    }
+
+    const activeTargetLane = car.targetLane ?? car.lane;
+    const targetOffset = LANES[clamp(activeTargetLane, 0, LANES.length - 1)];
+    const offsetDelta = targetOffset - car.lateralOffset;
+    const signalDirection = car.targetLane !== null
+      ? Math.sign(LANES[car.targetLane] - LANES[car.lane])
+      : Math.abs(offsetDelta) > 0.22 || car.signalHoldTimer > 0
+        ? Math.sign(offsetDelta || (targetOffset - LANES[car.lane]))
+        : 0;
+    const blinkOn = signalDirection !== 0 && Math.sin(car.signalClock * Math.PI * 4.2) > -0.1;
+    car.indicators.left.forEach((mesh) => {
+      mesh.visible = signalDirection < 0 && blinkOn;
+    });
+    car.indicators.right.forEach((mesh) => {
+      mesh.visible = signalDirection > 0 && blinkOn;
+    });
   }
 
   createVehicle() {
@@ -294,6 +343,7 @@ export class TrafficSystem {
     });
     const headlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffefd0 });
     const tailMaterial = new THREE.MeshBasicMaterial({ color: 0xb42520 });
+    const indicatorMaterial = new THREE.MeshBasicMaterial({ color: 0xffa11a });
 
     const group = new THREE.Group();
     group.name = isTruck ? "TrafficTruck" : "TrafficCar";
@@ -314,6 +364,19 @@ export class TrafficSystem {
 
     group.add(makeBox(bodyWidth * 0.62, 0.1, 0.08, headlightMaterial, new THREE.Vector3(0, 0.76, bodyLength / 2 + 0.02)));
     group.add(makeBox(bodyWidth * 0.68, 0.11, 0.08, tailMaterial, new THREE.Vector3(0, 0.76, -bodyLength / 2 - 0.02)));
+    const indicatorInset = bodyWidth * 0.36;
+    const leftIndicators = [
+      makeBox(0.18, 0.12, 0.1, indicatorMaterial, new THREE.Vector3(-indicatorInset, 0.81, bodyLength / 2 + 0.05)),
+      makeBox(0.18, 0.12, 0.1, indicatorMaterial, new THREE.Vector3(-indicatorInset, 0.81, -bodyLength / 2 - 0.05)),
+    ];
+    const rightIndicators = [
+      makeBox(0.18, 0.12, 0.1, indicatorMaterial, new THREE.Vector3(indicatorInset, 0.81, bodyLength / 2 + 0.05)),
+      makeBox(0.18, 0.12, 0.1, indicatorMaterial, new THREE.Vector3(indicatorInset, 0.81, -bodyLength / 2 - 0.05)),
+    ];
+    [...leftIndicators, ...rightIndicators].forEach((mesh) => {
+      mesh.visible = false;
+      group.add(mesh);
+    });
 
     return {
       id: this.nextId++,
@@ -334,6 +397,14 @@ export class TrafficSystem {
       cruiseSpeed: 0,
       nearMissCooldown: 0,
       laneChangeCooldown: rand(0, 3.5),
+      targetLane: null,
+      signalTimer: 0,
+      signalHoldTimer: 0,
+      signalClock: rand(0, 1),
+      indicators: {
+        left: leftIndicators,
+        right: rightIndicators,
+      },
       overtakeArmed: false,
     };
   }
