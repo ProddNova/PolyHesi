@@ -472,19 +472,19 @@ export class HighwayWorld {
       keyLight,
       fog,
       colors: {
-        dawnSky: new THREE.Color(0xc77f69),
+        dawnSky: new THREE.Color(0xd39a72),
         daySky: new THREE.Color(0x80c8ff),
-        duskSky: new THREE.Color(0x574876),
-        nightSky: new THREE.Color(0x07101f),
+        duskSky: new THREE.Color(0xb67958),
+        nightSky: new THREE.Color(0x09131c),
         dayGround: new THREE.Color(0x1a211a),
-        nightGround: new THREE.Color(0x0a0d13),
+        nightGround: new THREE.Color(0x0b0f12),
         dayHemi: new THREE.Color(0xe5f4ff),
-        nightHemi: new THREE.Color(0x40537b),
+        nightHemi: new THREE.Color(0x4f6570),
         sun: new THREE.Color(0xfff3d1),
-        moon: new THREE.Color(0x9eb8ff),
+        moon: new THREE.Color(0xb6c7d7),
       },
     };
-    this.applyEnvironment({ timeOfDay: 18.25 });
+    this.applyEnvironment({ timeOfDay: 14.5 });
   }
 
   applyEnvironment(settings = {}) {
