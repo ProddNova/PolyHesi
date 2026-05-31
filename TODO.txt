@@ -16,18 +16,8 @@ MACRO AREE
 
 TODO
 
-micro-task
 
-- Non limitare gli fps a 60
-
-- Accorciare il palo orizzontale situato dietro ai cartelli larghi infatti ora spunta ai lati del cartello questo pale che si trova dietro
-
-- Poter modificare dalla modalità di remodel i cartelli pali della luce e gallerie (tutto)
-
-
-fast-tk's
-
-- La visuale in terza persona quando la giro con il mouse non usa la mcchina come punto centrale su cui roteare bensi ruota su un punto a caso piu avanti della macchina, facendo a volte uscire anche la macchina dalla visuale
+tk's
 
 - Fare si che le auto del traffico siano le auto PSX esattamente queste 3 : 1 Japan rally legacy 2 Japan sedan 3 Korean hatch, cercando di ottimizzare al massimo per non fare laggare il gioco
 
@@ -35,18 +25,22 @@ fast-tk's
 
 - Le auto psx hanno i vetri colorati invece che essere neri/trasparenti (meglio neri)
 
-- Il controllo del Cycle speed non funziona e non moddifica il ciclo del giorno come dovrebbe
-
 - Ottimizzazione performance, attualmente il gioco lagga molto, il controllo nelle impostazioni sulla qualità grafica sembra non funzionare
 
+- Fix lag alla collisione : attualmente quando collido si freeza il gioco per qualche secondo quando hitto i guardrail fixa questa cosa
 
-slow-tk's
+- Alzare e fixare sollevamento autostrada rispetto alla base
+
+
+later-tk's
 
 - Rifinire sistema di commercio, rivedere prezzi auto, rivedere guadagni e costo parti 
 
 - Rivedere siti negozio da concentrarsi bene
 
 - Controllare e testare game loop
+
+- Quando rientro nel garage fai si che sia chiuso e premendo e switchi alla scena iniziale dove la macchina è dentro il garage
 
 
 AUTO PLAYER
