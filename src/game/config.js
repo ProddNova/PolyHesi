@@ -26,7 +26,7 @@ export const DEFAULT_SETTINGS = {
   trafficSpeedKmh: 118,
   cameraFov: 64,
   dayNightCycle: true,
-  timeOfDay: 14.5,
+  timeOfDay: 18.25,
   dayNightSpeed: 18,
   masterVolume: 0.34,
   graphicsQuality: 1,
