@@ -92,7 +92,7 @@ export class Game {
     this.hitRecoveryTimer = 0;
     this.invulnerableTimer = 0;
     this.cameraShake = 0;
-    this.fps = 60;
+    this.fps = 0;
     this.cameraYawOffset = 0;
     this.cameraPitchOffset = 0;
     this.cameraInputTimer = 0;
@@ -858,8 +858,10 @@ export class Game {
       return;
     }
 
-    const target = new THREE.Vector3(position.x, 0, position.z);
-    const road = this.world.getNearestRoadInfo(target);
+    const probe = new THREE.Vector3(position.x, 0, position.z);
+    const road = this.world.getNearestRoadInfo(probe);
+    const targetX = road?.center?.x ?? probe.x;
+    const targetZ = road?.center?.z ?? probe.z;
     const yaw = road?.yaw ?? this.player.yaw;
 
     this.mode = "driving";
@@ -881,17 +883,17 @@ export class Game {
       if (!this.noClipRig.active) {
         this.enterNoClip();
       }
-      this.noClipRig.position.set(target.x, Math.max(this.noClipRig.position.y, 2.4), target.z);
+      this.noClipRig.position.set(targetX, Math.max(this.noClipRig.position.y, 2.4), targetZ);
       this.noClipRig.yaw = yaw;
       this.syncPlayerToNoClip();
     } else {
-      this.player.reset({ x: target.x, z: target.z, yaw });
+      this.player.reset({ x: targetX, z: targetZ, yaw });
     }
 
     this.player.stop?.();
     this.player.applyTransform?.(0, 1 / 60);
     this.traffic.reset(this.settings, road?.s ?? 0);
-    this.hud.flashNotice("Map teleport", `${Math.round(target.x)}, ${Math.round(target.z)}`);
+    this.hud.flashNotice("Map teleport", `${Math.round(targetX)}, ${Math.round(targetZ)}`);
   }
 
   openMarket() {

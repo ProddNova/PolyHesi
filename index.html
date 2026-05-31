@@ -149,7 +149,7 @@
       <aside class="dev-panel" aria-label="Development tuning panel">
         <header>
           <span>Dev Panel <kbd>O</kbd></span>
-          <strong id="fpsValue">60</strong>
+          <strong id="fpsValue">0</strong>
         </header>
         <nav class="dev-tabs" aria-label="Dev panel tabs">
           <button class="is-active" data-dev-tab="gameplay" type="button">Game</button>
@@ -204,32 +204,32 @@
           <label>
             <span>Car speed</span>
             <output id="maxSpeedKmhOut">285</output>
-            <input id="maxSpeedKmh" type="range" min="170" max="460" step="1" />
+            <input id="maxSpeedKmh" type="range" min="170" max="1200" step="1" />
           </label>
           <label>
             <span>Handling</span>
             <output id="handlingOut">0.85</output>
-            <input id="handling" type="range" min="0.55" max="1.8" step="0.01" />
+            <input id="handling" type="range" min="0.05" max="8" step="0.01" />
           </label>
           <label>
             <span>Power</span>
             <output id="powerMultiplierOut">1.00x</output>
-            <input id="powerMultiplier" type="range" min="0.45" max="2.2" step="0.01" />
+            <input id="powerMultiplier" type="range" min="0.05" max="8" step="0.01" />
           </label>
           <label>
             <span>Grip</span>
             <output id="gripMultiplierOut">1.00x</output>
-            <input id="gripMultiplier" type="range" min="0.35" max="2.0" step="0.01" />
+            <input id="gripMultiplier" type="range" min="0.05" max="8" step="0.01" />
           </label>
           <label>
             <span>Brakes</span>
             <output id="brakePowerOut">1.00x</output>
-            <input id="brakePower" type="range" min="0.35" max="2.0" step="0.01" />
+            <input id="brakePower" type="range" min="0.05" max="8" step="0.01" />
           </label>
           <label>
             <span>Weight tune</span>
             <output id="weightMultiplierOut">1.00x</output>
-            <input id="weightMultiplier" type="range" min="0.65" max="1.6" step="0.01" />
+            <input id="weightMultiplier" type="range" min="0.05" max="8" step="0.01" />
           </label>
         </div>
 
@@ -288,7 +288,7 @@
       </aside>
 
       <section id="mapOverlay" class="map-overlay" aria-label="Map">
-        <canvas id="miniMapCanvas" width="640" height="640"></canvas>
+        <canvas id="miniMapCanvas" width="960" height="960"></canvas>
       </section>
 
       <section id="remodelToolbox" class="remodel-toolbox" aria-label="Remodel tools">

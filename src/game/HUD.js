@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import {
   CAR_AUCTION_LISTINGS,
   CAR_PRESETS,
@@ -1097,7 +1098,7 @@ export class HUD {
 
     const playerPoint = this.worldToMap(player.position, width, height);
     ctx.translate(playerPoint.x, playerPoint.y);
-    ctx.rotate(-player.yaw);
+    ctx.rotate(Math.PI - player.yaw);
     ctx.fillStyle = "#f2efe4";
     ctx.beginPath();
     ctx.moveTo(0, -7);
@@ -1204,28 +1205,37 @@ export class HUD {
   }
 
   worldToMap(position, width, height) {
-    const bounds = this.mapBounds;
-    const spanX = bounds.maxX - bounds.minX;
-    const spanZ = bounds.maxZ - bounds.minZ;
-    const scale = Math.min((width - 36) / spanX, (height - 36) / spanZ);
-    const mapWidth = spanX * scale;
-    const mapHeight = spanZ * scale;
+    const { bounds, mapWidth, mapHeight, offsetX, offsetY, scale } = this.getMapLayout(width, height);
     return {
-      x: (width - mapWidth) * 0.5 + (position.x - bounds.minX) * scale,
-      y: (height - mapHeight) * 0.5 + (position.z - bounds.minZ) * scale,
+      x: offsetX + (position.x - bounds.minX) * scale,
+      y: offsetY + (position.z - bounds.minZ) * scale,
     };
   }
 
   mapToWorld(x, y, width, height) {
+    const { bounds, mapWidth, mapHeight, offsetX, offsetY, scale } = this.getMapLayout(width, height);
+    const clampedX = THREE.MathUtils.clamp(x, offsetX, offsetX + mapWidth);
+    const clampedY = THREE.MathUtils.clamp(y, offsetY, offsetY + mapHeight);
+    return {
+      x: bounds.minX + (clampedX - offsetX) / scale,
+      z: bounds.minZ + (clampedY - offsetY) / scale,
+    };
+  }
+
+  getMapLayout(width, height) {
     const bounds = this.mapBounds;
-    const spanX = bounds.maxX - bounds.minX;
-    const spanZ = bounds.maxZ - bounds.minZ;
+    const spanX = Math.max(1, bounds.maxX - bounds.minX);
+    const spanZ = Math.max(1, bounds.maxZ - bounds.minZ);
     const scale = Math.min((width - 36) / spanX, (height - 36) / spanZ);
     const mapWidth = spanX * scale;
     const mapHeight = spanZ * scale;
     return {
-      x: bounds.minX + (x - (width - mapWidth) * 0.5) / scale,
-      z: bounds.minZ + (y - (height - mapHeight) * 0.5) / scale,
+      bounds,
+      scale,
+      mapWidth,
+      mapHeight,
+      offsetX: (width - mapWidth) * 0.5,
+      offsetY: (height - mapHeight) * 0.5,
     };
   }
 }

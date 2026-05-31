@@ -1258,23 +1258,25 @@ canvas {
 .map-overlay {
   position: absolute;
   left: 50%;
-  bottom: 18px;
-  width: min(620px, calc(100vw - 36px));
+  top: 50%;
+  bottom: auto;
+  width: min(860px, calc(100vw - 48px));
   aspect-ratio: 1;
   border-radius: 8px;
-  padding: 12px;
+  padding: 14px;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, 12px) scale(0.98);
+  transform: translate(-50%, calc(-50% + 12px)) scale(0.98);
   transition:
     opacity 160ms ease,
     transform 180ms ease;
+  z-index: 18;
 }
 
 .map-overlay.is-active {
   opacity: 1;
   pointer-events: auto;
-  transform: translate(-50%, 0) scale(1);
+  transform: translate(-50%, -50%) scale(1);
 }
 
 .map-overlay canvas {
@@ -2237,9 +2239,9 @@ canvas {
   }
 
   .map-overlay {
-    top: calc(154px + env(safe-area-inset-top, 0px));
+    top: 50%;
     bottom: auto;
-    width: min(460px, calc(100vw - 28px));
+    width: min(640px, calc(100vw - 28px));
   }
 
   .remodel-panel {
@@ -2513,9 +2515,9 @@ canvas {
   }
 
   .map-overlay {
-    top: calc(146px + env(safe-area-inset-top, 0px));
+    top: 50%;
     bottom: auto;
-    width: min(420px, calc(100vw - 24px));
+    width: min(92vw, 560px);
   }
 }
 
