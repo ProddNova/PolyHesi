@@ -1272,30 +1272,12 @@ export class Game {
       }
     }
 
-    this.settings.maxSpeedKmh = Math.min(
-      460,
-      this.basePerformance.maxSpeedKmh + totals.maxSpeedKmh,
-    );
-    this.settings.powerMultiplier = Math.min(
-      1.48,
-      this.basePerformance.powerMultiplier + totals.powerMultiplier,
-    );
-    this.settings.handling = Math.min(
-      1.8,
-      this.basePerformance.handling + totals.handling,
-    );
-    this.settings.gripMultiplier = Math.min(
-      1.55,
-      this.basePerformance.gripMultiplier + totals.gripMultiplier,
-    );
-    this.settings.brakePower = Math.min(
-      1.52,
-      this.basePerformance.brakePower + totals.brakePower,
-    );
-    this.settings.weightMultiplier = Math.min(
-      1.24,
-      this.basePerformance.weightMultiplier + totals.weightMultiplier,
-    );
+    this.settings.maxSpeedKmh = Math.max(1, this.basePerformance.maxSpeedKmh + totals.maxSpeedKmh);
+    this.settings.powerMultiplier = Math.max(0.01, this.basePerformance.powerMultiplier + totals.powerMultiplier);
+    this.settings.handling = Math.max(0.01, this.basePerformance.handling + totals.handling);
+    this.settings.gripMultiplier = Math.max(0.01, this.basePerformance.gripMultiplier + totals.gripMultiplier);
+    this.settings.brakePower = Math.max(0.01, this.basePerformance.brakePower + totals.brakePower);
+    this.settings.weightMultiplier = Math.max(0.01, this.basePerformance.weightMultiplier + totals.weightMultiplier);
   }
 
   handleCarMarket(listingId) {
@@ -1489,8 +1471,8 @@ export class Game {
 
     const cameraRig =
       this.cameraMode === "chaseClose"
-        ? { back: 7.2, backSpeed: 1.4, maxBack: 10.8, height: 3.15, heightSpeed: 0.42, maxDistance: 12.8 }
-        : { back: 12.6, backSpeed: 2.8, maxBack: 16.8, height: 5.45, heightSpeed: 0.78, maxDistance: 19.2 };
+        ? { back: 7.2, maxBack: 10.8, height: 3.15, maxDistance: 12.8 }
+        : { back: 12.6, maxBack: 16.8, height: 5.45, maxDistance: 19.2 };
 
     const forward = this.player.getForwardVector();
     const right = this.player.getRightVector?.() ?? { x: Math.cos(this.player.yaw), z: -Math.sin(this.player.yaw) };
@@ -1504,12 +1486,8 @@ export class Game {
         ? { x: velocity.x / velocityLength, z: velocity.z / velocityLength }
         : forward;
     const slideRatio = clamp((this.player.lateralSpeed ?? 0) / Math.max(playerSpeed, 8), -0.42, 0.42);
-    const cameraBack = clamp(
-      cameraRig.back + speedRatio * cameraRig.backSpeed + (this.player.slip ?? 0) * 0.42,
-      cameraRig.back,
-      cameraRig.maxBack,
-    );
-    const cameraHeight = cameraRig.height + speedRatio * cameraRig.heightSpeed + (this.player.slip ?? 0) * 0.12;
+    const cameraBack = clamp(cameraRig.back + (this.player.slip ?? 0) * 0.42, cameraRig.back, cameraRig.maxBack);
+    const cameraHeight = cameraRig.height + (this.player.slip ?? 0) * 0.12;
     const cameraYaw =
       this.player.yaw +
       Math.PI +
@@ -1522,7 +1500,7 @@ export class Game {
       this.player.position.z + Math.cos(cameraYaw) * cameraBack,
     );
 
-    const followResponse = THREE.MathUtils.lerp(10.5, 8.4, speedRatio);
+    const followResponse = 10.5;
     this.camera.position.lerp(desired, 1 - Math.exp(-followResponse * dt));
     const cameraOffset = this.camera.position.clone().sub(this.player.position);
     const cameraDistance = cameraOffset.length();
@@ -1537,14 +1515,12 @@ export class Game {
       THREE.MathUtils.lerp(forward.z, velocityForward.z, slipLookBlend),
     ).normalize();
     const orbitAnchor = this.cameraMode === "chaseClose" ? 0.85 : 1.1;
-    const lookAhead = this.cameraMode === "chaseClose"
-      ? 0.45 + speedRatio * 0.7
-      : 0.6 + speedRatio * 1.05;
+    const lookAhead = this.cameraMode === "chaseClose" ? 0.45 : 0.6;
     const lookAt = new THREE.Vector3(
       this.player.position.x +
         lookDir.x * lookAhead +
         right.x * clamp((this.player.lateralSpeed ?? 0) * 0.032, -0.9, 0.9),
-      this.player.position.y + orbitAnchor + speedRatio * 0.08,
+      this.player.position.y + orbitAnchor,
       this.player.position.z +
         lookDir.z * lookAhead +
         right.z * clamp((this.player.lateralSpeed ?? 0) * 0.032, -0.9, 0.9),
@@ -1569,7 +1545,7 @@ export class Game {
     }
 
     this.camera.lookAt(this.cameraLookAt);
-    const targetFov = this.settings.cameraFov + speedRatio * 5.2 + (this.player.slip ?? 0) * 1.1;
+    const targetFov = this.settings.cameraFov + (this.player.slip ?? 0) * 1.1;
     this.camera.fov = damp(this.camera.fov, targetFov, 4.5, dt);
     this.camera.updateProjectionMatrix();
   }
