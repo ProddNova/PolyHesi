@@ -160,6 +160,7 @@ export class Game {
 
     this.input = new InputController(this.renderer.domElement);
     this.world = new HighwayWorld(this.scene);
+    this.world.setGraphicsQuality(this.settings.graphicsQuality);
     this.world.setUltraGraphics(Boolean(this.settings.ultraGraphics));
     this.player = new PlayerCar(this.scene, this.world.getStartPose());
     this.player.setCarPreset(this.getActiveVehiclePreset());
@@ -251,6 +252,7 @@ export class Game {
 
     this.world.update();
     this.traffic.reset(this.settings);
+    this.applyGraphicsQuality();
     this.enterGarageMode(true);
 
     window.addEventListener("resize", () => this.resize());
@@ -2190,6 +2192,9 @@ export class Game {
       this.applyGraphicsQuality();
       this.hud.flashNotice("Ultra graphics", this.settings.ultraGraphics ? "video mode on" : "video mode off");
     }
+    if (changedKey === "dayNightSpeed" || changedKey === "timeOfDay" || changedKey === "dayNightCycle") {
+      this.updateDayNight(0);
+    }
     if (changedKey === "cameraFov") {
       this.camera.fov = this.settings.cameraFov;
       this.camera.updateProjectionMatrix();
@@ -2515,7 +2520,7 @@ export class Game {
 
   resize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.far = this.settings.ultraGraphics ? 1800 : 900;
+    this.camera.far = this.getCameraFarPlane();
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(this.getRenderPixelRatio());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -2526,16 +2531,49 @@ export class Game {
       return Math.min(window.devicePixelRatio || 1, 4);
     }
     const quality = Math.round(Number(this.settings.graphicsQuality) || 1);
-    const cap = quality <= 0 ? 0.82 : quality >= 2 ? 1.5 : 1.15;
-    return Math.min(window.devicePixelRatio, cap);
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    const cap = quality <= 0 ? 0.7 : quality >= 2 ? 1.25 : 0.92;
+    return Math.min(devicePixelRatio, cap);
+  }
+
+  getCameraFarPlane() {
+    if (this.settings.ultraGraphics) {
+      return 1800;
+    }
+    const quality = Math.round(Number(this.settings.graphicsQuality) || 1);
+    return quality <= 0 ? 560 : quality >= 2 ? 980 : 760;
+  }
+
+  applyPlayerGraphicsQuality() {
+    const quality = this.settings.ultraGraphics ? 3 : Math.round(Number(this.settings.graphicsQuality) || 1);
+    this.player?.group?.traverse?.((object) => {
+      if (object.isLight) {
+        object.castShadow = quality >= 2;
+        if (object.shadow?.mapSize) {
+          const size = quality >= 2 ? 1024 : 256;
+          object.shadow.mapSize.set(size, size);
+          object.shadow.needsUpdate = true;
+        }
+      }
+      if (object.isMesh) {
+        object.castShadow = quality > 0;
+        object.receiveShadow = quality > 0;
+      }
+    });
   }
 
   applyGraphicsQuality() {
-    this.camera.far = this.settings.ultraGraphics ? 1800 : 900;
+    this.camera.far = this.getCameraFarPlane();
     this.camera.updateProjectionMatrix();
     this.renderer.toneMappingExposure = this.settings.ultraGraphics ? 1.12 : 1;
+    this.renderer.shadowMap.enabled = this.settings.ultraGraphics || Math.round(Number(this.settings.graphicsQuality) || 1) > 0;
+    this.renderer.shadowMap.type = this.settings.ultraGraphics ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.renderer.setPixelRatio(this.getRenderPixelRatio());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.world?.setGraphicsQuality?.(this.settings.graphicsQuality);
     this.world?.setUltraGraphics?.(Boolean(this.settings.ultraGraphics));
+    this.applyPlayerGraphicsQuality();
+    const playerRoad = this.world?.getNearestRoadInfo?.(this.player.position);
+    this.traffic?.syncDensity?.(this.settings, playerRoad?.s ?? 0);
   }
 }

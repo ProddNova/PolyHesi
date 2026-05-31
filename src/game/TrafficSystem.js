@@ -95,8 +95,16 @@ export class TrafficSystem {
       return 0;
     }
 
+    const quality = Math.round(Number(settings.graphicsQuality) || 1);
+    const densityScale = settings.ultraGraphics
+      ? 1
+      : quality <= 0
+        ? 0.58
+        : quality === 1
+          ? 0.8
+          : 1;
     return clamp(
-      Math.round(settings.trafficDensity * DENSITY_TO_ACTIVE_CARS),
+      Math.round(settings.trafficDensity * densityScale * DENSITY_TO_ACTIVE_CARS),
       MIN_ACTIVE_CARS,
       MAX_ACTIVE_CARS,
     );

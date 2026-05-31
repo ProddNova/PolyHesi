@@ -214,6 +214,8 @@ export class HighwayWorld {
     this.roadLights = [];
     this.garageLights = [];
     this.ultraGraphics = false;
+    this.graphicsQuality = 1;
+    this.horizonGroup = null;
     this.tunnelRuns = TUNNEL_RUNS.map((run) => ({ ...run }));
 
     this.materials = this.createMaterials();
@@ -543,8 +545,19 @@ export class HighwayWorld {
 
   setUltraGraphics(enabled) {
     this.ultraGraphics = Boolean(enabled);
+    this.applyGraphicsQualityProfile();
+  }
+
+  setGraphicsQuality(level = 1) {
+    this.graphicsQuality = clamp(Math.round(Number(level) || 1), 0, 2);
+    this.applyGraphicsQualityProfile();
+  }
+
+  applyGraphicsQualityProfile() {
+    const quality = this.graphicsQuality;
+    const shadowSize = this.ultraGraphics ? 4096 : quality >= 2 ? 2048 : quality === 1 ? 1024 : 512;
     if (this.environment?.keyLight) {
-      const shadowSize = this.ultraGraphics ? 4096 : 2048;
+      this.environment.keyLight.castShadow = quality > 0 || this.ultraGraphics;
       this.environment.keyLight.shadow.mapSize.set(shadowSize, shadowSize);
       this.environment.keyLight.shadow.needsUpdate = true;
     }
@@ -554,9 +567,21 @@ export class HighwayWorld {
       this.materials?.concrete?.map,
     ]) {
       if (texture) {
-        texture.anisotropy = this.ultraGraphics ? 16 : 1;
+        texture.anisotropy = this.ultraGraphics ? 16 : quality >= 2 ? 8 : quality === 1 ? 4 : 1;
         texture.needsUpdate = true;
       }
+    }
+    for (const light of this.roadLights) {
+      light.visible = this.ultraGraphics || quality > 0;
+      light.castShadow = this.ultraGraphics || quality >= 2;
+    }
+    for (const light of this.garageLights) {
+      light.castShadow = this.ultraGraphics || quality >= 2;
+      light.shadow.mapSize.set(quality >= 2 ? 512 : 256, quality >= 2 ? 512 : 256);
+      light.shadow.needsUpdate = true;
+    }
+    if (this.horizonGroup) {
+      this.horizonGroup.visible = this.ultraGraphics || quality > 0;
     }
   }
 
@@ -939,7 +964,6 @@ export class HighwayWorld {
   createRoadsideInfrastructure(parent) {
     const details = new THREE.Group();
     details.name = "RoadsideCityInfrastructure";
-    details.userData.remodelIgnore = true;
 
     const sidewalks = [];
     const poles = [];
@@ -959,16 +983,26 @@ export class HighwayWorld {
           position: this.offsetPoint(frame, side * (ROAD_HALF_WIDTH + 8.45), 0.09),
           yaw: frame.yaw,
           scale: { x: 3.4, y: 0.055, z: 15.5 },
+          remodel: { remodelSelectable: false },
         });
       }
     }
 
+    let streetlightIndex = 0;
     for (let s = 36; s < this.trackLength; s += CITY_STREETLIGHT_INTERVAL) {
       const frame = this.getFrameAtDistance(s);
       for (const side of [-1, 1]) {
         if (this.isCityServiceClearance(frame.s, side)) {
           continue;
         }
+        const id = `streetlight:${side > 0 ? "r" : "l"}:${Math.round(s)}`;
+        const label = `Streetlight ${Math.round(s)}`;
+        const remodelMeta = {
+          remodelFixedId: id,
+          remodelLabel: label,
+          remodelCategory: "default",
+          remodelGroupId: id,
+        };
         const polePosition = this.offsetPoint(frame, side * (ROAD_HALF_WIDTH + 10.2), 3.05);
         const armPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 0.76, 2.78, 5.96);
         const lampPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 1.55, 2.74, 5.88);
@@ -976,18 +1010,21 @@ export class HighwayWorld {
           position: polePosition,
           yaw: frame.yaw,
           scale: { x: 0.14, y: 6.1, z: 0.14 },
+          remodel: remodelMeta,
         });
         arms.push({
           position: armPosition,
           yaw: frame.yaw,
           scale: { x: 1.62, y: 0.11, z: 0.11 },
+          remodel: { ...remodelMeta, remodelSelectable: false },
         });
         lamps.push({
           position: lampPosition,
           yaw: frame.yaw,
           scale: { x: 0.44, y: 0.16, z: 0.34 },
+          remodel: { ...remodelMeta, remodelSelectable: false },
         });
-        if (s % (CITY_STREETLIGHT_INTERVAL * 3) < 1 && Math.abs(side) === 1) {
+        if (streetlightIndex % 3 === 0) {
           const light = new THREE.PointLight(0xffd887, 0, 82, 1.12);
           light.position.copy(lampPosition);
           light.position.y -= 0.55;
@@ -995,13 +1032,14 @@ export class HighwayWorld {
           this.roadLights.push(light);
           lightGroup.add(light);
         }
+        streetlightIndex += 1;
       }
     }
 
     details.add(this.createScaledInstancedBoxes(sidewalks, this.materials.concrete));
-    details.add(this.createScaledInstancedBoxes(poles, this.materials.streetlightPole));
-    details.add(this.createScaledInstancedBoxes(arms, this.materials.streetlightPole));
-    details.add(this.createScaledInstancedBoxes(lamps, this.materials.streetlightGlow));
+    details.add(this.createScaledInstancedBoxes(poles, this.materials.streetlightPole, false, false));
+    details.add(this.createScaledInstancedBoxes(arms, this.materials.streetlightPole, false, false));
+    details.add(this.createScaledInstancedBoxes(lamps, this.materials.streetlightGlow, false, false));
     details.add(lightGroup);
     parent.add(details);
   }
@@ -1009,7 +1047,6 @@ export class HighwayWorld {
   createExpresswaySigns(parent) {
     const signs = new THREE.Group();
     signs.name = "ShutokuExpresswaySigns";
-    signs.userData.remodelIgnore = true;
 
     const poleMaterial = this.materials.streetlightPole;
     const frameMaterial = new THREE.MeshStandardMaterial({
@@ -1052,8 +1089,20 @@ export class HighwayWorld {
       placement,
       Math.PI,
     );
+    group.traverse((object) => {
+      if (object.isMesh) {
+        object.userData.remodelIgnore = true;
+      }
+    });
 
     parent.add(group);
+    parent.add(
+      this.createGroupRemodelProxy(group, {
+        id: `sign:roadside:${side > 0 ? "r" : "l"}:${Math.round(frame.s)}`,
+        label: `Roadside sign ${Math.round(frame.s)}`,
+        category: "default",
+      }),
+    );
   }
 
   addOverheadExpresswaySign(parent, frame, placement, poleMaterial, frameMaterial) {
@@ -1066,13 +1115,25 @@ export class HighwayWorld {
     const postHeight = 8.35;
     this.addLocalBox(group, 0.42, postHeight, 0.42, poleMaterial, -postX, postHeight * 0.5, 0);
     this.addLocalBox(group, 0.42, postHeight, 0.42, poleMaterial, postX, postHeight * 0.5, 0);
-    this.addLocalBox(group, postX * 2 + 0.7, 0.42, 0.42, poleMaterial, 0, postHeight, 0);
+    this.addLocalBox(group, 11.2, 0.42, 0.42, poleMaterial, 0, postHeight, 0);
     this.addLocalBox(group, postX * 1.68, 0.18, 0.18, frameMaterial, 0, postHeight - 1.55, -0.16);
     this.addLocalBox(group, 0.16, 2.05, 0.16, frameMaterial, -4.8, postHeight - 0.88, -0.16);
     this.addLocalBox(group, 0.16, 2.05, 0.16, frameMaterial, 4.8, postHeight - 0.88, -0.16);
     this.addSignBoard(group, 0, postHeight - 1.75, -0.24, 10.4, 2.45, placement, Math.PI);
+    group.traverse((object) => {
+      if (object.isMesh) {
+        object.userData.remodelIgnore = true;
+      }
+    });
 
     parent.add(group);
+    parent.add(
+      this.createGroupRemodelProxy(group, {
+        id: `sign:overhead:${Math.round(frame.s)}`,
+        label: `Overhead sign ${Math.round(frame.s)}`,
+        category: "default",
+      }),
+    );
   }
 
   addSignBoard(parent, x, y, z, width, height, placement, rotationY = 0) {
@@ -1139,6 +1200,7 @@ export class HighwayWorld {
   createHorizonBuildings(parent) {
     const horizonGroup = new THREE.Group();
     horizonGroup.name = "HorizonSkyline";
+    this.horizonGroup = horizonGroup;
     const steps = 180;
     const lateral = 1400;
     const height = 320;
@@ -1522,6 +1584,11 @@ export class HighwayWorld {
     proxy.userData.remodelLabel = `Building ${type.id} ${Math.round(placement.s)}`;
     proxy.userData.remodelCategory = "building";
     proxy.userData.remodelControlledObject = group;
+    proxy.userData.remodelControlledBase = {
+      position: group.position.clone(),
+      rotation: { x: group.rotation.x, y: group.rotation.y, z: group.rotation.z },
+      scale: group.scale.clone(),
+    };
     return proxy;
   }
 
@@ -1686,6 +1753,29 @@ export class HighwayWorld {
     return mesh;
   }
 
+  createGroupRemodelProxy(group, { id, label, category = "default" }) {
+    group.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(group);
+    const size = bounds.getSize(new THREE.Vector3());
+    const center = bounds.getCenter(new THREE.Vector3());
+    const proxy = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.materials.remodelCreated);
+    proxy.name = `RemodelProxy_${group.name}`;
+    proxy.position.copy(center);
+    proxy.rotation.copy(group.rotation);
+    proxy.scale.set(Math.max(size.x, 1), Math.max(size.y, 1), Math.max(size.z, 1));
+    proxy.visible = false;
+    proxy.userData.remodelFixedId = id;
+    proxy.userData.remodelLabel = label;
+    proxy.userData.remodelCategory = category;
+    proxy.userData.remodelControlledObject = group;
+    proxy.userData.remodelControlledBase = {
+      position: group.position.clone(),
+      rotation: { x: group.rotation.x, y: group.rotation.y, z: group.rotation.z },
+      scale: group.scale.clone(),
+    };
+    return proxy;
+  }
+
   createTunnelRuns(parent) {
     const tunnels = new THREE.Group();
     tunnels.name = "FixedHighwayTunnels";
@@ -1725,8 +1815,20 @@ export class HighwayWorld {
       this.addLocalBox(section, 0.18, 0.1, length * 0.46, this.materials.tunnelLight, -3.8, wallHeight - 0.42, 0);
       this.addLocalBox(section, 0.18, 0.1, length * 0.46, this.materials.tunnelLight, 3.8, wallHeight - 0.42, 0);
     }
+    section.traverse((object) => {
+      if (object.isMesh) {
+        object.userData.remodelIgnore = true;
+      }
+    });
 
     parent.add(section);
+    parent.add(
+      this.createGroupRemodelProxy(section, {
+        id: `tunnel:section:${Math.round(frame.s)}:${index}`,
+        label: `Tunnel section ${Math.round(frame.s)}`,
+        category: "default",
+      }),
+    );
   }
 
   addTunnelPortal(parent, frame, label) {
@@ -1747,8 +1849,20 @@ export class HighwayWorld {
       this.addLocalBox(portal, 0.2, 0.46, 0.18, this.materials.tunnelWarning, side * (ROAD_HALF_WIDTH + 3.45), 3.15, -1.4);
       this.addLocalBox(portal, 0.2, 0.46, 0.18, this.materials.tunnelWarning, side * (ROAD_HALF_WIDTH + 3.45), 4.75, -1.4);
     }
+    portal.traverse((object) => {
+      if (object.isMesh) {
+        object.userData.remodelIgnore = true;
+      }
+    });
 
     parent.add(portal);
+    parent.add(
+      this.createGroupRemodelProxy(portal, {
+        id: `tunnel:portal:${label}:${Math.round(frame.s)}`,
+        label: `${label} portal`,
+        category: "default",
+      }),
+    );
   }
 
   createSavedRemodelPieces() {
@@ -2306,7 +2420,6 @@ export class HighwayWorld {
   writeMeshRemodelState(target, state) {
     const object = target.object;
     const controlledObject = object.userData?.remodelControlledObject;
-    const previousPosition = object.position.clone();
     object.position.set(state.position.x, state.position.y, state.position.z);
     object.rotation.set(state.rotation.x, state.rotation.y, state.rotation.z);
     object.scale.set(
@@ -2321,9 +2434,28 @@ export class HighwayWorld {
       object.material.color.set(state.color);
     }
     if (controlledObject) {
-      controlledObject.position.add(object.position.clone().sub(previousPosition));
-      controlledObject.rotation.copy(object.rotation);
-      controlledObject.scale.copy(object.scale);
+      const base = object.userData?.remodelControlledBase;
+      const baseState = target.baseState;
+      if (base && baseState) {
+        controlledObject.position.set(
+          base.position.x + (state.position.x - baseState.position.x),
+          base.position.y + (state.position.y - baseState.position.y),
+          base.position.z + (state.position.z - baseState.position.z),
+        );
+        controlledObject.rotation.set(
+          base.rotation.x + (state.rotation.x - baseState.rotation.x),
+          base.rotation.y + (state.rotation.y - baseState.rotation.y),
+          base.rotation.z + (state.rotation.z - baseState.rotation.z),
+        );
+        controlledObject.scale.set(
+          base.scale.x * (state.dimensions.x / Math.max(baseState.dimensions.x, MIN_REMODEL_DIMENSION)),
+          base.scale.y * (state.dimensions.y / Math.max(baseState.dimensions.y, MIN_REMODEL_DIMENSION)),
+          base.scale.z * (state.dimensions.z / Math.max(baseState.dimensions.z, MIN_REMODEL_DIMENSION)),
+        );
+      } else {
+        controlledObject.position.copy(object.position);
+        controlledObject.rotation.copy(object.rotation);
+      }
       controlledObject.updateMatrixWorld(true);
     }
     object.updateMatrixWorld(true);
