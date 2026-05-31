@@ -142,6 +142,8 @@ const CITY_BLOCK_ROWS = [
 ];
 const CITY_MANUAL_CLEARANCE = 46;
 const CITY_DISTRICT_HALF_WIDTH = 520;
+const CITY_RELATIVE_ELEVATION = -0.45;
+const CITY_BUILDING_HEIGHT_SCALE = 1.2;
 const CITY_SIDEWALK_INTERVAL = 24;
 const CITY_STREETLIGHT_INTERVAL = 112;
 const ROAD_SIGN_PLACEMENTS = [
@@ -1079,7 +1081,6 @@ export class HighwayWorld {
     this.addLocalBox(group, 0.42, postHeight, 0.42, poleMaterial, -postX, postHeight * 0.5, 0);
     this.addLocalBox(group, 0.42, postHeight, 0.42, poleMaterial, postX, postHeight * 0.5, 0);
     this.addLocalBox(group, postX * 2 + 0.7, 0.42, 0.42, poleMaterial, 0, postHeight, 0);
-    this.addLocalBox(group, postX * 1.68, 0.18, 0.18, frameMaterial, 0, postHeight - 1.55, -0.16);
     this.addLocalBox(group, 0.16, 2.05, 0.16, frameMaterial, -4.8, postHeight - 0.88, -0.16);
     this.addLocalBox(group, 0.16, 2.05, 0.16, frameMaterial, 4.8, postHeight - 0.88, -0.16);
     this.addSignBoard(group, 0, postHeight - 1.75, -0.24, 10.4, 2.45, placement, Math.PI);
@@ -1153,7 +1154,7 @@ export class HighwayWorld {
     horizonGroup.name = "HorizonSkyline";
     const steps = 180;
     const lateral = 1400;
-    const height = 320;
+    const height = 320 * CITY_BUILDING_HEIGHT_SCALE;
     const width = 90;
     const depth = 90;
     const material = new THREE.MeshStandardMaterial({ color: 0x2a3035, roughness: 0.9, flatShading: true });
@@ -1174,6 +1175,7 @@ export class HighwayWorld {
   createFixedCityscape(parent) {
     const city = new THREE.Group();
     city.name = "FixedRoadsideCityscape";
+    city.position.y = CITY_RELATIVE_ELEVATION;
 
     this.cityBuildingFootprints = new Map();
     for (const placement of CITY_BUILDING_PLACEMENTS) {
@@ -1247,7 +1249,7 @@ export class HighwayWorld {
     const frame = this.getFrameAtDistance(s);
     const width = cityRange(seed + 1.7, row.width[0], row.width[1]);
     const depth = cityRange(seed + 2.9, row.depth[0], row.depth[1]);
-    const height = cityRange(seed + 4.1, row.height[0], row.height[1]) * (rowIndex >= 3 ? 1.08 : 1);
+    const height = cityRange(seed + 4.1, row.height[0], row.height[1]) * (rowIndex >= 3 ? 1.08 : 1) * CITY_BUILDING_HEIGHT_SCALE;
     const lateral = side * (ROAD_HALF_WIDTH + row.lateral + width * 0.5 + cityRange(seed + 5.5, -row.lateralJitter, row.lateralJitter));
     const forward = cityRange(seed + 6.7, -row.forwardJitter, row.forwardJitter);
     const base = this.offsetAlong(frame, lateral, forward, 0);
@@ -1543,7 +1545,7 @@ export class HighwayWorld {
     const trim = this.materials.buildingTrim;
     const w = type.width * scale;
     const d = type.depth * scale;
-    const h = type.height * scale;
+    const h = type.height * scale * CITY_BUILDING_HEIGHT_SCALE;
 
     if (type.id === "stepped") {
       this.addLocalBox(group, w, h * 0.64, d, material, 0, h * 0.32, 0);
