@@ -10,6 +10,14 @@ export function damp(current, target, lambda, dt) {
   return THREE.MathUtils.lerp(current, target, 1 - Math.exp(-lambda * dt));
 }
 
+export function angleDelta(current, target) {
+  return Math.atan2(Math.sin(target - current), Math.cos(target - current));
+}
+
+export function dampAngle(current, target, lambda, dt) {
+  return current + angleDelta(current, target) * (1 - Math.exp(-lambda * dt));
+}
+
 export function rand(min, max) {
   return min + Math.random() * (max - min);
 }

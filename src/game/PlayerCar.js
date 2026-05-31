@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { getCarPreset, PLAYER_START } from "./config.js";
-import { clamp, damp, makeBox } from "./utils.js";
+import { angleDelta, clamp, damp, dampAngle, makeBox } from "./utils.js";
 import { createPlayerCarAsset } from "./PlayerCarAsset.js";
 
 function shapeAxis(value, softness = 0.48) {
@@ -16,6 +16,7 @@ export class PlayerCar {
     this.speed = 0;
     this.speedMagnitude = 0;
     this.yaw = startPose.yaw;
+    this.visualYaw = startPose.yaw;
     this.yawVelocity = 0;
     this.slip = 0;
     this.slipAngle = 0;
@@ -203,6 +204,7 @@ export class PlayerCar {
     this.bodyPitch = 0;
     this.bodyRoll = 0;
     this.yaw = startPose.yaw;
+    this.visualYaw = startPose.yaw;
     this.velocity.set(0, 0, 0);
     this.position.set(startPose.x, 0, startPose.z);
     this.previousPosition.copy(this.position);
@@ -583,6 +585,18 @@ export class PlayerCar {
 
   applyTransform(steer = 0, dt = 1 / 60) {
     const speedLean = clamp(this.speedMagnitude / 42, 0, 1);
+    const speedTrace = clamp((this.speedMagnitude - 1.8) / 12, 0, 1);
+    const forwardTrace = clamp((this.speed - 1.2) / 10, 0, 1);
+    const velocityYaw = Math.atan2(this.velocity.x, this.velocity.z);
+    const pathYaw = forwardTrace > 0 ? velocityYaw : this.yaw;
+    const maxVisualLead = THREE.MathUtils.lerp(0.16, 0.31, speedLean);
+    const headingLead = clamp(angleDelta(pathYaw, this.yaw), -maxVisualLead, maxVisualLead);
+    const targetVisualYaw = pathYaw + headingLead;
+    const yawResponse = THREE.MathUtils.lerp(10.5, 6.4, speedTrace);
+    this.visualYaw =
+      this.speedMagnitude < 0.2
+        ? this.yaw
+        : dampAngle(this.visualYaw, targetVisualYaw, yawResponse, dt);
     this.steerVisual = damp(this.steerVisual, steer, 9.4, dt);
     this.bodyPitch = damp(
       this.bodyPitch,
@@ -603,7 +617,7 @@ export class PlayerCar {
       dt,
     );
     this.group.position.copy(this.position);
-    this.group.rotation.y = this.yaw;
+    this.group.rotation.y = this.visualYaw;
     this.group.rotation.x = this.bodyPitch;
     this.group.rotation.z = this.bodyRoll - clamp(this.yawVelocity, -0.8, 0.8) * 0.012 * speedLean;
   }

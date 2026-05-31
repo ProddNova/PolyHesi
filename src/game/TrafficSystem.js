@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { LANES, TRAFFIC_CAR_IDS } from "./config.js";
-import { choice, clamp, damp, makeBox, rand } from "./utils.js";
+import { choice, clamp, damp, dampAngle, makeBox, rand } from "./utils.js";
 
 const TRAFFIC_COLORS = [0xb8b4a8, 0xd6d3c8, 0x4c5459, 0x273c4d, 0x7d2520, 0x4d594c];
 const ACTIVE_AHEAD = 760;
@@ -12,11 +12,6 @@ const SAFE_BACK_SPAWN = 85;
 const DENSITY_TO_ACTIVE_CARS = 0.145;
 const MIN_ACTIVE_CARS = 12;
 const MAX_ACTIVE_CARS = 72;
-
-function dampAngle(current, target, lambda, dt) {
-  const delta = Math.atan2(Math.sin(target - current), Math.cos(target - current));
-  return current + delta * (1 - Math.exp(-lambda * dt));
-}
 
 export class TrafficSystem {
   constructor(scene, world) {
