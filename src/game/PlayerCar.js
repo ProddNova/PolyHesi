@@ -337,8 +337,14 @@ export class PlayerCar {
     const handlingScale = Math.pow(Math.max(0.05, settings.handling ?? 1), 0.72);
     const steerAngle = shapedSteer * maxSteerAngle * handlingScale;
     const parkingSteerAssist = THREE.MathUtils.lerp(1.45, 1, clamp(Math.abs(this.speed) / 14, 0, 1));
-    const highSpeedTurnTaming = THREE.MathUtils.lerp(0.96, 0.52, Math.pow(speedRatio, 1.14));
-    const slipYawGrip = clamp(1 - this.slip * 0.34, 0.62, 1);
+    const highSpeedTurnTaming = THREE.MathUtils.lerp(0.94, 0.42, Math.pow(speedRatio, 1.08));
+    const slipYawGrip = clamp(1 - this.slip * 0.46, 0.5, 1);
+    const corneringGripLimit = this.getCorneringGripLimit({
+      gripMultiplier,
+      brakeAmount,
+      throttleAmount,
+      speedRatio,
+    });
     const rawYawRate =
       (this.speed / wheelBase) *
       Math.tan(steerAngle) *
@@ -347,9 +353,13 @@ export class PlayerCar {
       (0.82 + gripMultiplier * 0.2) *
       highSpeedTurnTaming *
       slipYawGrip;
-    const yawLimit =
+    const presetYawLimit =
       THREE.MathUtils.lerp(preset.yawLowLimit, preset.yawHighLimit, Math.pow(speedRatio, 0.7)) *
       highSpeedTurnTaming;
+    const physicalYawLimit =
+      (corneringGripLimit / Math.max(Math.abs(this.speed), 7.5)) *
+      THREE.MathUtils.lerp(1.18, 0.92, speedRatio);
+    const yawLimit = Math.min(presetYawLimit, physicalYawLimit);
     const yawResponse =
       THREE.MathUtils.lerp(6.2, 2.6, Math.pow(speedRatio, 0.82)) *
       Math.max(0.05, gripMultiplier) *
@@ -437,22 +447,22 @@ export class PlayerCar {
     const slipAngle = Math.atan2(this.lateralSpeed, Math.max(absForwardSpeed, 4));
     this.slipAngle = damp(this.slipAngle, slipAngle, 10.5, dt);
     const slipDemand = clamp(
-      Math.abs(slipAngle) / 0.36 +
-        Math.max(0, Math.abs(this.lateralSpeed) - 2.4) / Math.max(18, this.speedMagnitude * 0.95),
+      Math.abs(slipAngle) / 0.24 +
+        Math.max(0, Math.abs(this.lateralSpeed) - 1.25) / Math.max(13, this.speedMagnitude * 0.78),
       0,
       1.35,
     );
-    this.slip = damp(this.slip, slipDemand, slipDemand > this.slip ? 6.8 : 4.4, dt);
+    this.slip = damp(this.slip, slipDemand, slipDemand > this.slip ? 8.4 : 5.8, dt);
 
     const turnLoad = clamp((Math.abs(this.yawVelocity) * this.speedMagnitude) / 9.81, 0, 2.4);
     const loadGrip =
-      clamp(1 - turnLoad * 0.07 - brakeAmount * 0.08 + speedRatio * 0.08, 0.56, 1.1);
-    const handbrakeGrip = 1 - this.handbrakeInput * THREE.MathUtils.lerp(0.18, 0.38, speedRatio);
-    const slipGrip = THREE.MathUtils.lerp(1, 0.46, clamp((this.slip - 0.18) / 0.78, 0, 1));
+      clamp(1 - turnLoad * 0.045 - brakeAmount * 0.045 + speedRatio * 0.1, 0.68, 1.14);
+    const handbrakeGrip = 1 - this.handbrakeInput * THREE.MathUtils.lerp(0.42, 0.64, speedRatio);
+    const slipGrip = THREE.MathUtils.lerp(1, 0.58, clamp((this.slip - 0.18) / 0.82, 0, 1));
     const recoveryGrip = inputRecoveryBoost(counterSteering, this.steerInput, this.lateralSpeed, this.slip);
-    const throttleGrip = 1 - throttleAmount * THREE.MathUtils.lerp(0.02, 0.08, speedRatio);
+    const throttleGrip = 1 - throttleAmount * THREE.MathUtils.lerp(0.01, 0.045, speedRatio);
     const gripRate =
-      THREE.MathUtils.lerp(12.5, 6.1, Math.pow(speedRatio, 0.68)) *
+      THREE.MathUtils.lerp(18.5, 10.8, Math.pow(speedRatio, 0.62)) *
       (0.82 + gripMultiplier * 0.34) *
       loadGrip *
       handbrakeGrip *
@@ -461,13 +471,27 @@ export class PlayerCar {
       throttleGrip;
     const desiredLateralAccel = -this.lateralSpeed * gripRate;
     const gripLimit =
-      (8.4 + gripMultiplier * 3.2) *
+      (10.6 + gripMultiplier * 4.2) *
       loadGrip *
-      (1 - this.handbrakeInput * 0.24) *
-      THREE.MathUtils.lerp(0.88, 1.08, speedRatio);
+      (1 - this.handbrakeInput * 0.46) *
+      THREE.MathUtils.lerp(0.96, 1.12, speedRatio);
     const lateralAccel = clamp(desiredLateralAccel, -gripLimit, gripLimit);
     this.velocity.x += right.x * lateralAccel * dt;
     this.velocity.z += right.z * lateralAccel * dt;
+  }
+
+  getCorneringGripLimit({ gripMultiplier, brakeAmount, throttleAmount, speedRatio }) {
+    const brakePenalty = 1 - brakeAmount * THREE.MathUtils.lerp(0.04, 0.1, speedRatio);
+    const throttlePenalty = 1 - throttleAmount * THREE.MathUtils.lerp(0.01, 0.05, speedRatio);
+    const handbrakePenalty = 1 - this.handbrakeInput * THREE.MathUtils.lerp(0.4, 0.62, speedRatio);
+    const slipPenalty = clamp(1 - Math.max(0, this.slip - 0.12) * 0.36, 0.58, 1);
+    return (
+      (10.6 + Math.max(0, gripMultiplier) * 4.2) *
+      brakePenalty *
+      throttlePenalty *
+      handbrakePenalty *
+      slipPenalty
+    );
   }
 
   limitLongitudinalSpeed(maxSpeed, maxReverseSpeed) {
@@ -588,11 +612,12 @@ export class PlayerCar {
     const speedTrace = clamp((this.speedMagnitude - 1.8) / 12, 0, 1);
     const forwardTrace = clamp((this.speed - 1.2) / 10, 0, 1);
     const velocityYaw = Math.atan2(this.velocity.x, this.velocity.z);
-    const pathYaw = forwardTrace > 0 ? velocityYaw : this.yaw;
-    const maxVisualLead = THREE.MathUtils.lerp(0.16, 0.31, speedLean);
-    const headingLead = clamp(angleDelta(pathYaw, this.yaw), -maxVisualLead, maxVisualLead);
-    const targetVisualYaw = pathYaw + headingLead;
-    const yawResponse = THREE.MathUtils.lerp(10.5, 6.4, speedTrace);
+    const pathSlip = forwardTrace > 0 ? angleDelta(this.yaw, velocityYaw) : 0;
+    const maxVisualSlip = THREE.MathUtils.lerp(0.035, 0.095, speedLean);
+    const handbrakeVisualSlip = this.handbrakeInput * THREE.MathUtils.lerp(0.02, 0.09, speedLean);
+    const targetVisualYaw =
+      this.yaw + clamp(pathSlip, -maxVisualSlip - handbrakeVisualSlip, maxVisualSlip + handbrakeVisualSlip);
+    const yawResponse = THREE.MathUtils.lerp(12.5, 8.8, speedTrace);
     this.visualYaw =
       this.speedMagnitude < 0.2
         ? this.yaw
