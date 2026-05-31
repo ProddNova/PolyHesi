@@ -1489,8 +1489,8 @@ export class Game {
 
     const cameraRig =
       this.cameraMode === "chaseClose"
-        ? { back: 8.2, backSpeed: 3.2, height: 3.4, heightSpeed: 0.7 }
-        : { back: 17.2, backSpeed: 7.5, height: 7.1, heightSpeed: 1.7 };
+        ? { back: 7.2, backSpeed: 1.4, maxBack: 10.8, height: 3.15, heightSpeed: 0.42, maxDistance: 12.8 }
+        : { back: 12.6, backSpeed: 2.8, maxBack: 16.8, height: 5.45, heightSpeed: 0.78, maxDistance: 19.2 };
 
     const forward = this.player.getForwardVector();
     const right = this.player.getRightVector?.() ?? { x: Math.cos(this.player.yaw), z: -Math.sin(this.player.yaw) };
@@ -1504,43 +1504,55 @@ export class Game {
         ? { x: velocity.x / velocityLength, z: velocity.z / velocityLength }
         : forward;
     const slideRatio = clamp((this.player.lateralSpeed ?? 0) / Math.max(playerSpeed, 8), -0.42, 0.42);
-    const cameraBack = cameraRig.back + speedRatio * cameraRig.backSpeed + (this.player.slip ?? 0) * 1.15;
-    const cameraHeight = cameraRig.height + speedRatio * cameraRig.heightSpeed + (this.player.slip ?? 0) * 0.22;
+    const cameraBack = clamp(
+      cameraRig.back + speedRatio * cameraRig.backSpeed + (this.player.slip ?? 0) * 0.42,
+      cameraRig.back,
+      cameraRig.maxBack,
+    );
+    const cameraHeight = cameraRig.height + speedRatio * cameraRig.heightSpeed + (this.player.slip ?? 0) * 0.12;
     const cameraYaw =
       this.player.yaw +
       Math.PI +
       this.cameraYawOffset +
-      slideRatio * 0.34 -
-      clamp(this.player.yawVelocity, -0.8, 0.8) * 0.08;
+      slideRatio * 0.18 -
+      clamp(this.player.yawVelocity, -0.8, 0.8) * 0.035;
     const desired = new THREE.Vector3(
       this.player.position.x + Math.sin(cameraYaw) * cameraBack,
       this.player.position.y + cameraHeight,
       this.player.position.z + Math.cos(cameraYaw) * cameraBack,
     );
 
-    const followResponse = THREE.MathUtils.lerp(6.2, 4.2, speedRatio);
+    const followResponse = THREE.MathUtils.lerp(10.5, 8.4, speedRatio);
     this.camera.position.lerp(desired, 1 - Math.exp(-followResponse * dt));
+    const cameraOffset = this.camera.position.clone().sub(this.player.position);
+    const cameraDistance = cameraOffset.length();
+    if (cameraDistance > cameraRig.maxDistance) {
+      this.camera.position.copy(this.player.position).add(cameraOffset.multiplyScalar(cameraRig.maxDistance / cameraDistance));
+    }
 
-    const slipLookBlend = clamp((this.player.slip ?? 0) * 0.46, 0, 0.46);
+    const slipLookBlend = clamp((this.player.slip ?? 0) * 0.18, 0, 0.18);
     const lookDir = new THREE.Vector3(
       THREE.MathUtils.lerp(forward.x, velocityForward.x, slipLookBlend),
       0,
       THREE.MathUtils.lerp(forward.z, velocityForward.z, slipLookBlend),
     ).normalize();
+    const lookAhead = this.cameraMode === "chaseClose"
+      ? 3.6 + speedRatio * 2.8
+      : 4.8 + speedRatio * 4.2;
     const lookAt = new THREE.Vector3(
       this.player.position.x +
-        lookDir.x * (7 + speedRatio * 10.8) +
-        right.x * clamp((this.player.lateralSpeed ?? 0) * 0.075, -2.2, 2.2),
-      1.25 + speedRatio * 0.4,
+        lookDir.x * lookAhead +
+        right.x * clamp((this.player.lateralSpeed ?? 0) * 0.032, -0.9, 0.9),
+      this.player.position.y + 1.35 + speedRatio * 0.16,
       this.player.position.z +
-        lookDir.z * (7 + speedRatio * 10.8) +
-        right.z * clamp((this.player.lateralSpeed ?? 0) * 0.075, -2.2, 2.2),
+        lookDir.z * lookAhead +
+        right.z * clamp((this.player.lateralSpeed ?? 0) * 0.032, -0.9, 0.9),
     );
     if (!this.cameraLookAtInitialized || this.cameraLookAt.distanceToSquared(lookAt) > 7200) {
       this.cameraLookAt.copy(lookAt);
       this.cameraLookAtInitialized = true;
     } else {
-      this.cameraLookAt.lerp(lookAt, 1 - Math.exp(-8.5 * dt));
+      this.cameraLookAt.lerp(lookAt, 1 - Math.exp(-12.5 * dt));
     }
 
     if (this.cameraShake > 0.001) {

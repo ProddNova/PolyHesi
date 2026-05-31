@@ -141,6 +141,26 @@ const CITY_MANUAL_CLEARANCE = 46;
 const CITY_DISTRICT_HALF_WIDTH = 520;
 const CITY_SIDEWALK_INTERVAL = 24;
 const CITY_STREETLIGHT_INTERVAL = 112;
+const ROAD_SIGN_PLACEMENTS = [
+  { s: 420, type: "side", side: 1, title: "首都高速", route: "C1", lines: ["銀座 2km", "新橋 4km"] },
+  { s: 1120, type: "gantry", title: "都心環状線", route: "C1", lines: ["渋谷", "霞が関", "羽田"] },
+  { s: 2180, type: "side", side: -1, title: "湾岸線", route: "B", lines: ["台場 3km", "横浜 28km"] },
+  { s: 3560, type: "gantry", title: "分岐", route: "JCT", lines: ["新宿", "池袋", "上野"] },
+  { s: 4920, type: "side", side: 1, title: "出口", route: "出口 04", lines: ["芝公園", "右車線"] },
+  { s: 7420, type: "gantry", title: "首都高速道路", route: "Route 3", lines: ["渋谷", "用賀", "東名"] },
+  { s: 9140, type: "side", side: -1, title: "中央環状線", route: "C2", lines: ["大橋 1km", "中野長者橋"] },
+  { s: 11860, type: "gantry", title: "空港方面", route: "1", lines: ["浜崎橋", "羽田空港", "湾岸線"] },
+  { s: 14620, type: "side", side: 1, title: "速度注意", route: "50", lines: ["カーブ連続", "車間注意"] },
+  { s: 17140, type: "gantry", title: "江戸橋 JCT", route: "JCT", lines: ["箱崎", "向島", "京橋"] },
+  { s: 20680, type: "side", side: -1, title: "出口", route: "出口 09", lines: ["銀座", "次の出口"] },
+  { s: 24440, type: "gantry", title: "湾岸線", route: "B", lines: ["有明", "葛西", "千葉"] },
+  { s: 28920, type: "side", side: 1, title: "首都高速", route: "C1", lines: ["神田橋", "竹橋"] },
+  { s: 33560, type: "gantry", title: "都心方面", route: "C1", lines: ["飯倉", "六本木", "目黒"] },
+  { s: 38120, type: "side", side: -1, title: "PA", route: "休憩", lines: ["辰巳 PA", "800m"] },
+  { s: 43100, type: "gantry", title: "環状線", route: "C2", lines: ["板橋", "王子", "川口"] },
+  { s: 48680, type: "side", side: 1, title: "出口", route: "出口 12", lines: ["汐留", "右出口"] },
+  { s: 53240, type: "gantry", title: "首都高速", route: "C1", lines: ["日本橋", "上野", "浅草"] },
+];
 
 const TUNNEL_RUNS = [
   { start: 6040, length: 920, name: "North Gallery" },
@@ -584,6 +604,7 @@ export class HighwayWorld {
     this.flushGuardrailBatch(highway, guardrails, GUARDRAIL_SEGMENT_LENGTH);
     this.createTunnelRuns(highway);
     this.createRoadsideInfrastructure(highway);
+    this.createExpresswaySigns(highway);
     this.createFixedCityscape(highway);
 
     this.scene.add(highway);
@@ -982,6 +1003,137 @@ export class HighwayWorld {
     details.add(lightGroup);
     parent.add(details);
   }
+
+  createExpresswaySigns(parent) {
+    const signs = new THREE.Group();
+    signs.name = "ShutokuExpresswaySigns";
+    signs.userData.remodelIgnore = true;
+
+    const poleMaterial = this.materials.streetlightPole;
+    const frameMaterial = new THREE.MeshStandardMaterial({
+      color: 0xd5dde1,
+      roughness: 0.48,
+      metalness: 0.22,
+      flatShading: true,
+    });
+    frameMaterial.name = "expresswaySignFrame";
+
+    for (const placement of ROAD_SIGN_PLACEMENTS) {
+      const frame = this.getFrameAtDistance(placement.s);
+      if (placement.type === "gantry") {
+        this.addOverheadExpresswaySign(signs, frame, placement, poleMaterial, frameMaterial);
+      } else {
+        this.addRoadsideExpresswaySign(signs, frame, placement, poleMaterial, frameMaterial);
+      }
+    }
+
+    parent.add(signs);
+  }
+
+  addRoadsideExpresswaySign(parent, frame, placement, poleMaterial, frameMaterial) {
+    const side = placement.side ?? 1;
+    const group = new THREE.Group();
+    group.name = `RoadsideSign_${Math.round(frame.s)}`;
+    group.position.copy(this.offsetPoint(frame, side * (ROAD_HALF_WIDTH + 5.9), 0));
+    group.rotation.y = frame.yaw;
+
+    this.addLocalBox(group, 0.28, 5.2, 0.28, poleMaterial, 0, 2.6, 0);
+    this.addLocalBox(group, 0.72, 0.28, 0.2, frameMaterial, -side * 0.36, 5.1, 0);
+    this.addLocalBox(group, 4.9, 0.22, 0.16, frameMaterial, -side * 2.6, 5.1, 0);
+    this.addSignBoard(
+      group,
+      -side * 3.65,
+      5.2,
+      -0.12,
+      4.7,
+      2.55,
+      placement,
+      Math.PI,
+    );
+
+    parent.add(group);
+  }
+
+  addOverheadExpresswaySign(parent, frame, placement, poleMaterial, frameMaterial) {
+    const group = new THREE.Group();
+    group.name = `OverheadSign_${Math.round(frame.s)}`;
+    group.position.copy(this.offsetPoint(frame, 0, 0));
+    group.rotation.y = frame.yaw;
+
+    const postX = ROAD_HALF_WIDTH + 5.35;
+    const postHeight = 8.35;
+    this.addLocalBox(group, 0.42, postHeight, 0.42, poleMaterial, -postX, postHeight * 0.5, 0);
+    this.addLocalBox(group, 0.42, postHeight, 0.42, poleMaterial, postX, postHeight * 0.5, 0);
+    this.addLocalBox(group, postX * 2 + 0.7, 0.42, 0.42, poleMaterial, 0, postHeight, 0);
+    this.addLocalBox(group, postX * 1.68, 0.18, 0.18, frameMaterial, 0, postHeight - 1.55, -0.16);
+    this.addLocalBox(group, 0.16, 2.05, 0.16, frameMaterial, -4.8, postHeight - 0.88, -0.16);
+    this.addLocalBox(group, 0.16, 2.05, 0.16, frameMaterial, 4.8, postHeight - 0.88, -0.16);
+    this.addSignBoard(group, 0, postHeight - 1.75, -0.24, 10.4, 2.45, placement, Math.PI);
+
+    parent.add(group);
+  }
+
+  addSignBoard(parent, x, y, z, width, height, placement, rotationY = 0) {
+    const backing = this.addLocalBox(
+      parent,
+      width + 0.26,
+      height + 0.22,
+      0.14,
+      new THREE.MeshStandardMaterial({ color: 0x1f2b28, roughness: 0.62, metalness: 0.05, flatShading: true }),
+      x,
+      y,
+      z + 0.03,
+    );
+    backing.name = "expresswaySignBacking";
+
+    const board = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, height),
+      this.createExpresswaySignMaterial(placement),
+    );
+    board.name = "expresswaySignFace";
+    board.position.set(x, y, z - 0.06);
+    board.rotation.y = rotationY;
+    board.castShadow = false;
+    board.receiveShadow = false;
+    parent.add(board);
+    return board;
+  }
+
+  createExpresswaySignMaterial(placement) {
+    const texture = makeCanvasTexture((ctx, canvas) => {
+      ctx.fillStyle = "#087243";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "#dfeee6";
+      ctx.lineWidth = 7;
+      ctx.strokeRect(9, 9, canvas.width - 18, canvas.height - 18);
+      ctx.fillStyle = "#dfeee6";
+      ctx.font = "bold 22px system-ui, sans-serif";
+      ctx.textBaseline = "middle";
+      ctx.fillText(placement.title, 20, 31);
+      ctx.font = "bold 17px system-ui, sans-serif";
+      ctx.fillText(placement.route, canvas.width - 76, 31);
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 23px system-ui, sans-serif";
+      const lines = placement.lines ?? [];
+      for (let i = 0; i < lines.length; i += 1) {
+        ctx.fillText(lines[i], 22, 65 + i * 26);
+      }
+      ctx.fillStyle = "#f0f6ef";
+      ctx.beginPath();
+      ctx.moveTo(canvas.width - 34, canvas.height - 27);
+      ctx.lineTo(canvas.width - 20, canvas.height - 39);
+      ctx.lineTo(canvas.width - 20, canvas.height - 15);
+      ctx.closePath();
+      ctx.fill();
+    });
+    texture.anisotropy = this.ultraGraphics ? 8 : 2;
+    return new THREE.MeshBasicMaterial({
+      map: texture,
+      color: 0xffffff,
+      side: THREE.DoubleSide,
+    });
+  }
+
   createHorizonBuildings(parent) {
     const horizonGroup = new THREE.Group();
     horizonGroup.name = "HorizonSkyline";
