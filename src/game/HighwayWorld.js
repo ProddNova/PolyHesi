@@ -142,7 +142,8 @@ const CITY_BLOCK_ROWS = [
 ];
 const CITY_MANUAL_CLEARANCE = 46;
 const CITY_DISTRICT_HALF_WIDTH = 520;
-const CITY_RELATIVE_ELEVATION = -0.7;
+const CITY_GROUND_ELEVATION = -1.18;
+const CITY_RELATIVE_ELEVATION = -1.45;
 const CITY_BUILDING_HEIGHT_SCALE = 1.44;
 const CITY_SIDEWALK_INTERVAL = 24;
 const CITY_STREETLIGHT_INTERVAL = 112;
@@ -490,11 +491,12 @@ export class HighwayWorld {
     this.applyEnvironment({ timeOfDay: 18.25 });
   }
 
-  applyEnvironment(settings = {}) {
+  applyEnvironment(settings = {}, dt = 1 / 60) {
     if (!this.environment) {
       return;
     }
 
+    const smooth = clamp(1 - Math.exp(-4.6 * Math.min(dt, 0.12)), 0, 1);
     const hour = ((Number(settings.timeOfDay ?? 12) % 24) + 24) % 24;
     const daylight = clamp(Math.sin(((hour - 6) / 12) * Math.PI), 0, 1);
     const dawn = clamp(1 - Math.abs(hour - 6) / 2.6, 0, 1);
@@ -511,13 +513,19 @@ export class HighwayWorld {
     if (dusk > 0) {
       sky.lerp(colors.duskSky, dusk * 0.6);
     }
-    this.scene.background.copy(sky);
-    fog.color.copy(sky);
-    fog.density = (this.ultraGraphics ? 0.0000025 : 0.000012) + night * 0.000018 + twilight * 0.00001;
+    this.scene.background.lerp(sky, smooth);
+    fog.color.lerp(sky, smooth);
+    fog.density = THREE.MathUtils.lerp(
+      fog.density,
+      (this.ultraGraphics ? 0.0000025 : 0.000012) + night * 0.000018 + twilight * 0.00001,
+      smooth,
+    );
 
-    hemisphere.color.copy(colors.nightHemi).lerp(colors.dayHemi, daylight);
-    hemisphere.groundColor.copy(colors.nightGround).lerp(colors.dayGround, daylight);
-    hemisphere.intensity = 0.48 + daylight * 1.0 + twilight * 0.24;
+    const hemiColor = colors.nightHemi.clone().lerp(colors.dayHemi, daylight);
+    const groundColor = colors.nightGround.clone().lerp(colors.dayGround, daylight);
+    hemisphere.color.lerp(hemiColor, smooth);
+    hemisphere.groundColor.lerp(groundColor, smooth);
+    hemisphere.intensity = THREE.MathUtils.lerp(hemisphere.intensity, 0.5 + daylight * 1.04 + twilight * 0.28, smooth);
 
     const sunAngle = ((hour - 6) / 24) * TWO_PI;
     const sunHeight = Math.sin(sunAngle);
@@ -531,18 +539,28 @@ export class HighwayWorld {
       lightHeight * lightRadius,
       Math.sin(lightAngle) * -220,
     );
-    keyLight.color.copy(useMoon ? colors.moon : colors.sun);
-    keyLight.intensity = useMoon
-      ? 0.48 + night * 0.32
-      : 0.18 + daylight * 1.16 + twilight * 0.24;
+    keyLight.color.lerp(useMoon ? colors.moon : colors.sun, smooth);
+    keyLight.intensity = THREE.MathUtils.lerp(
+      keyLight.intensity,
+      useMoon ? 0.72 + night * 0.48 : 0.2 + daylight * 1.2 + twilight * 0.26,
+      smooth,
+    );
     if (this.materials?.streetlightGlow) {
-      this.materials.streetlightGlow.color.setHex(lampPower > 0.02 ? 0xffd887 : 0x6f5a32);
+      this.materials.streetlightGlow.color.lerp(new THREE.Color(lampPower > 0.02 ? 0xffe0a0 : 0x6f5a32), smooth);
     }
     for (const light of this.roadLights) {
-      light.intensity = lampPower * (light.userData.baseIntensity ?? 1) * (this.ultraGraphics ? 1.3 : 1);
+      light.intensity = THREE.MathUtils.lerp(
+        light.intensity,
+        lampPower * (light.userData.baseIntensity ?? 1) * (this.ultraGraphics ? 1.65 : 1.28),
+        smooth,
+      );
     }
     for (const light of this.garageLights) {
-      light.intensity = (light.userData.baseIntensity ?? 1) * (0.95 + night * 0.72);
+      light.intensity = THREE.MathUtils.lerp(
+        light.intensity,
+        (light.userData.baseIntensity ?? 1) * (0.95 + night * 0.72),
+        smooth,
+      );
     }
   }
 
@@ -568,7 +586,7 @@ export class HighwayWorld {
   createStaticHighway() {
     const highway = new THREE.Group();
     highway.name = "StaticHighwayLoop";
-    highway.add(this.createRibbonMesh(CITY_DISTRICT_HALF_WIDTH, -0.08, this.materials.cityGround, ROAD_RIBBON_SEGMENTS));
+    highway.add(this.createRibbonMesh(CITY_DISTRICT_HALF_WIDTH, CITY_GROUND_ELEVATION, this.materials.cityGround, ROAD_RIBBON_SEGMENTS));
     highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 5.2, 0.0, this.materials.shoulder, ROAD_RIBBON_SEGMENTS));
     highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH, 0.045, this.materials.asphalt, ROAD_RIBBON_SEGMENTS));
     this.addBranchHighways(highway);

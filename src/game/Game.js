@@ -1454,18 +1454,17 @@ export class Game {
     );
 
     const playerSpeed = this.player.speedMagnitude ?? Math.abs(this.player.speed);
-    const speedRatio = clamp(playerSpeed / (this.settings.maxSpeedKmh / 3.6), 0, 1);
     if (this.mode === "garage") {
       this.updateGarageCamera();
       return;
     }
 
     if (this.cameraMode === "hood" || this.cameraMode === "roof") {
-      this.updateFirstPersonCamera(dt, speedRatio, this.cameraMode);
+      this.updateFirstPersonCamera(dt, this.cameraMode);
       return;
     }
     if (this.cameraMode === "cinematic") {
-      this.updateCinematicCamera(dt, speedRatio);
+      this.updateCinematicCamera(dt);
       return;
     }
 
@@ -1476,18 +1475,9 @@ export class Game {
 
     const forward = this.player.getForwardVector();
     const right = this.player.getRightVector?.() ?? { x: Math.cos(this.player.yaw), z: -Math.sin(this.player.yaw) };
-    const velocity = this.player.getVelocityVector?.() ?? {
-      x: forward.x * this.player.speed,
-      z: forward.z * this.player.speed,
-    };
-    const velocityLength = Math.hypot(velocity.x, velocity.z);
-    const velocityForward =
-      velocityLength > 1
-        ? { x: velocity.x / velocityLength, z: velocity.z / velocityLength }
-        : forward;
     const slideRatio = clamp((this.player.lateralSpeed ?? 0) / Math.max(playerSpeed, 8), -0.42, 0.42);
-    const cameraBack = clamp(cameraRig.back + (this.player.slip ?? 0) * 0.42, cameraRig.back, cameraRig.maxBack);
-    const cameraHeight = cameraRig.height + (this.player.slip ?? 0) * 0.12;
+    const cameraBack = cameraRig.back;
+    const cameraHeight = cameraRig.height;
     const cameraYaw =
       this.player.yaw +
       Math.PI +
@@ -1508,22 +1498,11 @@ export class Game {
       this.camera.position.copy(this.player.position).add(cameraOffset.multiplyScalar(cameraRig.maxDistance / cameraDistance));
     }
 
-    const slipLookBlend = clamp((this.player.slip ?? 0) * 0.18, 0, 0.18);
-    const lookDir = new THREE.Vector3(
-      THREE.MathUtils.lerp(forward.x, velocityForward.x, slipLookBlend),
-      0,
-      THREE.MathUtils.lerp(forward.z, velocityForward.z, slipLookBlend),
-    ).normalize();
     const orbitAnchor = this.cameraMode === "chaseClose" ? 0.85 : 1.1;
-    const lookAhead = this.cameraMode === "chaseClose" ? 0.45 : 0.6;
     const lookAt = new THREE.Vector3(
-      this.player.position.x +
-        lookDir.x * lookAhead +
-        right.x * clamp((this.player.lateralSpeed ?? 0) * 0.032, -0.9, 0.9),
+      this.player.position.x,
       this.player.position.y + orbitAnchor,
-      this.player.position.z +
-        lookDir.z * lookAhead +
-        right.z * clamp((this.player.lateralSpeed ?? 0) * 0.032, -0.9, 0.9),
+      this.player.position.z,
     );
     if (!this.cameraLookAtInitialized || this.cameraLookAt.distanceToSquared(lookAt) > 7200) {
       this.cameraLookAt.copy(lookAt);
@@ -1550,7 +1529,7 @@ export class Game {
     this.camera.updateProjectionMatrix();
   }
 
-  updateFirstPersonCamera(dt, speedRatio, variant = "hood") {
+  updateFirstPersonCamera(dt, variant = "hood") {
     const lateralSpeed = this.player.lateralSpeed ?? 0;
     const playerSpeed = this.player.speedMagnitude ?? Math.abs(this.player.speed);
     const preset = this.player.activePreset;
@@ -1596,31 +1575,31 @@ export class Game {
 
     this.camera.lookAt(lookAt);
     this.cameraLookAtInitialized = false;
-    const targetFov = this.settings.cameraFov + 1 + speedRatio * 1.4;
+    const targetFov = this.settings.cameraFov + 1;
     this.camera.fov = damp(this.camera.fov, targetFov, 5.8, dt);
     this.camera.updateProjectionMatrix();
   }
 
-  updateCinematicCamera(dt, speedRatio) {
+  updateCinematicCamera(dt) {
     const time = performance.now() * 0.001;
     const forward = this.player.getForwardVector();
     const right = this.player.getRightVector?.() ?? { x: Math.cos(this.player.yaw), z: -Math.sin(this.player.yaw) };
     const side = Math.sin(time * 0.42) > 0 ? 1 : -1;
     const orbit = Math.sin(time * 0.28) * 0.35;
     const desired = new THREE.Vector3(
-      this.player.position.x - forward.x * (14 + speedRatio * 8) + right.x * side * (8.5 + orbit * 3),
-      4.8 + speedRatio * 2.4 + Math.sin(time * 0.7) * 0.45,
-      this.player.position.z - forward.z * (14 + speedRatio * 8) + right.z * side * (8.5 + orbit * 3),
+      this.player.position.x - forward.x * 14 + right.x * side * (8.5 + orbit * 3),
+      4.8 + Math.sin(time * 0.7) * 0.45,
+      this.player.position.z - forward.z * 14 + right.z * side * (8.5 + orbit * 3),
     );
     this.camera.position.lerp(desired, 1 - Math.exp(-2.2 * dt));
     const lookAt = new THREE.Vector3(
-      this.player.position.x + forward.x * (8 + speedRatio * 10),
-      1.2 + speedRatio * 0.8,
-      this.player.position.z + forward.z * (8 + speedRatio * 10),
+      this.player.position.x,
+      1.2,
+      this.player.position.z,
     );
     this.camera.lookAt(lookAt);
     this.cameraLookAtInitialized = false;
-    const targetFov = this.settings.cameraFov + 4 + speedRatio * 7;
+    const targetFov = this.settings.cameraFov + 4;
     this.camera.fov = damp(this.camera.fov, targetFov, 3.4, dt);
     this.camera.updateProjectionMatrix();
   }
@@ -1742,7 +1721,7 @@ export class Game {
       this.settings.timeOfDay = (this.settings.timeOfDay + (dt * speedMinutesPerSecond) / 60) % 24;
       this.hud.updateSettingValue?.("timeOfDay", this.settings.timeOfDay);
     }
-    this.world.applyEnvironment?.(this.settings);
+    this.world.applyEnvironment?.(this.settings, dt);
   }
 
   applySavedProgress(progress = {}) {
