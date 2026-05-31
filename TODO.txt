@@ -18,33 +18,21 @@ TODO
 
 micro-task
 
-- Non limitare gli fps
+- Non limitare gli fps a 60
+
+- Mettere totale di 6 gallerie, le 4 che ci sono gia lasciale cosi, mettine altre 2 lunghe il doppio di quelle presenti ora
 
 
 fast-tk's
 
-- La visuale in terza persona è rotta: quando la macchina sterza o ruota, il veicolo non rimane correttamente centrato nell’inquadratura come in GTA V / giochi di guida arcade.
-La camera deve seguire la macchina in modo fluido, mantenendola sempre al centro o leggermente sotto il centro dello schermo.
-Inoltre attualmente la camera si allontana troppo dal veicolo, rendendo la terza persona difficile da usare: limita la distanza massima e rendi la visuale più stabile e giocabile.
+- La visuale in terza persona quando la giro con il mouse non usa la mcchina come punto centrale su cui roteare bensi ruota su un punto a caso piu avanti della macchina, facendo a volte uscire anche la macchina dalla visuale
 
-- Quando sterzo, il modello della macchina ruota visivamente troppo sull’asse Y / yaw rispetto alla direzione fisica reale del veicolo.
-Il problema è che l’auto sembra girare molto più di quanto stia effettivamente sterzando nella fisica, quindi il feedback visivo è fuorviante.
-Riduci e stabilizza questa rotazione visiva: il modello deve seguire meglio la traiettoria reale della macchina, senza esagerare la rotazione laterale.
-La direzione visiva dell’auto deve comunicare correttamente quanto il veicolo sta davvero curvando.
+- Fare si che le auto del traffico siano le auto PSX esattamente queste 3 : 1 Japan rally legacy 2 Japan sedan 3 Korean hatch
 
-- Fare si che le auto del traffico siano le auto PSX
-
-- Dal remodel sui veicoli psx oltre a varie posizioni e cose poter impostare anche il tipo di cerchione del rig e il colore del cerchione e anche auto 8colore auto) tutto ovviamente deve venire salvato in modo persistente come il rig fa già
+- Dal remodel sui veicoli psx oltre a varie posizioni e cose poter impostare anche il tipo di cerchione del rig e il colore del cerchione e anche colore auto) tutto ovviamente deve venire salvato in modo persistente come il rig fa già, i cerchioni vanno presi dalla cartella "PSXStyleCars-DevEdition/Wheels"
 
 - Le auto psx hanno i vetri colorati invece che essere neri/trasparenti (meglio neri)
 
-- Migliorare mappa deve essere piu grande e stoppare il gioco inoltre se dev cliccando nella mappa con il mouse si ci potra teletrasportare
-
-- Inserire dei cartelli stradali fatti bene con il palo il cartello verde e scritte in giapponese come la shutoku expressway, sia cartelli singoli lato strada sia cartelli che stanno sopra quindi un palo a destra uno asinistra e il cartello che copre la strada diciamo
-
-- Migliora le finestre dei palazzi ora sono fatte male non ordinate e poi sono sottili non sembrano finestre
-
-- Fai alcune gallerie molto lunghe anche e segna sulla mappa solo dev la posizione di tutte le gallerie
 
 slow-tk's
 
