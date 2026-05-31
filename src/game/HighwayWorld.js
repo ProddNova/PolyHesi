@@ -164,7 +164,9 @@ const ROAD_SIGN_PLACEMENTS = [
 
 const TUNNEL_RUNS = [
   { start: 6040, length: 920, name: "North Gallery" },
+  { start: 12120, length: 2240, name: "Central Grand Gallery" },
   { start: 22660, length: 1380, name: "Hill Tunnel" },
+  { start: 30240, length: 2760, name: "Harbor Grand Gallery" },
   { start: 39920, length: 760, name: "West Gallery" },
   { start: 51080, length: 1120, name: "South Long Gallery" },
 ];
