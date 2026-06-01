@@ -29,32 +29,7 @@ const GUARDRAIL_MODEL = {
   post: { width: 0.22, height: 1.18, depth: 0.22, y: 0.56 },
   reflector: { width: 0.06, height: 0.18, depth: 0.5, y: 0.86, inset: 0.13 },
 };
-const HITBOX_TEMPLATES = [
-  {
-    id: "hitbox:player",
-    label: "Player hitbox",
-    position: { x: -63, y: 0.7, z: -88 },
-    dimensions: { x: 1.86, y: 1.4, z: 4.25 },
-    color: 0x30a78f,
-    kind: "car",
-  },
-  {
-    id: "hitbox:traffic-car",
-    label: "Traffic car hitbox",
-    position: { x: -57, y: 0.7, z: -88 },
-    dimensions: { x: 1.9, y: 1.4, z: 4.7 },
-    color: 0xd6ad3d,
-    kind: "car",
-  },
-  {
-    id: "hitbox:traffic-truck",
-    label: "Traffic truck hitbox",
-    position: { x: -49, y: 1.15, z: -88 },
-    dimensions: { x: 2.55, y: 2.3, z: 11.5 },
-    color: 0x596064,
-    kind: "truck",
-  },
-];
+const HITBOX_TEMPLATES = [];
 
 const BUILDING_TYPES = [
   { id: "slab", width: 24, depth: 16, height: 42, color: 0x89908b, roof: 0x30343a, floors: 10, columns: 5 },
@@ -2644,7 +2619,9 @@ export class HighwayWorld {
     if (controlledObject) {
       controlledObject.position.add(object.position.clone().sub(previousPosition));
       controlledObject.rotation.copy(object.rotation);
-      controlledObject.scale.copy(object.scale);
+      if (!object.userData?.remodelControlledObjectPoseOnly) {
+        controlledObject.scale.copy(object.scale);
+      }
       controlledObject.updateMatrixWorld(true);
     }
     object.updateMatrixWorld(true);

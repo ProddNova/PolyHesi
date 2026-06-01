@@ -3,7 +3,20 @@ import { LANES, TRAFFIC_CAR_IDS, getCarPreset } from "./config.js";
 import { createTrafficCarAsset } from "./PlayerCarAsset.js";
 import { choice, clamp, damp, dampAngle, makeBox, rand } from "./utils.js";
 
-const TRAFFIC_COLORS = [0xb8b4a8, 0xd6d3c8, 0x4c5459, 0x273c4d, 0x7d2520, 0x4d594c];
+const TRAFFIC_COLORS = [
+  0xb8b4a8,
+  0xd6d3c8,
+  0x4c5459,
+  0x273c4d,
+  0x7d2520,
+  0x4d594c,
+  0xd6ad3d,
+  0x30a78f,
+  0x2d6a78,
+  0x8e2f29,
+  0xe9e2cf,
+  0x222529,
+];
 const ACTIVE_AHEAD = 760;
 const ACTIVE_BEHIND = 180;
 const RECYCLE_AHEAD = 860;
@@ -146,6 +159,7 @@ export class TrafficSystem {
     car.signalHoldTimer = 0;
     car.signalDirection = 0;
     this.updateIndicators(car, 0);
+    this.randomizeAppearance(car);
     this.randomizeSpeed(car, settings);
     this.applyFrame(car, 1, true);
   }
@@ -305,6 +319,37 @@ export class TrafficSystem {
     car.speed = car.cruiseSpeed * rand(0.92, 1.04);
   }
 
+  pickTrafficColor(previousColor = null) {
+    if (TRAFFIC_COLORS.length <= 1) {
+      return TRAFFIC_COLORS[0] ?? 0xb8b4a8;
+    }
+
+    let color = choice(TRAFFIC_COLORS);
+    for (let attempt = 0; attempt < 4 && color === previousColor; attempt += 1) {
+      color = choice(TRAFFIC_COLORS);
+    }
+    return color;
+  }
+
+  randomizeAppearance(car) {
+    const nextColor = this.pickTrafficColor(car.trafficColor);
+    if (nextColor === car.trafficColor) {
+      return;
+    }
+
+    car.trafficColor = nextColor;
+    const previousGroup = car.group;
+    const visual = this.createTrafficVisual(car.trafficModel, car.trafficColor);
+    car.group = visual.group;
+    car.indicators = visual.indicators;
+    car.width = visual.width;
+    car.length = visual.length;
+    if (previousGroup?.parent) {
+      this.scene.remove(previousGroup);
+      this.scene.add(car.group);
+    }
+  }
+
   applyFrame(car, dt = 1 / 60, snap = false) {
     const frame = this.world.getFrameAtDistance(car.s);
     const targetOffset = LANES[clamp(car.lane, 0, LANES.length - 1)];
@@ -348,11 +393,13 @@ export class TrafficSystem {
 
   createVehicle() {
     const trafficModel = choice(TRAFFIC_CAR_IDS);
-    const visual = this.createTrafficVisual(trafficModel);
+    const trafficColor = this.pickTrafficColor();
+    const visual = this.createTrafficVisual(trafficModel, trafficColor);
 
     return {
       id: this.nextId++,
       trafficModel,
+      trafficColor,
       kind: "car",
       group: visual.group,
       width: visual.width,
@@ -379,9 +426,9 @@ export class TrafficSystem {
     };
   }
 
-  createTrafficVisual(modelId) {
+  createTrafficVisual(modelId, bodyColor = null) {
     try {
-      const preset = this.getTrafficPreset(modelId);
+      const preset = this.getTrafficPreset(modelId, bodyColor);
       const group = createTrafficCarAsset(preset);
       group.name = `TrafficPSX_${modelId}`;
       const indicators = this.createIndicatorMeshes(preset.bodyWidth, preset.bodyLength);
@@ -394,21 +441,25 @@ export class TrafficSystem {
       };
     } catch (error) {
       console.warn(`Unable to build PSX traffic car ${modelId}; using lightweight fallback.`, error);
-      return this.createFallbackTrafficVisual(modelId);
+      return this.createFallbackTrafficVisual(modelId, bodyColor);
     }
   }
 
-  getTrafficPreset(modelId) {
+  getTrafficPreset(modelId, bodyColor = null) {
     const preset = getCarPreset(modelId);
     const rig = this.getVehicleRigForCar(modelId) ?? {};
+    const paintColor = bodyColor ?? rig.bodyColor ?? preset.color;
     return {
       ...preset,
       id: modelId,
       carId: modelId,
-      color: rig.bodyColor ?? preset.color,
+      color: paintColor,
       wheelModel: rig.wheelModel || preset.wheelModel,
       wheelColor: rig.wheelColor,
-      vehicleRig: rig,
+      vehicleRig: {
+        ...rig,
+        bodyColor: paintColor,
+      },
     };
   }
 
@@ -432,8 +483,8 @@ export class TrafficSystem {
     return { left, right };
   }
 
-  createFallbackTrafficVisual(modelId) {
-    const color = choice(TRAFFIC_COLORS);
+  createFallbackTrafficVisual(modelId, bodyColor = null) {
+    const color = bodyColor ?? choice(TRAFFIC_COLORS);
     const bodyMaterial = new THREE.MeshStandardMaterial({
       color,
       roughness: 0.5,
@@ -484,7 +535,7 @@ export class TrafficSystem {
         continue;
       }
       const previousGroup = car.group;
-      const visual = this.createTrafficVisual(modelId);
+      const visual = this.createTrafficVisual(modelId, car.trafficColor);
       car.group = visual.group;
       car.indicators = visual.indicators;
       car.width = visual.width;

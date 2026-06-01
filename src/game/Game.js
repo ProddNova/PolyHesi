@@ -10,6 +10,7 @@ import {
   PHYSICS_SETTING_KEYS,
   PROGRESS_VERSION,
   SETTING_DEFS,
+  TRAFFIC_CAR_IDS,
   createStarterVehicle,
   createVehicleFromListing,
   sanitizeVehicleRigTune,
@@ -34,6 +35,12 @@ const HUD_SLOW_UPDATE_INTERVAL = 0.25;
 const TIME_SETTING_UI_INTERVAL = 0.2;
 const CAMERA_MODES = ["hood", "roof", "chaseClose", "chaseFar", "cinematic"];
 const GARAGE_PSX_CAR_TARGET_ID = "psx:garage-player-car";
+const TRAFFIC_PSX_CAR_TARGET_PREFIX = "psx:traffic-car:";
+const TRAFFIC_PSX_REMODEL_POSES = [
+  { x: -63, z: -88, yaw: 0 },
+  { x: -57, z: -88, yaw: 0 },
+  { x: -49, z: -88, yaw: 0 },
+];
 const REMODEL_PRESETS = {
   stripe: {
     position: { x: 0, y: 0.08, z: 0 },
@@ -111,6 +118,7 @@ export class Game {
     this.vehicleRigOverrides = {};
     this.selectedRemodelPsxCarId = null;
     this.remodelPsxLineupGroup = null;
+    this.trafficPsxRemodelTargets = new Map();
     this.mode = "garage";
     this.coins = 0;
     this.coinAccumulator = 0;
@@ -170,6 +178,7 @@ export class Game {
     this.player.setCarPreset(this.getActiveVehiclePreset());
     this.garagePsxRemodelTarget = null;
     this.createGaragePsxRemodelTarget();
+    this.createTrafficPsxRemodelTargets();
     this.traffic = new TrafficSystem(this.scene, this.world, {
       getVehicleRigForCar: (carId) => this.getVehicleRigForCar(carId),
     });
@@ -1007,12 +1016,17 @@ export class Game {
     }
     this.selectedRemodelPsxCarId = carId;
     this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(carId));
-    this.applyRemodelPsxPreviewCar();
+    if (this.isGaragePsxCarEditorActive()) {
+      this.applyRemodelPsxPreviewCar();
+    }
     this.updateGaragePsxRemodelTarget();
+    if (TRAFFIC_CAR_IDS.includes(carId)) {
+      this.updateTrafficPsxRemodelTarget(carId);
+    }
     this.updateRemodelPsxLineupSelection();
   }
 
-  syncRemodelPsxRigEditor() {
+  syncRemodelPsxRigEditor({ previewPlayer = true } = {}) {
     const cars = this.getRemodelPsxCarPresets().map((preset) => ({
       id: preset.id,
       label: `${preset.label}${preset.trafficEligible ? " [traffic]" : ""}${PLAYER_CAR_IDS.includes(preset.id) ? " [player]" : ""}`,
@@ -1023,7 +1037,9 @@ export class Game {
     this.hud?.setRemodelPsxCars(cars, this.selectedRemodelPsxCarId ?? "");
     if (this.selectedRemodelPsxCarId) {
       this.hud?.writeRemodelPsxRigState(this.getVehicleRigForCar(this.selectedRemodelPsxCarId));
-      this.applyRemodelPsxPreviewCar();
+      if (previewPlayer) {
+        this.applyRemodelPsxPreviewCar();
+      }
       this.updateGaragePsxRemodelTarget({ rebuildOverlay: false });
     }
   }
@@ -1046,15 +1062,33 @@ export class Game {
     this.updateRemodelPsxLineupSelection();
   }
 
+  getTrafficPsxRemodelTargetId(carId) {
+    return `${TRAFFIC_PSX_CAR_TARGET_PREFIX}${carId}`;
+  }
+
+  getRemodelPsxCarIdForTarget(target) {
+    if (!target) {
+      return null;
+    }
+    if (target.id === GARAGE_PSX_CAR_TARGET_ID) {
+      return this.selectedRemodelPsxCarId ?? this.getActiveVehicle()?.carId ?? null;
+    }
+    return target.object?.userData?.remodelPsxCarId ?? null;
+  }
+
   shouldShowRemodelPsxRigForTarget(target) {
-    return Boolean(this.mode === "garage" && target?.id === GARAGE_PSX_CAR_TARGET_ID);
+    return Boolean(this.getRemodelPsxCarIdForTarget(target));
   }
 
   updateRemodelPsxRigVisibility(target) {
     const visible = this.shouldShowRemodelPsxRigForTarget(target);
     this.hud?.setRemodelPsxRigVisible(visible);
     if (visible) {
-      this.syncRemodelPsxRigEditor();
+      const carId = this.getRemodelPsxCarIdForTarget(target);
+      if (carId && this.selectedRemodelPsxCarId !== carId) {
+        this.selectedRemodelPsxCarId = carId;
+      }
+      this.syncRemodelPsxRigEditor({ previewPlayer: target?.id === GARAGE_PSX_CAR_TARGET_ID });
     }
   }
 
@@ -1069,6 +1103,9 @@ export class Game {
     } else if (this.isGaragePsxCarEditorActive()) {
       this.applyRemodelPsxPreviewCar();
     }
+    if (TRAFFIC_CAR_IDS.includes(this.selectedRemodelPsxCarId)) {
+      this.updateTrafficPsxRemodelTarget(this.selectedRemodelPsxCarId);
+    }
     this.updateGaragePsxRemodelTarget();
     this.buildRemodelPsxLineup();
     this.updateRemodelPsxLineupVisibility();
@@ -1082,6 +1119,7 @@ export class Game {
     this.vehicleRigOverrides[this.selectedRemodelPsxCarId] = this.getVehicleRigForCar(this.selectedRemodelPsxCarId);
     if (CAR_PRESETS.find((preset) => preset.id === this.selectedRemodelPsxCarId)?.trafficEligible) {
       this.traffic?.refreshModel?.(this.selectedRemodelPsxCarId);
+      this.updateTrafficPsxRemodelTarget(this.selectedRemodelPsxCarId);
     }
     this.markProgressDirty({ immediate: true });
     this.hud?.setRemodelEditorStatus("PSX rig saved");
@@ -1169,6 +1207,96 @@ export class Game {
     this.garagePsxRemodelTarget = mesh;
     this.updateGaragePsxRemodelTarget({ rebuildOverlay: false });
     this.world.rebuildRemodelTargets();
+  }
+
+  createTrafficPsxRemodelTargets() {
+    if (!this.world?.remodelHitboxGroup) {
+      return;
+    }
+
+    for (let index = 0; index < TRAFFIC_CAR_IDS.length; index += 1) {
+      const carId = TRAFFIC_CAR_IDS[index];
+      const preset = CAR_PRESETS.find((item) => item.id === carId);
+      const material = this.world.materials.remodelHitbox.clone();
+      material.opacity = 0.08;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+      mesh.name = `Traffic PSX ${preset?.label ?? carId}`;
+      mesh.userData.remodelFixedId = this.getTrafficPsxRemodelTargetId(carId);
+      mesh.userData.remodelLabel = `${preset?.label ?? carId} [traffic rig]`;
+      mesh.userData.remodelCategory = "hitbox";
+      mesh.userData.remodelPsxCarId = carId;
+      mesh.userData.remodelControlledObjectPoseOnly = true;
+      this.world.remodelHitboxGroup.add(mesh);
+      this.trafficPsxRemodelTargets.set(carId, { mesh, visual: null });
+      this.updateTrafficPsxRemodelTarget(carId, {
+        rebuildOverlay: false,
+        pose: TRAFFIC_PSX_REMODEL_POSES[index] ?? TRAFFIC_PSX_REMODEL_POSES[0],
+      });
+    }
+
+    this.world.rebuildRemodelTargets();
+  }
+
+  createTrafficPsxRemodelVisual(carId, state) {
+    const visual = createPlayerCarAsset(this.getRemodelPsxPreviewPreset(carId));
+    visual.name = `RemodelTrafficPSX_${carId}`;
+    visual.position.set(
+      state.position.x,
+      state.position.y - state.dimensions.y * 0.5,
+      state.position.z,
+    );
+    visual.rotation.set(state.rotation.x, state.rotation.y, state.rotation.z);
+    visual.traverse((object) => {
+      object.userData.remodelIgnore = true;
+    });
+    return visual;
+  }
+
+  updateTrafficPsxRemodelTarget(carId, { rebuildOverlay = true, pose = null } = {}) {
+    const entry = this.trafficPsxRemodelTargets.get(carId);
+    if (!entry?.mesh || !this.world?.remodelHitboxGroup) {
+      return;
+    }
+
+    const preset = this.getRemodelPsxPreviewPreset(carId);
+    const height = Math.max(1.35, (preset.bodyHeight ?? 0.68) + 0.9);
+    const state = this.world.getRemodelTargetState(entry.mesh.userData.remodelFixedId) ?? {
+      position: {
+        x: pose?.x ?? entry.mesh.position.x,
+        y: pose?.y ?? height * 0.5,
+        z: pose?.z ?? entry.mesh.position.z,
+      },
+      rotation: {
+        x: 0,
+        y: pose?.yaw ?? entry.mesh.rotation.y,
+        z: 0,
+      },
+      dimensions: {
+        x: Math.max(1.2, preset.bodyWidth ?? 1.9),
+        y: height,
+        z: Math.max(3.2, preset.bodyLength ?? 4.4),
+      },
+      color: "#ff5f7d",
+    };
+
+    entry.mesh.position.set(state.position.x, state.position.y, state.position.z);
+    entry.mesh.rotation.set(state.rotation.x, state.rotation.y, state.rotation.z);
+    entry.mesh.scale.set(state.dimensions.x, state.dimensions.y, state.dimensions.z);
+    entry.mesh.updateMatrixWorld(true);
+
+    if (entry.visual) {
+      this.world.remodelHitboxGroup.remove(entry.visual);
+    }
+    entry.visual = this.createTrafficPsxRemodelVisual(carId, state);
+    entry.mesh.userData.remodelControlledObject = entry.visual;
+    this.world.remodelHitboxGroup.add(entry.visual);
+
+    if (rebuildOverlay) {
+      this.world.rebuildRemodelTargets();
+      if (this.remodelOverlay?.visible) {
+        this.remodelOverlay.refresh(this.remodelOverlay.getSelectedTarget?.()?.id);
+      }
+    }
   }
 
   updateGaragePsxRemodelTarget({ rebuildOverlay = true } = {}) {
