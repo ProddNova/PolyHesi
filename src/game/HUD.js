@@ -240,10 +240,14 @@ export class HUD {
     this.populateRemodelWheelModels();
     for (const input of Object.values(this.nodes.remodelInputs)) {
       input?.addEventListener("input", () => this.onRemodelChange?.(this.readRemodelState()));
-      if (input?.type === "color") {
+      if (input?.type !== "number") {
         continue;
       }
-      input?.addEventListener("wheel", (event) => this.handleRemodelInputWheel(event, input), {
+      input?.addEventListener("wheel", (event) => this.handleRemodelInputWheel(
+        event,
+        input,
+        () => this.onRemodelChange?.(this.readRemodelState()),
+      ), {
         passive: false,
       });
     }
@@ -255,7 +259,14 @@ export class HUD {
     }
     for (const input of Object.values(this.nodes.remodelPsxInputs ?? {})) {
       input?.addEventListener("input", () => this.onRemodelPsxRigChange?.(this.readRemodelPsxRigState()));
-      input?.addEventListener("wheel", (event) => this.handleRemodelInputWheel(event, input), {
+      if (input?.type !== "number") {
+        continue;
+      }
+      input?.addEventListener("wheel", (event) => this.handleRemodelInputWheel(
+        event,
+        input,
+        () => this.onRemodelPsxRigChange?.(this.readRemodelPsxRigState()),
+      ), {
         passive: false,
       });
     }
@@ -599,7 +610,7 @@ export class HUD {
     };
   }
 
-  handleRemodelInputWheel(event, input) {
+  handleRemodelInputWheel(event, input, onChange = null) {
     if (!input) {
       return;
     }
@@ -616,7 +627,7 @@ export class HUD {
     const next = Number.isFinite(min) ? Math.max(min, rawNext) : rawNext;
     const decimals = step >= 1 ? 1 : 2;
     input.value = next.toFixed(decimals);
-    this.onRemodelChange?.(this.readRemodelState());
+    onChange?.();
   }
 
   buildCarShop() {

@@ -170,7 +170,9 @@ export class Game {
     this.player.setCarPreset(this.getActiveVehiclePreset());
     this.garagePsxRemodelTarget = null;
     this.createGaragePsxRemodelTarget();
-    this.traffic = new TrafficSystem(this.scene, this.world);
+    this.traffic = new TrafficSystem(this.scene, this.world, {
+      getVehicleRigForCar: (carId) => this.getVehicleRigForCar(carId),
+    });
     this.debugOverlay = new DebugOverlay(this.scene, this.world);
     this.remodelOverlay = new RemodelOverlay(
       this.scene,
@@ -1078,6 +1080,9 @@ export class Game {
       return;
     }
     this.vehicleRigOverrides[this.selectedRemodelPsxCarId] = this.getVehicleRigForCar(this.selectedRemodelPsxCarId);
+    if (CAR_PRESETS.find((preset) => preset.id === this.selectedRemodelPsxCarId)?.trafficEligible) {
+      this.traffic?.refreshModel?.(this.selectedRemodelPsxCarId);
+    }
     this.markProgressDirty({ immediate: true });
     this.hud?.setRemodelEditorStatus("PSX rig saved");
     this.hud?.flashNotice("PSX rig", "saved to config");
@@ -1126,7 +1131,7 @@ export class Game {
   }
 
   getRemodelPsxCarPresets() {
-    return CAR_PRESETS.filter((preset) => preset.inGamePlayer);
+    return CAR_PRESETS.filter((preset) => preset.inGamePlayer || preset.trafficEligible);
   }
 
   getRemodelPsxPreviewPreset(carId = this.selectedRemodelPsxCarId) {

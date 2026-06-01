@@ -27,6 +27,7 @@ const objLoader = new OBJLoader();
 const textureLoader = new THREE.TextureLoader();
 const bodyTemplates = new Map();
 const wheelTemplates = new Map();
+const trafficCarTemplates = new Map();
 const textureCache = new Map();
 const tireGeometry = new THREE.CylinderGeometry(1, 1, 1, 14);
 tireGeometry.rotateZ(Math.PI / 2);
@@ -411,4 +412,46 @@ export function createPlayerCarAsset(preset) {
   root.userData.assetSource = `PSXStyleCars-DevEdition/${modelId}`;
   root.userData.bodyGroundClearance = bodyGroundY;
   return root;
+}
+
+function getTrafficTemplateKey(preset) {
+  const rig = preset.vehicleRig ?? {};
+  return [
+    preset.psxModel ?? preset.carId ?? preset.id ?? "JapanSportCoupe",
+    preset.color,
+    rig.rideHeight,
+    rig.frontWheelOffsetX,
+    rig.frontWheelOffsetY,
+    rig.frontWheelOffsetZ,
+    rig.rearWheelOffsetX,
+    rig.rearWheelOffsetY,
+    rig.rearWheelOffsetZ,
+    rig.wheelScale,
+    rig.wheelModel,
+    rig.wheelColor,
+    rig.bodyColor,
+    rig.bodyOffsetY,
+    rig.bodyOffsetZ,
+  ].join(":");
+}
+
+export function createTrafficCarAsset(preset) {
+  const key = getTrafficTemplateKey(preset);
+  if (!trafficCarTemplates.has(key)) {
+    const template = createPlayerCarAsset(preset);
+    template.name = `TrafficPSXTemplate_${preset.psxModel ?? preset.carId ?? preset.id}`;
+    template.traverse((child) => {
+      if (!child.isMesh) {
+        return;
+      }
+      child.castShadow = false;
+      child.receiveShadow = false;
+      child.frustumCulled = true;
+    });
+    trafficCarTemplates.set(key, template);
+  }
+
+  const clone = trafficCarTemplates.get(key).clone(true);
+  clone.name = `TrafficPSX_${preset.psxModel ?? preset.carId ?? preset.id}`;
+  return clone;
 }

@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { LANES, TRAFFIC_CAR_IDS } from "./config.js";
+import { LANES, TRAFFIC_CAR_IDS, getCarPreset } from "./config.js";
+import { createTrafficCarAsset } from "./PlayerCarAsset.js";
 import { choice, clamp, damp, dampAngle, makeBox, rand } from "./utils.js";
 
 const TRAFFIC_COLORS = [0xb8b4a8, 0xd6d3c8, 0x4c5459, 0x273c4d, 0x7d2520, 0x4d594c];
@@ -20,11 +21,13 @@ const GRAPHICS_TRAFFIC_LIMITS = [
 const LANE_CHANGE_SIGNAL_LEAD = 1.15;
 const LANE_CHANGE_SIGNAL_HOLD = 0.55;
 const LANE_CHANGE_FINISH_EPSILON = 0.16;
+const TRAFFIC_INDICATOR_MATERIAL = new THREE.MeshBasicMaterial({ color: 0xffb21a });
 
 export class TrafficSystem {
-  constructor(scene, world) {
+  constructor(scene, world, options = {}) {
     this.scene = scene;
     this.world = world;
+    this.getVehicleRigForCar = options.getVehicleRigForCar ?? (() => ({}));
     this.cars = [];
     this.nextId = 1;
   }
@@ -344,8 +347,92 @@ export class TrafficSystem {
   }
 
   createVehicle() {
-    const isTruck = false;
     const trafficModel = choice(TRAFFIC_CAR_IDS);
+    const visual = this.createTrafficVisual(trafficModel);
+
+    return {
+      id: this.nextId++,
+      trafficModel,
+      kind: "car",
+      group: visual.group,
+      width: visual.width,
+      length: visual.length,
+      lane: 1,
+      lateralOffset: LANES[1],
+      s: 0,
+      x: 0,
+      z: 0,
+      yaw: 0,
+      visualYaw: 0,
+      speed: 0,
+      speedFactor: 1,
+      cruiseSpeed: 0,
+      nearMissCooldown: 0,
+      laneChangeCooldown: rand(0, 3.5),
+      targetLane: null,
+      signalTimer: 0,
+      signalHoldTimer: 0,
+      signalDirection: 0,
+      signalClock: rand(0, 1),
+      indicators: visual.indicators,
+      overtakeArmed: false,
+    };
+  }
+
+  createTrafficVisual(modelId) {
+    try {
+      const preset = this.getTrafficPreset(modelId);
+      const group = createTrafficCarAsset(preset);
+      group.name = `TrafficPSX_${modelId}`;
+      const indicators = this.createIndicatorMeshes(preset.bodyWidth, preset.bodyLength);
+      [...indicators.left, ...indicators.right].forEach((mesh) => group.add(mesh));
+      return {
+        group,
+        indicators,
+        width: preset.bodyWidth,
+        length: preset.bodyLength,
+      };
+    } catch (error) {
+      console.warn(`Unable to build PSX traffic car ${modelId}; using lightweight fallback.`, error);
+      return this.createFallbackTrafficVisual(modelId);
+    }
+  }
+
+  getTrafficPreset(modelId) {
+    const preset = getCarPreset(modelId);
+    const rig = this.getVehicleRigForCar(modelId) ?? {};
+    return {
+      ...preset,
+      id: modelId,
+      carId: modelId,
+      color: rig.bodyColor ?? preset.color,
+      wheelModel: rig.wheelModel || preset.wheelModel,
+      wheelColor: rig.wheelColor,
+      vehicleRig: rig,
+    };
+  }
+
+  createIndicatorMeshes(bodyWidth, bodyLength) {
+    const indicatorInset = bodyWidth * 0.42;
+    const frontZ = bodyLength / 2 + 0.05;
+    const rearZ = -bodyLength / 2 - 0.05;
+    const left = [
+      makeBox(0.2, 0.12, 0.1, TRAFFIC_INDICATOR_MATERIAL, new THREE.Vector3(-indicatorInset, 0.78, frontZ)),
+      makeBox(0.2, 0.12, 0.1, TRAFFIC_INDICATOR_MATERIAL, new THREE.Vector3(-indicatorInset, 0.78, rearZ)),
+    ];
+    const right = [
+      makeBox(0.2, 0.12, 0.1, TRAFFIC_INDICATOR_MATERIAL, new THREE.Vector3(indicatorInset, 0.78, frontZ)),
+      makeBox(0.2, 0.12, 0.1, TRAFFIC_INDICATOR_MATERIAL, new THREE.Vector3(indicatorInset, 0.78, rearZ)),
+    ];
+    [...left, ...right].forEach((mesh) => {
+      mesh.visible = false;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
+    });
+    return { left, right };
+  }
+
+  createFallbackTrafficVisual(modelId) {
     const color = choice(TRAFFIC_COLORS);
     const bodyMaterial = new THREE.MeshStandardMaterial({
       color,
@@ -367,70 +454,44 @@ export class TrafficSystem {
     });
     const headlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffefd0 });
     const tailMaterial = new THREE.MeshBasicMaterial({ color: 0xb42520 });
-    const indicatorMaterial = new THREE.MeshBasicMaterial({ color: 0xffb21a });
 
     const group = new THREE.Group();
-    group.name = isTruck ? "TrafficTruck" : "TrafficCar";
-    const bodyLength = isTruck ? rand(9.8, 12.8) : rand(3.95, 4.9);
-    const bodyWidth = isTruck ? rand(2.36, 2.56) : rand(1.74, 1.96);
+    group.name = `TrafficFallback_${modelId}`;
+    const bodyLength = rand(3.95, 4.9);
+    const bodyWidth = rand(1.74, 1.96);
 
-    if (isTruck) {
-      group.add(makeBox(bodyWidth, 2.15, bodyLength * 0.62, panelMaterial, new THREE.Vector3(0, 1.54, -bodyLength * 0.12), true));
-      group.add(makeBox(bodyWidth * 0.94, 1.55, bodyLength * 0.25, bodyMaterial, new THREE.Vector3(0, 1.18, bodyLength * 0.33), true));
-      group.add(makeBox(bodyWidth * 0.72, 0.48, bodyLength * 0.1, glassMaterial, new THREE.Vector3(0, 1.85, bodyLength * 0.43), true));
-      group.add(makeBox(bodyWidth * 0.9, 0.2, bodyLength * 0.86, panelMaterial, new THREE.Vector3(0, 0.36, -bodyLength * 0.02), true));
-    } else {
-      group.add(makeBox(bodyWidth, 0.66, bodyLength, bodyMaterial, new THREE.Vector3(0, 0.66, 0), true));
-      group.add(makeBox(bodyWidth * 0.72, 0.48, bodyLength * 0.36, glassMaterial, new THREE.Vector3(0, 1.14, -0.18), true));
-      group.add(makeBox(bodyWidth * 0.95, 0.12, 1.25, bodyMaterial, new THREE.Vector3(0, 0.51, bodyLength * 0.28), true));
-      group.add(makeBox(bodyWidth * 0.94, 0.16, bodyLength * 0.86, panelMaterial, new THREE.Vector3(0, 0.3, -0.05), true));
-    }
+    group.add(makeBox(bodyWidth, 0.66, bodyLength, bodyMaterial, new THREE.Vector3(0, 0.66, 0), true));
+    group.add(makeBox(bodyWidth * 0.72, 0.48, bodyLength * 0.36, glassMaterial, new THREE.Vector3(0, 1.14, -0.18), true));
+    group.add(makeBox(bodyWidth * 0.95, 0.12, 1.25, bodyMaterial, new THREE.Vector3(0, 0.51, bodyLength * 0.28), true));
+    group.add(makeBox(bodyWidth * 0.94, 0.16, bodyLength * 0.86, panelMaterial, new THREE.Vector3(0, 0.3, -0.05), true));
 
     group.add(makeBox(bodyWidth * 0.62, 0.1, 0.08, headlightMaterial, new THREE.Vector3(0, 0.76, bodyLength / 2 + 0.02)));
     group.add(makeBox(bodyWidth * 0.68, 0.11, 0.08, tailMaterial, new THREE.Vector3(0, 0.76, -bodyLength / 2 - 0.02)));
-    const indicatorInset = bodyWidth * 0.36;
-    const leftIndicators = [
-      makeBox(0.24, 0.14, 0.12, indicatorMaterial, new THREE.Vector3(-indicatorInset, 0.81, bodyLength / 2 + 0.05)),
-      makeBox(0.24, 0.14, 0.12, indicatorMaterial, new THREE.Vector3(-indicatorInset, 0.81, -bodyLength / 2 - 0.05)),
-    ];
-    const rightIndicators = [
-      makeBox(0.24, 0.14, 0.12, indicatorMaterial, new THREE.Vector3(indicatorInset, 0.81, bodyLength / 2 + 0.05)),
-      makeBox(0.24, 0.14, 0.12, indicatorMaterial, new THREE.Vector3(indicatorInset, 0.81, -bodyLength / 2 - 0.05)),
-    ];
-    [...leftIndicators, ...rightIndicators].forEach((mesh) => {
-      mesh.visible = false;
-      group.add(mesh);
-    });
+    const indicators = this.createIndicatorMeshes(bodyWidth, bodyLength);
+    [...indicators.left, ...indicators.right].forEach((mesh) => group.add(mesh));
 
     return {
-      id: this.nextId++,
-      trafficModel,
-      kind: isTruck ? "truck" : "car",
       group,
+      indicators,
       width: bodyWidth,
       length: bodyLength,
-      lane: 1,
-      lateralOffset: LANES[1],
-      s: 0,
-      x: 0,
-      z: 0,
-      yaw: 0,
-      visualYaw: 0,
-      speed: 0,
-      speedFactor: 1,
-      cruiseSpeed: 0,
-      nearMissCooldown: 0,
-      laneChangeCooldown: rand(0, 3.5),
-      targetLane: null,
-      signalTimer: 0,
-      signalHoldTimer: 0,
-      signalDirection: 0,
-      signalClock: rand(0, 1),
-      indicators: {
-        left: leftIndicators,
-        right: rightIndicators,
-      },
-      overtakeArmed: false,
     };
+  }
+
+  refreshModel(modelId) {
+    for (const car of this.cars) {
+      if (car.trafficModel !== modelId) {
+        continue;
+      }
+      const previousGroup = car.group;
+      const visual = this.createTrafficVisual(modelId);
+      car.group = visual.group;
+      car.indicators = visual.indicators;
+      car.width = visual.width;
+      car.length = visual.length;
+      this.scene.remove(previousGroup);
+      this.scene.add(car.group);
+      this.applyFrame(car, 1, true);
+    }
   }
 }
