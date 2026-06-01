@@ -142,18 +142,18 @@ const CITY_FACADE_PALETTE = [
   0x6f6d67,
 ];
 const CITY_BLOCK_ROWS = [
-  { spacing: 27, lateral: 11, lateralJitter: 1.4, forwardJitter: 10, height: [28, 74], width: [15, 32], depth: [18, 34], skip: 0.0, serviceClearance: 66 },
-  { spacing: 38, lateral: 20, lateralJitter: 4, forwardJitter: 14, height: [36, 98], width: [18, 40], depth: [20, 40], skip: 0.0, serviceClearance: 92 },
-  { spacing: 52, lateral: 40, lateralJitter: 7, forwardJitter: 19, height: [48, 128], width: [21, 50], depth: [24, 48], skip: 0.0, serviceClearance: 128 },
-  { spacing: 70, lateral: 67, lateralJitter: 11, forwardJitter: 25, height: [60, 158], width: [25, 60], depth: [28, 56], skip: 0.0, serviceClearance: 170 },
-  { spacing: 94, lateral: 101, lateralJitter: 17, forwardJitter: 32, height: [72, 190], width: [29, 70], depth: [32, 66], skip: 0.002, serviceClearance: 220 },
-  { spacing: 122, lateral: 143, lateralJitter: 23, forwardJitter: 39, height: [86, 214], width: [31, 78], depth: [36, 74], skip: 0.004, serviceClearance: 278 },
-  { spacing: 158, lateral: 194, lateralJitter: 31, forwardJitter: 46, height: [100, 238], width: [35, 88], depth: [40, 84], skip: 0.006, serviceClearance: 348 },
-  { spacing: 204, lateral: 258, lateralJitter: 41, forwardJitter: 56, height: [120, 270], width: [42, 102], depth: [46, 96], skip: 0.008, serviceClearance: 432 },
-  { spacing: 258, lateral: 350, lateralJitter: 52, forwardJitter: 68, height: [144, 292], width: [52, 122], depth: [55, 110], skip: 0.012, serviceClearance: 520 },
-  { spacing: 330, lateral: 492, lateralJitter: 72, forwardJitter: 88, height: [184, 354], width: [68, 154], depth: [70, 140], skip: 0.016, serviceClearance: 640 },
-  { spacing: 420, lateral: 700, lateralJitter: 98, forwardJitter: 112, height: [224, 416], width: [84, 184], depth: [85, 170], skip: 0.02, serviceClearance: 780 },
-  { spacing: 530, lateral: 980, lateralJitter: 130, forwardJitter: 144, height: [266, 498], width: [104, 224], depth: [100, 200], skip: 0.026, serviceClearance: 960 },
+  { spacing: 18, lateral: 9, lateralJitter: 1.0, forwardJitter: 6, height: [28, 74], width: [15, 32], depth: [18, 34], skip: 0.0, serviceClearance: 54 },
+  { spacing: 25, lateral: 17, lateralJitter: 2.8, forwardJitter: 9, height: [36, 98], width: [18, 40], depth: [20, 40], skip: 0.0, serviceClearance: 76 },
+  { spacing: 34, lateral: 32, lateralJitter: 5, forwardJitter: 12, height: [48, 128], width: [21, 50], depth: [24, 48], skip: 0.0, serviceClearance: 104 },
+  { spacing: 46, lateral: 52, lateralJitter: 8, forwardJitter: 16, height: [60, 158], width: [25, 60], depth: [28, 56], skip: 0.0, serviceClearance: 138 },
+  { spacing: 62, lateral: 80, lateralJitter: 12, forwardJitter: 21, height: [72, 190], width: [29, 70], depth: [32, 66], skip: 0.0, serviceClearance: 178 },
+  { spacing: 80, lateral: 114, lateralJitter: 16, forwardJitter: 25, height: [86, 214], width: [31, 78], depth: [36, 74], skip: 0.0, serviceClearance: 226 },
+  { spacing: 104, lateral: 154, lateralJitter: 22, forwardJitter: 30, height: [100, 238], width: [35, 88], depth: [40, 84], skip: 0.002, serviceClearance: 284 },
+  { spacing: 134, lateral: 204, lateralJitter: 30, forwardJitter: 36, height: [120, 270], width: [42, 102], depth: [46, 96], skip: 0.004, serviceClearance: 352 },
+  { spacing: 170, lateral: 278, lateralJitter: 38, forwardJitter: 44, height: [144, 292], width: [52, 122], depth: [55, 110], skip: 0.006, serviceClearance: 424 },
+  { spacing: 218, lateral: 394, lateralJitter: 52, forwardJitter: 57, height: [184, 354], width: [68, 154], depth: [70, 140], skip: 0.008, serviceClearance: 520 },
+  { spacing: 278, lateral: 560, lateralJitter: 72, forwardJitter: 73, height: [224, 416], width: [84, 184], depth: [85, 170], skip: 0.012, serviceClearance: 634 },
+  { spacing: 350, lateral: 790, lateralJitter: 96, forwardJitter: 94, height: [266, 498], width: [104, 224], depth: [100, 200], skip: 0.016, serviceClearance: 780 },
 ];
 const CITY_MANUAL_CLEARANCE = 34;
 const CITY_DISTRICT_HALF_WIDTH = 520;
@@ -1510,8 +1510,8 @@ export class HighwayWorld {
       side,
       s: (s + forward + this.trackLength) % this.trackLength,
       lateral: Math.abs(lateral),
-      halfForward: depth * 0.5 + 7 + rowIndex * 0.8,
-      halfLateral: width * 0.5 + 4,
+      halfForward: depth * 0.5 + 2.4 + rowIndex * 0.35,
+      halfLateral: width * 0.5 + 1.8,
     };
     if (!this.reserveCityFootprint(footprint)) {
       return;
