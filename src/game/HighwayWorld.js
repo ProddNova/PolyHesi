@@ -208,6 +208,19 @@ const TUNNEL_RUNS = [
   { start: 51080, length: 1120, name: "South Long Gallery" },
 ];
 const TUNNEL_MODULE_LENGTH = 18;
+const DEFAULT_ROUTE_SCALE = 6.5;
+const DEFAULT_ROUTE_CONTROL_POINTS = [
+  [0, 0],
+  [0, 900],
+  [260, 1700],
+  [1150, 2300],
+  [2050, 1850],
+  [2400, 950],
+  [2050, 150],
+  [1280, -450],
+  [540, -720],
+  [0, -650],
+].map(([x, z]) => ({ x: x * DEFAULT_ROUTE_SCALE, z: z * DEFAULT_ROUTE_SCALE }));
 const GRAPHICS_PROFILES = [
   { shadowSize: 0, anisotropy: 1, roadLightStep: Infinity },
   { shadowSize: 1024, anisotropy: 2, roadLightStep: 2 },
@@ -257,6 +270,7 @@ export class HighwayWorld {
     this.remodelOverrides = { ...this.remodelStore.targets };
     this.remodelDeletedIds = new Set(this.remodelStore.deleted);
     this.remodelCreatedPieces = [...this.remodelStore.created];
+    this.routeProfile = this.sanitizeRouteProfile(this.remodelStore.routeProfile);
     this.remodelTargets = [];
     this.remodelTargetMap = new Map();
     this.remodelCreatedGroup = null;
@@ -266,7 +280,7 @@ export class HighwayWorld {
     this.garageLights = [];
     this.ultraGraphics = false;
     this.graphicsQuality = 1;
-    this.tunnelRuns = TUNNEL_RUNS.map((run) => ({ ...run }));
+    this.tunnelRuns = this.routeProfile.tunnels.map((run) => ({ ...run }));
 
     this.materials = this.createMaterials();
     this.createRoute();
@@ -442,20 +456,119 @@ export class HighwayWorld {
     return texture;
   }
 
+  getDefaultRouteProfile() {
+    return {
+      controlPoints: DEFAULT_ROUTE_CONTROL_POINTS.map((point) => ({ ...point })),
+      branches: [],
+      tunnels: TUNNEL_RUNS.map((run) => ({ ...run })),
+    };
+  }
+
+  sanitizeRoutePoint(point, fallback = { x: 0, z: 0 }) {
+    const x = Number(point?.x);
+    const z = Number(point?.z);
+    return {
+      x: Number.isFinite(x) ? x : fallback.x,
+      z: Number.isFinite(z) ? z : fallback.z,
+    };
+  }
+
+  sanitizeTunnelRun(run, index = 0) {
+    const trackLength = Math.max(1, this.trackLength || 58000);
+    const start = ((Number(run?.start) || 0) % trackLength + trackLength) % trackLength;
+    const length = clamp(Number(run?.length) || 600, 90, Math.max(120, trackLength * 0.45));
+    const rawName = typeof run?.name === "string" && run.name.trim()
+      ? run.name.trim()
+      : `Remodel Tunnel ${index + 1}`;
+    return {
+      start,
+      length,
+      name: rawName.slice(0, 42),
+    };
+  }
+
+  sanitizeRouteProfile(profile = null) {
+    const fallback = this.getDefaultRouteProfile();
+    const sourcePoints = Array.isArray(profile?.controlPoints) ? profile.controlPoints : fallback.controlPoints;
+    const controlPoints = sourcePoints
+      .map((point, index) => this.sanitizeRoutePoint(point, fallback.controlPoints[index] ?? fallback.controlPoints[0]))
+      .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.z));
+    const safePoints = controlPoints.length >= 6
+      ? controlPoints.slice(0, 64)
+      : fallback.controlPoints.map((point) => ({ ...point }));
+
+    const branches = Array.isArray(profile?.branches)
+      ? profile.branches
+          .map((branch, index) => {
+            const points = Array.isArray(branch?.points)
+              ? branch.points.map((point) => this.sanitizeRoutePoint(point)).slice(0, 16)
+              : [];
+            if (points.length < 2) {
+              return null;
+            }
+            return {
+              id: typeof branch?.id === "string" && branch.id ? branch.id : `branch:${Date.now().toString(36)}:${index}`,
+              points,
+            };
+          })
+          .filter(Boolean)
+          .slice(0, 12)
+      : fallback.branches.map((branch) => ({
+          id: branch.id,
+          points: branch.points.map((point) => ({ ...point })),
+        }));
+
+    const tunnels = (Array.isArray(profile?.tunnels) ? profile.tunnels : fallback.tunnels)
+      .map((run, index) => this.sanitizeTunnelRun(run, index))
+      .slice(0, 24);
+
+    return {
+      controlPoints: safePoints,
+      branches,
+      tunnels,
+    };
+  }
+
+  getRemodelRouteProfile() {
+    return {
+      controlPoints: this.routeProfile.controlPoints.map((point) => ({ ...point })),
+      branches: this.routeProfile.branches.map((branch) => ({
+        id: branch.id,
+        points: branch.points.map((point) => ({ ...point })),
+      })),
+      tunnels: this.tunnelRuns.map((run) => ({ ...run })),
+    };
+  }
+
+  applyRemodelRouteProfile(profile, { rebuild = true } = {}) {
+    this.routeProfile = this.sanitizeRouteProfile(profile);
+    this.tunnelRuns = this.routeProfile.tunnels.map((run) => ({ ...run }));
+    if (rebuild) {
+      this.rebuildRoadGeometry();
+    }
+    return this.getRemodelRouteProfile();
+  }
+
+  rebuildRoadGeometry() {
+    const existing = this.scene.getObjectByName("StaticHighwayLoop");
+    if (existing) {
+      this.scene.remove(existing);
+      existing.traverse((object) => {
+        object.geometry?.dispose?.();
+      });
+    }
+    this.createRoute();
+    this.createStaticHighway();
+    this.rebuildRemodelTargets();
+    this.applySavedRemodelOverrides();
+  }
+
   createRoute() {
-    const routeScale = 6.5;
-    const points = [
-      [0, 0],
-      [0, 900],
-      [260, 1700],
-      [1150, 2300],
-      [2050, 1850],
-      [2400, 950],
-      [2050, 150],
-      [1280, -450],
-      [540, -720],
-      [0, -650],
-    ].map(([x, z]) => new THREE.Vector3(x * routeScale, 0, z * routeScale));
+    this.roadSamples = [];
+    this.mapRoutes = [];
+    this.branchRoutes = [];
+
+    const points = this.routeProfile.controlPoints.map((point) => new THREE.Vector3(point.x, 0, point.z));
 
     this.curve = new THREE.CatmullRomCurve3(points, true, "catmullrom", 0.28);
     this.curve.arcLengthDivisions = 4096;
@@ -469,29 +582,16 @@ export class HighwayWorld {
       this.roadSamples.push(sample);
     }
     this.mapRoutes.push({ samples: mainSamples, closed: true });
+    this.createBranchRoutes();
   }
 
-  createBranchRoutes(routeScale) {
-    const branchPointSets = [
-      [
-        [250, 1380],
-        [680, 1820],
-        [1450, 1930],
-        [2010, 1510],
-        [2260, 900],
-      ],
-      [
-        [1120, -360],
-        [1770, -160],
-        [2420, 430],
-        [2700, 1180],
-        [2360, 1800],
-      ],
-    ];
-
-    for (const pointSet of branchPointSets) {
+  createBranchRoutes() {
+    for (const branch of this.routeProfile.branches) {
+      if (!branch.points?.length || branch.points.length < 2) {
+        continue;
+      }
       const curve = new THREE.CatmullRomCurve3(
-        pointSet.map(([x, z]) => new THREE.Vector3(x * routeScale, 0, z * routeScale)),
+        branch.points.map((point) => new THREE.Vector3(point.x, 0, point.z)),
         false,
         "catmullrom",
         0.24,
@@ -500,13 +600,14 @@ export class HighwayWorld {
       curve.updateArcLengths();
       const length = curve.getLength();
       const samples = [];
-      for (let i = 0; i <= 220; i += 1) {
-        const sample = this.getFrameOnCurve(curve, length, (i / 220) * length, false);
+      const sampleCount = Math.max(60, Math.min(260, Math.ceil(length / 34)));
+      for (let i = 0; i <= sampleCount; i += 1) {
+        const sample = this.getFrameOnCurve(curve, length, (i / sampleCount) * length, false);
         sample.isBranch = true;
         samples.push(sample);
         this.roadSamples.push(sample);
       }
-      this.branchRoutes.push({ curve, length, samples });
+      this.branchRoutes.push({ id: branch.id, curve, length, samples });
       this.mapRoutes.push({ samples, closed: false });
     }
   }
@@ -1974,7 +2075,7 @@ export class HighwayWorld {
     const tunnels = new THREE.Group();
     tunnels.name = "FixedHighwayTunnels";
 
-    for (const run of TUNNEL_RUNS) {
+    for (const run of this.tunnelRuns) {
       const steps = Math.ceil(run.length / TUNNEL_MODULE_LENGTH);
       for (let i = 0; i < steps; i += 1) {
         const segmentLength = Math.min(TUNNEL_MODULE_LENGTH, run.length - i * TUNNEL_MODULE_LENGTH);
@@ -2370,14 +2471,20 @@ export class HighwayWorld {
       window.localStorage.setItem(
         REMODEL_STORAGE_KEY,
         JSON.stringify({
-          version: 2,
+          version: 3,
           savedAt: new Date().toISOString(),
           targets,
           deleted: [...this.remodelDeletedIds],
           created: this.getCreatedRemodelPayload(),
+          routeProfile: this.getRemodelRouteProfile(),
         }),
       );
-      return Object.keys(targets).length + this.remodelDeletedIds.size + this.remodelCreatedPieces.length;
+      return Object.keys(targets).length +
+        this.remodelDeletedIds.size +
+        this.remodelCreatedPieces.length +
+        this.routeProfile.controlPoints.length +
+        this.routeProfile.branches.length +
+        this.tunnelRuns.length;
     } catch {
       return null;
     }
@@ -2387,15 +2494,16 @@ export class HighwayWorld {
     try {
       const payload = JSON.parse(window.localStorage.getItem(REMODEL_STORAGE_KEY) ?? "{}");
       if (!payload || typeof payload !== "object") {
-        return { targets: {}, deleted: [], created: [] };
+        return { targets: {}, deleted: [], created: [], routeProfile: null };
       }
       return {
         targets: payload.targets && typeof payload.targets === "object" ? { ...payload.targets } : {},
         deleted: Array.isArray(payload.deleted) ? payload.deleted.filter((id) => typeof id === "string") : [],
         created: Array.isArray(payload.created) ? payload.created.filter((piece) => piece?.id && piece?.state) : [],
+        routeProfile: payload.routeProfile && typeof payload.routeProfile === "object" ? payload.routeProfile : null,
       };
     } catch {
-      return { targets: {}, deleted: [], created: [] };
+      return { targets: {}, deleted: [], created: [], routeProfile: null };
     }
   }
 

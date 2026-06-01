@@ -298,6 +298,15 @@
       </aside>
 
       <section id="mapOverlay" class="map-overlay" aria-label="Map">
+        <div id="remodelMapToolbar" class="remodel-map-toolbar" aria-label="Remodel map tools">
+          <button data-remodel-map-tool="route" type="button">Route</button>
+          <button data-remodel-map-tool="tunnel" type="button">Tunnel</button>
+          <button data-remodel-map-tool="branch" type="button">Junction</button>
+          <button id="remodelMapAddButton" type="button">Add</button>
+          <button id="remodelMapDeleteButton" type="button">Delete</button>
+          <button id="remodelMapSaveButton" type="button">Save</button>
+          <button id="remodelMapResetButton" type="button">Reset</button>
+        </div>
         <canvas id="miniMapCanvas" width="960" height="960"></canvas>
       </section>
 

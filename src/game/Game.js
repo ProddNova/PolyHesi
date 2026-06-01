@@ -256,6 +256,9 @@ export class Game {
       (state) => this.updateSelectedPsxCarRig(state),
       () => this.saveSelectedPsxCarRig(),
       (position) => this.teleportFromMap(position),
+      (profile, options) => this.updateRemodelRouteProfile(profile, options),
+      () => this.saveRemodelMap(),
+      () => this.resetRemodelRouteProfile(),
     );
     this.initializeRemodelPsxCars();
     this.hud.setAdminMode(this.isAdmin);
@@ -300,6 +303,10 @@ export class Game {
     }
     if (this.input.consumeMapToggle()) {
       const visible = this.hud.toggleMap();
+      this.hud.setRemodelMapMode(
+        visible && this.isAdmin && this.settings.remodelMode,
+        this.world.getRemodelRouteProfile(),
+      );
       if (visible) {
         this.input.releasePointerLock();
       }
@@ -2306,6 +2313,9 @@ export class Game {
     this.hud?.setRemodelReticleVisible(enabled);
     this.hud?.setRemodelToolsVisible(enabled);
     this.hud?.setRemodelHover(null);
+    if (this.hud?.isMapVisible?.()) {
+      this.hud.setRemodelMapMode(enabled && this.isAdmin, this.world.getRemodelRouteProfile());
+    }
     if (enabled) {
       this.input.releasePointerLock();
     } else {
@@ -2503,6 +2513,39 @@ export class Game {
         z: snap(state.position.z),
       },
     };
+  }
+
+  updateRemodelRouteProfile(profile, { flash = true } = {}) {
+    if (!this.isAdmin || !this.settings.remodelMode) {
+      this.hud.flashNotice("Remodel map", "enable remodel first");
+      return this.world.getRemodelRouteProfile();
+    }
+
+    const applied = this.world.applyRemodelRouteProfile(profile);
+    this.remodelOverlay.refresh(null);
+    this.closeRemodelEditor();
+    const road = this.world.getNearestRoadInfo(this.player.position);
+    this.traffic.reset(this.settings, road?.s ?? 0);
+    if (this.settings.noClip) {
+      this.syncPlayerToNoClip();
+    }
+    if (flash) {
+      this.hud.flashNotice("Remodel map", "layout updated");
+    }
+    return applied;
+  }
+
+  resetRemodelRouteProfile() {
+    if (!this.isAdmin) {
+      this.hud.flashNotice("Admin", "accesso riservato");
+      return this.world.getRemodelRouteProfile();
+    }
+    const applied = this.world.applyRemodelRouteProfile(this.world.getDefaultRouteProfile());
+    this.remodelOverlay.refresh(null);
+    this.closeRemodelEditor();
+    this.traffic.reset(this.settings);
+    this.hud.flashNotice("Remodel map", "route reset");
+    return applied;
   }
 
   saveRemodelMap() {
