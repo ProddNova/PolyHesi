@@ -44,8 +44,8 @@ export const DEFAULT_SETTINGS = {
   remodelMode: false,
   remodelSnapToGrid: false,
   remodelGridSize: 0.25,
-  laneDashLength: 4.8,
-  laneDashSpacing: 14.5,
+  laneDashLength: 2.6,
+  laneDashSpacing: 8.2,
 };
 
 const PSX_MODEL_IDS = [
@@ -579,7 +579,6 @@ export const PARTS_CATALOG = [
 ];
 
 export const DEV_STORAGE_KEY = "polyhesi.devSettings.v1";
-export const LANE_DASH_TUNING_CONSUMED_KEY = "polyhesi.laneDashTuningConsumed.v1";
 export const REMODEL_STORAGE_KEY = "polyhesi.remodelMap.v1";
 
 export const PHYSICS_SETTING_KEYS = [
@@ -609,6 +608,4 @@ export const SETTING_DEFS = [
   { key: "noClipSpeedKmh", format: (value) => `${Math.round(value)}` },
   { key: "noClipBoostSpeedKmh", format: (value) => `${Math.round(value)}` },
   { key: "remodelGridSize", format: (value) => `${Number(value).toFixed(2)}` },
-  { key: "laneDashLength", format: (value) => `${Number(value).toFixed(1)} m` },
-  { key: "laneDashSpacing", format: (value) => `${Number(value).toFixed(1)} m` },
 ];

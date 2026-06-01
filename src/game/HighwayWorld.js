@@ -152,8 +152,8 @@ const CITY_BUILDING_HEIGHT_SCALE = 1.44;
 const CITY_STREETLIGHT_INTERVAL = 68;
 const CITY_STREETLIGHT_POLE_OFFSET = ROAD_HALF_WIDTH + 2.65;
 const ROADSIDE_SIGN_OFFSET = ROAD_HALF_WIDTH + 4.8;
-const DEFAULT_LANE_DASH_LENGTH = 4.8;
-const DEFAULT_LANE_DASH_SPACING = 14.5;
+const DEFAULT_LANE_DASH_LENGTH = 2.6;
+const DEFAULT_LANE_DASH_SPACING = 8.2;
 const ROAD_SIGN_PLACEMENTS = [
   { s: 420, type: "side", side: 1, title: "首都高速", route: "C1", lines: ["銀座 2km", "新橋 4km"] },
   { s: 1120, type: "gantry", title: "都心環状線", route: "C1", lines: ["渋谷", "霞が関", "羽田"] },
@@ -230,7 +230,7 @@ const DEFAULT_ROUTE_CONTROL_POINTS = [
   [0, -650],
 ].map(([x, z]) => ({ x: x * DEFAULT_ROUTE_SCALE, z: z * DEFAULT_ROUTE_SCALE }));
 const GRAPHICS_PROFILES = [
-  { shadowSize: 0, anisotropy: 1, roadLightStep: Infinity },
+  { shadowSize: 0, anisotropy: 1, roadLightStep: 4 },
   { shadowSize: 1024, anisotropy: 2, roadLightStep: 2 },
   { shadowSize: 2048, anisotropy: 8, roadLightStep: 1 },
 ];
@@ -418,6 +418,7 @@ export class HighwayWorld {
         flatShading: true,
       }),
       streetlightGlow: new THREE.MeshBasicMaterial({ color: 0xffd887 }),
+      aviationBeacon: new THREE.MeshBasicMaterial({ color: 0xff1717 }),
       remodelCreated: new THREE.MeshStandardMaterial({
         color: 0x78e0c1,
         roughness: 0.72,
@@ -898,7 +899,7 @@ export class HighwayWorld {
         light.intensity = 0;
       }
     }
-    this.roadLightRange = this.ultraGraphics ? 1640 : this.graphicsQuality >= 2 ? 1240 : this.graphicsQuality >= 1 ? 940 : 0;
+    this.roadLightRange = this.ultraGraphics ? 1640 : this.graphicsQuality >= 2 ? 1240 : this.graphicsQuality >= 1 ? 940 : 620;
     const garageShadowSize = this.ultraGraphics ? 1024 : this.graphicsQuality >= 2 ? 512 : 0;
     for (const light of this.garageLights) {
       light.castShadow = garageShadowSize > 0;
@@ -1718,18 +1719,16 @@ export class HighwayWorld {
           scale: { x: 0.44, y: 0.16, z: 0.34 },
           remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight lamp"),
         });
-        if (s % (CITY_STREETLIGHT_INTERVAL * 2) < 1 && Math.abs(side) === 1) {
-          const light = new THREE.PointLight(0xffd887, 0, 108, 1.04);
-          light.position.copy(lampPosition);
-          light.position.y -= 0.55;
-          light.visible = false;
-          light.userData.baseIntensity = 11.4;
-          light.userData.qualityIndex = this.roadLights.length;
-          light.userData.qualityAllowed = false;
-          light.userData.s = s;
-          this.roadLights.push(light);
-          lightGroup.add(light);
-        }
+        const light = new THREE.PointLight(0xffd887, 0, 132, 1.02);
+        light.position.copy(lampPosition);
+        light.position.y -= 0.52;
+        light.visible = false;
+        light.userData.baseIntensity = 15.5;
+        light.userData.qualityIndex = this.roadLights.length;
+        light.userData.qualityAllowed = false;
+        light.userData.s = s;
+        this.roadLights.push(light);
+        lightGroup.add(light);
       }
     }
 
@@ -1998,6 +1997,7 @@ export class HighwayWorld {
     const warmWindows = [];
     const trim = [];
     const signs = [];
+    const roofBeacons = [];
 
     for (let rowIndex = 0; rowIndex < CITY_BLOCK_ROWS.length; rowIndex += 1) {
       const row = CITY_BLOCK_ROWS[rowIndex];
@@ -2017,6 +2017,7 @@ export class HighwayWorld {
             warmWindows,
             trim,
             signs,
+            roofBeacons,
             row,
             rowIndex,
             side,
@@ -2035,11 +2036,12 @@ export class HighwayWorld {
     district.add(this.createChunkedScaledInstancedBoxes(warmWindows, this.materials.buildingWindowWarm, false, false));
     district.add(this.createChunkedScaledInstancedBoxes(trim, this.materials.buildingGlassDark, false, false));
     district.add(this.createChunkedScaledInstancedBoxes(signs, this.materials.tunnelSign, false, false));
+    district.add(this.createChunkedScaledInstancedBoxes(roofBeacons, this.materials.aviationBeacon, false, false));
     parent.add(district);
   }
 
   addProceduralCityBlock(batches) {
-    const { bodyBatches, roofs, glass, warmWindows, trim, signs, row, rowIndex, side, s, seed } = batches;
+    const { bodyBatches, roofs, glass, warmWindows, trim, signs, roofBeacons, row, rowIndex, side, s, seed } = batches;
     const frame = this.getFrameAtDistance(s);
     let width = cityRange(seed + 1.7, row.width[0], row.width[1]);
     let depth = cityRange(seed + 2.9, row.depth[0], row.depth[1]);
@@ -2127,6 +2129,23 @@ export class HighwayWorld {
         },
         remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "trim"),
       });
+    }
+
+    if (bodyHeight > 92 && cityNoise(seed + 31.4) > 0.46) {
+      const beaconCount = cityNoise(seed + 32.1) > 0.72 ? 2 : 1;
+      for (let i = 0; i < beaconCount; i += 1) {
+        const localX = beaconCount === 1
+          ? cityRange(seed + 33.2, -width * 0.18, width * 0.18)
+          : (i === 0 ? -1 : 1) * width * cityRange(seed + 34.2 + i, 0.24, 0.38);
+        const localZ = cityRange(seed + 35.7 + i, -depth * 0.24, depth * 0.24);
+        roofBeacons.push({
+          position: this.offsetLocalPoint(base, yaw, localX, localZ, bodyHeight + 1.18),
+          yaw,
+          s,
+          scale: { x: 0.72, y: 0.48, z: 0.72 },
+          remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "aviation-beacon"),
+        });
+      }
     }
   }
 
@@ -2340,6 +2359,7 @@ export class HighwayWorld {
     group.rotation.y = frame.yaw + (placement.yaw ?? 0);
 
     this.buildBuildingType(group, type, scale, placement.side);
+    this.addManualBuildingAviationBeacon(group, type, scale, placement);
     group.traverse((object) => {
       if (object.isMesh) {
         object.userData.remodelIgnore = true;
@@ -2347,6 +2367,19 @@ export class HighwayWorld {
     });
     parent.add(group);
     parent.add(this.createBuildingRemodelProxy(group, type, placement));
+  }
+
+  addManualBuildingAviationBeacon(group, type, scale, placement) {
+    const h = type.height * scale * CITY_BUILDING_HEIGHT_SCALE;
+    if (h < 82 || cityNoise(placement.s * 0.13 + type.height) <= 0.34) {
+      return;
+    }
+    const w = type.width * scale;
+    const d = type.depth * scale;
+    const side = placement.side || 1;
+    const x = side * w * cityRange(placement.s + 4.2, -0.18, 0.24);
+    const z = d * cityRange(placement.s + 7.6, -0.22, 0.22);
+    this.addLocalBox(group, 0.7, 0.5, 0.7, this.materials.aviationBeacon, x, h + 1.22, z);
   }
 
   createBuildingRemodelProxy(group, type, placement) {
