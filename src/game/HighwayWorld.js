@@ -417,7 +417,7 @@ export class HighwayWorld {
         metalness: 0.18,
         flatShading: true,
       }),
-      streetlightGlow: new THREE.MeshBasicMaterial({ color: 0xffd887 }),
+      streetlightGlow: new THREE.MeshBasicMaterial({ color: 0xf4f8ff }),
       aviationBeacon: new THREE.MeshBasicMaterial({ color: 0xff1717 }),
       remodelCreated: new THREE.MeshStandardMaterial({
         color: 0x78e0c1,
@@ -842,7 +842,7 @@ export class HighwayWorld {
       smooth,
     );
     if (this.materials?.streetlightGlow) {
-      this.materials.streetlightGlow.color.lerp(new THREE.Color(lampPower > 0.02 ? 0xffe0a0 : 0x6f5a32), smooth);
+      this.materials.streetlightGlow.color.lerp(new THREE.Color(lampPower > 0.02 ? 0xf4f8ff : 0x56606a), smooth);
     }
     for (const light of this.roadLights) {
       if (!light.visible) {
@@ -1001,13 +1001,21 @@ export class HighwayWorld {
       );
       panel.name = `RoadMarking_${marking.text}_${Math.round(marking.s)}`;
       panel.position.copy(this.offsetPoint(frame, laneOffset, ROAD_TEXT_MARKING_ELEVATION));
-      panel.rotation.set(-Math.PI * 0.5, frame.yaw, 0);
+      this.orientRoadSurfacePlane(panel, frame);
       panel.renderOrder = 3;
       panel.receiveShadow = false;
       markings.add(panel);
     }
 
     parent.add(markings);
+  }
+
+  orientRoadSurfacePlane(panel, frame) {
+    const xAxis = frame.normal.clone().multiplyScalar(-1).normalize();
+    const yAxis = frame.tangent.clone().normalize();
+    const zAxis = new THREE.Vector3(0, 1, 0);
+    const matrix = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+    panel.quaternion.setFromRotationMatrix(matrix);
   }
 
   createRoadSurfaceMarkingMaterial(marking) {
@@ -1720,7 +1728,7 @@ export class HighwayWorld {
           scale: { x: 0.44, y: 0.16, z: 0.34 },
           remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight lamp"),
         });
-        const light = new THREE.PointLight(0xffd887, 0, 132, 1.02);
+        const light = new THREE.PointLight(0xf4f8ff, 0, 132, 1.02);
         light.position.copy(lampPosition);
         light.position.y -= 0.52;
         light.visible = false;

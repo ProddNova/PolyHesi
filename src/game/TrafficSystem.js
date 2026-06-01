@@ -35,6 +35,8 @@ const GRAPHICS_TRAFFIC_LIMITS = [
 const LANE_CHANGE_SIGNAL_LEAD = 1.15;
 const LANE_CHANGE_SIGNAL_HOLD = 0.55;
 const LANE_CHANGE_FINISH_EPSILON = 0.16;
+const LANE_CHANGE_RESPONSE_CAR = 0.58;
+const LANE_CHANGE_RESPONSE_TRUCK = 0.42;
 const JUNCTION_TAKE_CHANCE_PER_SECOND = 0.34;
 const TRAFFIC_INDICATOR_MATERIAL = new THREE.MeshBasicMaterial({ color: 0xffb21a });
 
@@ -426,7 +428,7 @@ export class TrafficSystem {
       frame.yaw = Math.atan2(frame.tangent.x, frame.tangent.z);
     }
     const targetOffset = LANES[clamp(car.lane, 0, LANES.length - 1)];
-    const laneChangeResponse = car.kind === "truck" ? 0.95 : 1.35;
+    const laneChangeResponse = car.kind === "truck" ? LANE_CHANGE_RESPONSE_TRUCK : LANE_CHANGE_RESPONSE_CAR;
     car.lateralOffset = snap ? targetOffset : damp(car.lateralOffset, targetOffset, laneChangeResponse, dt);
     const position = this.world.offsetPoint(frame, car.lateralOffset, 0);
     car.x = position.x;
