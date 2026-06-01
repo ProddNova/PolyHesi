@@ -34,6 +34,7 @@ const GRAPHICS_TRAFFIC_LIMITS = [
 const LANE_CHANGE_SIGNAL_LEAD = 1.15;
 const LANE_CHANGE_SIGNAL_HOLD = 0.55;
 const LANE_CHANGE_FINISH_EPSILON = 0.16;
+const JUNCTION_TAKE_CHANCE_PER_SECOND = 0.34;
 const TRAFFIC_INDICATOR_MATERIAL = new THREE.MeshBasicMaterial({ color: 0xffb21a });
 
 export class TrafficSystem {
@@ -68,6 +69,7 @@ export class TrafficSystem {
           offset = SAFE_FRONT_SPAWN + rand(20, 180);
         }
         car.s = this.normalizeS(focusS + offset);
+        car.route = { type: "main", s: car.s };
         car.lane = lane;
         car.lateralOffset = LANES[lane];
         this.randomizeSpeed(car, settings);
@@ -84,6 +86,7 @@ export class TrafficSystem {
       const car = this.createVehicle();
       car.lane = Math.floor(rand(0, LANES.length));
       car.s = this.findOpenSpawnS(car.lane, focusS, "ahead");
+      car.route = { type: "main", s: car.s };
       car.lateralOffset = LANES[car.lane];
       this.randomizeSpeed(car, settings);
       this.scene.add(car.group);
@@ -107,7 +110,7 @@ export class TrafficSystem {
       car.laneChangeCooldown = Math.max(0, car.laneChangeCooldown - dt);
       this.updateLaneChangeSignal(car, dt);
       this.updateSpeed(car, dt, settings);
-      car.s = (car.s + car.speed * dt) % this.world.trackLength;
+      this.updateRouteProgress(car, dt);
       if (this.isOutsideActiveWindow(car.s, focusS)) {
         this.recycleCar(car, settings, focusS);
       }
@@ -151,6 +154,7 @@ export class TrafficSystem {
     const mode = delta < -RECYCLE_BEHIND ? "ahead" : "behind";
     car.lane = Math.floor(rand(0, LANES.length));
     car.s = this.findOpenSpawnS(car.lane, focusS, mode);
+    car.route = { type: "main", s: car.s };
     car.lateralOffset = LANES[car.lane];
     car.nearMissCooldown = 0.5;
     car.overtakeArmed = false;
@@ -158,6 +162,7 @@ export class TrafficSystem {
     car.signalTimer = 0;
     car.signalHoldTimer = 0;
     car.signalDirection = 0;
+    car.junctionCooldown = rand(1.5, 4.5);
     this.updateIndicators(car, 0);
     this.randomizeAppearance(car);
     this.randomizeSpeed(car, settings);
@@ -178,6 +183,52 @@ export class TrafficSystem {
     }
 
     car.speed = damp(car.speed, targetSpeed, blocker ? 4.2 : 0.9, dt);
+  }
+
+  updateRouteProgress(car, dt) {
+    car.junctionCooldown = Math.max(0, (car.junctionCooldown ?? 0) - dt);
+
+    if (car.route?.type === "branch") {
+      car.route.s += car.speed * dt * (car.route.direction >= 0 ? 1 : -1);
+      const exit = this.world.resolveBranchExit?.(car.route);
+      if (exit) {
+        car.s = this.normalizeS(exit.s + rand(4, 18));
+        car.route = { type: "main", s: car.s };
+        car.lane = this.pickLaneForJunctionSide(exit.side);
+        car.targetLane = null;
+        car.lateralOffset = LANES[car.lane];
+        car.junctionCooldown = rand(5, 10);
+      } else {
+        car.s = this.normalizeS(car.s + car.speed * dt);
+      }
+      return;
+    }
+
+    car.s = this.normalizeS(car.s + car.speed * dt);
+    car.route = { type: "main", s: car.s };
+    if (car.junctionCooldown > 0 || car.targetLane !== null || Math.abs(LANES[car.lane] - car.lateralOffset) > 0.34) {
+      return;
+    }
+
+    const branchChoice = this.world.findBranchChoiceForMainS?.(car.s, car.lane, Math.random);
+    if (!branchChoice || Math.random() > JUNCTION_TAKE_CHANCE_PER_SECOND * dt) {
+      return;
+    }
+
+    car.route = { type: "branch", ...branchChoice };
+    car.targetLane = null;
+    car.signalDirection = Math.sign(LANES[car.lane] || 0);
+    car.signalHoldTimer = LANE_CHANGE_SIGNAL_HOLD;
+    car.junctionCooldown = rand(6, 12);
+  }
+
+  pickLaneForJunctionSide(side) {
+    const sign = Math.sign(side || 1);
+    const lanes = LANES
+      .map((offset, lane) => ({ lane, score: Math.sign(offset || 0) === sign ? Math.abs(offset) : -1 }))
+      .filter((item) => item.score >= 0)
+      .sort((a, b) => b.score - a.score);
+    return lanes[0]?.lane ?? Math.floor(LANES.length * 0.5);
   }
 
   tryLaneChange(car) {
@@ -228,7 +279,7 @@ export class TrafficSystem {
 
   hasLaneOpening(car, lane) {
     for (const other of this.cars) {
-      if (other === car || other.lane !== lane) {
+      if (other === car || other.lane !== lane || this.getRouteKey(other) !== this.getRouteKey(car)) {
         continue;
       }
 
@@ -277,11 +328,12 @@ export class TrafficSystem {
   }
 
   findBlocker(car) {
+    const routeKey = this.getRouteKey(car);
     let closest = null;
     let closestDistance = Infinity;
 
     for (const other of this.cars) {
-      if (other === car || other.lane !== car.lane) {
+      if (other === car || other.lane !== car.lane || this.getRouteKey(other) !== routeKey) {
         continue;
       }
 
@@ -296,6 +348,10 @@ export class TrafficSystem {
     }
 
     return closest;
+  }
+
+  getRouteKey(car) {
+    return car.route?.type === "branch" ? `branch:${car.route.id}` : "main";
   }
 
   getTrafficBounds(car) {
@@ -351,7 +407,14 @@ export class TrafficSystem {
   }
 
   applyFrame(car, dt = 1 / 60, snap = false) {
-    const frame = this.world.getFrameAtDistance(car.s);
+    const frame = car.route?.type === "branch"
+      ? this.world.getBranchFrame?.(car.route.id, car.route.s) ?? this.world.getFrameAtDistance(car.s)
+      : this.world.getFrameAtDistance(car.s);
+    if (car.route?.type === "branch" && car.route.direction < 0) {
+      frame.tangent.multiplyScalar(-1);
+      frame.normal.multiplyScalar(-1);
+      frame.yaw = Math.atan2(frame.tangent.x, frame.tangent.z);
+    }
     const targetOffset = LANES[clamp(car.lane, 0, LANES.length - 1)];
     const laneChangeResponse = car.kind === "truck" ? 0.95 : 1.35;
     car.lateralOffset = snap ? targetOffset : damp(car.lateralOffset, targetOffset, laneChangeResponse, dt);
@@ -407,6 +470,7 @@ export class TrafficSystem {
       lane: 1,
       lateralOffset: LANES[1],
       s: 0,
+      route: { type: "main", s: 0 },
       x: 0,
       z: 0,
       yaw: 0,
@@ -421,6 +485,7 @@ export class TrafficSystem {
       signalHoldTimer: 0,
       signalDirection: 0,
       signalClock: rand(0, 1),
+      junctionCooldown: rand(0.5, 5.5),
       indicators: visual.indicators,
       overtakeArmed: false,
     };

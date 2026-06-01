@@ -2540,7 +2540,7 @@ export class Game {
       this.hud.flashNotice("Admin", "accesso riservato");
       return this.world.getRemodelRouteProfile();
     }
-    const applied = this.world.applyRemodelRouteProfile(this.world.getDefaultRouteProfile());
+    const applied = this.world.applyRemodelRouteProfile(this.world.getDefaultRouteProfile(), { preserveSpawnSegment: false });
     this.remodelOverlay.refresh(null);
     this.closeRemodelEditor();
     this.traffic.reset(this.settings);

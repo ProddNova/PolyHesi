@@ -224,6 +224,12 @@ export class HUD {
     this.mapContext = this.nodes.miniMapCanvas?.getContext("2d") ?? null;
     this.mapVisible = false;
     this.mapBounds = null;
+    this.mapView = {
+      zoom: 1,
+      panX: 0,
+      panZ: 0,
+    };
+    this.mapPanDrag = null;
     this.lastMapWorld = null;
     this.remodelMapMode = false;
     this.remodelMapTool = "route";
@@ -254,9 +260,15 @@ export class HUD {
     this.nodes.remodelPsxCarSelect?.addEventListener("change", () => this.onRemodelPsxCarSelect?.(this.nodes.remodelPsxCarSelect.value));
     this.nodes.remodelPsxSaveButton?.addEventListener("click", () => this.onRemodelPsxRigSave?.());
     this.nodes.miniMapCanvas?.addEventListener("pointerdown", (event) => this.handleMapPointerDown(event));
-    this.nodes.miniMapCanvas?.addEventListener("pointermove", (event) => this.handleRemodelMapPointerMove(event));
-    this.nodes.miniMapCanvas?.addEventListener("pointerup", (event) => this.handleRemodelMapPointerUp(event));
-    this.nodes.miniMapCanvas?.addEventListener("pointercancel", (event) => this.handleRemodelMapPointerUp(event));
+    this.nodes.miniMapCanvas?.addEventListener("pointermove", (event) => this.handleMapPointerMove(event));
+    this.nodes.miniMapCanvas?.addEventListener("pointerup", (event) => this.handleMapPointerUp(event));
+    this.nodes.miniMapCanvas?.addEventListener("pointercancel", (event) => this.handleMapPointerUp(event));
+    this.nodes.miniMapCanvas?.addEventListener("wheel", (event) => this.handleMapWheel(event), { passive: false });
+    this.nodes.miniMapCanvas?.addEventListener("contextmenu", (event) => {
+      if (this.mapVisible) {
+        event.preventDefault();
+      }
+    });
     for (const button of this.nodes.remodelMapToolButtons ?? []) {
       button.addEventListener("click", () => this.setRemodelMapTool(button.dataset.remodelMapTool));
     }
@@ -1131,6 +1143,7 @@ export class HUD {
     this.remodelRouteProfile = this.cloneRemodelRouteProfile(profile);
     this.remodelMapSelection = null;
     this.mapBounds = null;
+    this.mapPanDrag = null;
     this.syncRemodelMapToolbar();
   }
 
@@ -1198,6 +1211,14 @@ export class HUD {
 
     const hit = this.pickRemodelMapHandle(pointer.x, pointer.y, pointer.width, pointer.height);
     if (hit) {
+      if (this.isRemodelRoutePointLocked(hit)) {
+        this.remodelMapSelection = hit;
+        this.syncRemodelMapToolbar();
+        this.flashNotice?.("Spawn locked", "spawn road points stay fixed");
+        event.preventDefault();
+        event.stopPropagation();
+        return true;
+      }
       this.remodelMapSelection = hit;
       this.remodelMapDrag = hit;
       this.nodes.miniMapCanvas?.setPointerCapture?.(event.pointerId);
@@ -1236,6 +1257,92 @@ export class HUD {
     return true;
   }
 
+  handleMapPointerMove(event) {
+    if (this.handleMapPanPointerMove(event)) {
+      return;
+    }
+    this.handleRemodelMapPointerMove(event);
+  }
+
+  handleMapPointerUp(event) {
+    if (this.handleMapPanPointerUp(event)) {
+      return;
+    }
+    this.handleRemodelMapPointerUp(event);
+  }
+
+  handleMapPanPointerDown(event) {
+    if (!this.mapVisible || !this.nodes.miniMapCanvas || !this.mapBounds) {
+      return false;
+    }
+    const shouldPan = event.button === 1 || event.button === 2 || (this.remodelMapMode && event.button === 0 && event.shiftKey);
+    if (!shouldPan) {
+      return false;
+    }
+    const pointer = this.getMapPointer(event);
+    if (!pointer) {
+      return false;
+    }
+    this.mapPanDrag = {
+      pointerId: event.pointerId,
+      x: pointer.x,
+      y: pointer.y,
+      panX: this.mapView.panX,
+      panZ: this.mapView.panZ,
+      width: pointer.width,
+      height: pointer.height,
+    };
+    this.nodes.miniMapCanvas?.setPointerCapture?.(event.pointerId);
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
+  }
+
+  handleMapPanPointerMove(event) {
+    if (!this.mapPanDrag || !this.mapBounds) {
+      return false;
+    }
+    const pointer = this.getMapPointer(event);
+    if (!pointer) {
+      return false;
+    }
+    const layout = this.getMapLayout(this.mapPanDrag.width, this.mapPanDrag.height);
+    this.mapView.panX = this.mapPanDrag.panX - (pointer.x - this.mapPanDrag.x) / layout.scale;
+    this.mapView.panZ = this.mapPanDrag.panZ - (pointer.y - this.mapPanDrag.y) / layout.scale;
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
+  }
+
+  handleMapPanPointerUp(event) {
+    if (!this.mapPanDrag) {
+      return false;
+    }
+    this.nodes.miniMapCanvas?.releasePointerCapture?.(event.pointerId);
+    this.mapPanDrag = null;
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
+  }
+
+  handleMapWheel(event) {
+    if (!this.mapVisible || !this.mapBounds || !this.nodes.miniMapCanvas) {
+      return;
+    }
+    const pointer = this.getMapPointer(event);
+    if (!pointer) {
+      return;
+    }
+    const before = this.mapToWorld(pointer.x, pointer.y, pointer.width, pointer.height, { unclamped: true });
+    const zoomFactor = Math.exp(-event.deltaY * 0.0012);
+    this.mapView.zoom = THREE.MathUtils.clamp(this.mapView.zoom * zoomFactor, 0.22, 7);
+    const after = this.mapToWorld(pointer.x, pointer.y, pointer.width, pointer.height, { unclamped: true });
+    this.mapView.panX += before.x - after.x;
+    this.mapView.panZ += before.z - after.z;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   handleRemodelMapPointerMove(event) {
     if (!this.remodelMapMode || !this.remodelMapDrag || !this.remodelRouteProfile || !this.mapBounds) {
       return;
@@ -1262,6 +1369,9 @@ export class HUD {
   }
 
   moveRemodelMapHandle(handle, worldPoint) {
+    if (this.isRemodelRoutePointLocked(handle)) {
+      return;
+    }
     if (handle.type === "routePoint") {
       const point = this.remodelRouteProfile.controlPoints[handle.index];
       if (point) {
@@ -1354,6 +1464,10 @@ export class HUD {
   deleteSelectedRemodelMapFeature() {
     const selection = this.remodelMapSelection;
     if (!selection || !this.remodelRouteProfile) {
+      return;
+    }
+    if (this.isRemodelRoutePointLocked(selection)) {
+      this.flashNotice?.("Spawn locked", "spawn road points cannot be deleted");
       return;
     }
     if (selection.type === "routePoint" && this.remodelRouteProfile.controlPoints.length > 6) {
@@ -1521,6 +1635,10 @@ export class HUD {
   }
 
   handleMapPointerDown(event) {
+    if (this.handleMapPanPointerDown(event)) {
+      return;
+    }
+
     if (this.handleRemodelMapPointerDown(event)) {
       return;
     }
@@ -1572,6 +1690,56 @@ export class HUD {
     bounds.minZ -= padding;
     bounds.maxZ += padding;
     return bounds;
+  }
+
+  getSpawnLockedRoutePointIndices(profile = this.remodelRouteProfile) {
+    const points = profile?.controlPoints ?? [];
+    const startPose = this.lastMapWorld?.getStartPose?.();
+    if (!startPose || points.length < 2) {
+      return new Set();
+    }
+
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    for (let i = 0; i < points.length; i += 1) {
+      const a = points[i];
+      const b = points[(i + 1) % points.length];
+      const distance = this.distanceToSegment2D(startPose.x, startPose.z, { x: a.x, y: a.z }, { x: b.x, y: b.z });
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+
+    return new Set([bestIndex, (bestIndex + 1) % points.length]);
+  }
+
+  isRemodelRoutePointLocked(handle) {
+    return handle?.type === "routePoint" && this.getSpawnLockedRoutePointIndices().has(handle.index);
+  }
+
+  isWorldPointInTunnel(world, point) {
+    if (!world || !point) {
+      return false;
+    }
+    const nearest = world.getNearestRoadInfo?.(new THREE.Vector3(point.x, 0, point.z));
+    if (!nearest || nearest.isBranch) {
+      return false;
+    }
+    return this.isTrackDistanceInTunnels(nearest.s, this.remodelRouteProfile?.tunnels ?? world.tunnelRuns ?? [], world.trackLength);
+  }
+
+  isTrackDistanceInTunnels(s, tunnels, trackLength) {
+    if (!Number.isFinite(s) || !Number.isFinite(trackLength) || trackLength <= 0) {
+      return false;
+    }
+    return tunnels.some((tunnel) => {
+      const start = ((Number(tunnel.start) || 0) % trackLength + trackLength) % trackLength;
+      const length = Math.max(0, Number(tunnel.length) || 0);
+      const end = (start + length) % trackLength;
+      return length >= trackLength
+        || (start <= end ? s >= start && s <= end : s >= start || s <= end);
+    });
   }
 
   drawMapRoute(ctx, world, width, height) {
@@ -1645,16 +1813,20 @@ export class HUD {
 
     this.drawRemodelProfilePath(ctx, profile.controlPoints, true, width, height, {
       stroke: "rgba(120, 224, 193, 0.98)",
+      tunnelStroke: "rgba(116, 173, 255, 0.98)",
       width: 3,
+      world,
     });
     for (let i = 0; i < profile.branches.length; i += 1) {
       this.drawRemodelProfilePath(ctx, profile.branches[i].points, false, width, height, {
         stroke: "rgba(255, 190, 92, 0.95)",
+        tunnelStroke: "rgba(255, 190, 92, 0.95)",
         width: 3,
+        world: null,
       });
     }
 
-    ctx.strokeStyle = "rgba(120, 224, 193, 0.9)";
+    ctx.strokeStyle = "rgba(92, 153, 255, 0.92)";
     ctx.lineWidth = 8;
     for (const tunnel of profile.tunnels) {
       ctx.beginPath();
@@ -1681,38 +1853,62 @@ export class HUD {
       return;
     }
     ctx.save();
-    ctx.strokeStyle = style.stroke;
     ctx.lineWidth = style.width;
-    ctx.beginPath();
-    points.forEach((point, index) => {
-      const mapped = this.worldToMap(point, width, height);
-      if (index === 0) {
-        ctx.moveTo(mapped.x, mapped.y);
-      } else {
-        ctx.lineTo(mapped.x, mapped.y);
-      }
-    });
-    if (closed) {
-      ctx.closePath();
+    const limit = closed ? points.length : points.length - 1;
+    for (let i = 0; i < limit; i += 1) {
+      const a = points[i];
+      const b = points[(i + 1) % points.length];
+      const midpoint = { x: (a.x + b.x) * 0.5, z: (a.z + b.z) * 0.5 };
+      ctx.strokeStyle = style.world && this.isWorldPointInTunnel(style.world, midpoint)
+        ? style.tunnelStroke ?? style.stroke
+        : style.stroke;
+      const mappedA = this.worldToMap(a, width, height);
+      const mappedB = this.worldToMap(b, width, height);
+      ctx.beginPath();
+      ctx.moveTo(mappedA.x, mappedA.y);
+      ctx.lineTo(mappedB.x, mappedB.y);
+      ctx.stroke();
     }
-    ctx.stroke();
+    if (points.length === 1) {
+      const mapped = this.worldToMap(points[0], width, height);
+      ctx.beginPath();
+      ctx.arc(mapped.x, mapped.y, 1, 0, Math.PI * 2);
+      ctx.fillStyle = style.stroke;
+      ctx.fill();
+    }
     ctx.restore();
   }
 
   drawRemodelMapHandles(ctx, profile, world, width, height) {
-    const drawHandle = (point, color, selected = false, radius = 6) => {
+    const lockedRoutePoints = this.getSpawnLockedRoutePointIndices(profile);
+    const drawHandle = (point, color, selected = false, radius = 6, locked = false) => {
       ctx.beginPath();
       ctx.arc(point.x, point.y, selected ? radius + 3 : radius, 0, Math.PI * 2);
-      ctx.fillStyle = selected ? "#ffffff" : color;
+      ctx.fillStyle = locked ? "#46515b" : selected ? "#ffffff" : color;
       ctx.fill();
-      ctx.lineWidth = selected ? 3 : 2;
-      ctx.strokeStyle = selected ? color : "rgba(8, 10, 11, 0.86)";
+      ctx.lineWidth = locked ? 3 : selected ? 3 : 2;
+      ctx.strokeStyle = locked ? "#f1d36b" : selected ? color : "rgba(8, 10, 11, 0.86)";
       ctx.stroke();
+      if (locked) {
+        ctx.beginPath();
+        ctx.moveTo(point.x - radius * 0.55, point.y);
+        ctx.lineTo(point.x + radius * 0.55, point.y);
+        ctx.strokeStyle = "#f1d36b";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
     };
 
     profile.controlPoints.forEach((point, index) => {
       const mapped = this.worldToMap(point, width, height);
-      drawHandle(mapped, "#78e0c1", this.isRemodelMapSelection("routePoint", { index }));
+      const inTunnel = this.isWorldPointInTunnel(world, point);
+      drawHandle(
+        mapped,
+        inTunnel ? "#74adff" : "#78e0c1",
+        this.isRemodelMapSelection("routePoint", { index }),
+        inTunnel ? 6.5 : 6,
+        lockedRoutePoints.has(index),
+      );
     });
 
     profile.branches.forEach((branch, branchIndex) => {
@@ -1744,10 +1940,10 @@ export class HUD {
     ctx.fillRect(20, height - 76, Math.min(520, width - 40), 56);
     ctx.fillStyle = "rgba(242, 239, 228, 0.88)";
     ctx.font = "800 12px Inter, sans-serif";
-    ctx.fillText("Remodel map: drag handles. Route click adds curve points. Tunnel click adds galleries. Junction click creates/extends branches.", 34, height - 48);
+    ctx.fillText("Remodel map: drag handles. Spawn segment is locked. Wheel zooms, right/middle or Shift-drag pans.", 34, height - 48);
     ctx.fillStyle = "rgba(226, 221, 206, 0.64)";
     ctx.font = "700 10px Inter, sans-serif";
-    ctx.fillText("Delete removes selected handle/branch/tunnel. Save persists to localStorage.", 34, height - 28);
+    ctx.fillText("Tunnel handles/segments are blue. Junction click creates/extends branches. Save persists to localStorage.", 34, height - 28);
     ctx.restore();
   }
 
@@ -1759,10 +1955,10 @@ export class HUD {
     };
   }
 
-  mapToWorld(x, y, width, height) {
+  mapToWorld(x, y, width, height, options = {}) {
     const { bounds, mapWidth, mapHeight, offsetX, offsetY, scale } = this.getMapLayout(width, height);
-    const clampedX = THREE.MathUtils.clamp(x, offsetX, offsetX + mapWidth);
-    const clampedY = THREE.MathUtils.clamp(y, offsetY, offsetY + mapHeight);
+    const clampedX = options.unclamped ? x : THREE.MathUtils.clamp(x, offsetX, offsetX + mapWidth);
+    const clampedY = options.unclamped ? y : THREE.MathUtils.clamp(y, offsetY, offsetY + mapHeight);
     return {
       x: bounds.minX + (clampedX - offsetX) / scale,
       z: bounds.minZ + (clampedY - offsetY) / scale,
@@ -1771,13 +1967,24 @@ export class HUD {
 
   getMapLayout(width, height) {
     const bounds = this.mapBounds;
-    const spanX = Math.max(1, bounds.maxX - bounds.minX);
-    const spanZ = Math.max(1, bounds.maxZ - bounds.minZ);
+    const zoom = THREE.MathUtils.clamp(this.mapView?.zoom ?? 1, 0.22, 7);
+    const baseSpanX = Math.max(1, bounds.maxX - bounds.minX);
+    const baseSpanZ = Math.max(1, bounds.maxZ - bounds.minZ);
+    const centerX = (bounds.minX + bounds.maxX) * 0.5 + (this.mapView?.panX ?? 0);
+    const centerZ = (bounds.minZ + bounds.maxZ) * 0.5 + (this.mapView?.panZ ?? 0);
+    const spanX = baseSpanX / zoom;
+    const spanZ = baseSpanZ / zoom;
+    const viewBounds = {
+      minX: centerX - spanX * 0.5,
+      maxX: centerX + spanX * 0.5,
+      minZ: centerZ - spanZ * 0.5,
+      maxZ: centerZ + spanZ * 0.5,
+    };
     const scale = Math.min((width - 36) / spanX, (height - 36) / spanZ);
     const mapWidth = spanX * scale;
     const mapHeight = spanZ * scale;
     return {
-      bounds,
+      bounds: viewBounds,
       scale,
       mapWidth,
       mapHeight,

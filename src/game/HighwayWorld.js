@@ -23,6 +23,10 @@ const REMODEL_ROOT_NAMES = new Set([
 ]);
 const MIN_REMODEL_DIMENSION = 0.01;
 const GUARDRAIL_SEGMENT_LENGTH = 18.8;
+const JUNCTION_OPENING_HALF_LENGTH = 54;
+const JUNCTION_BRANCH_CLEARANCE = 48;
+const JUNCTION_ATTACHMENT_MAX_DISTANCE = 165;
+const JUNCTION_TRAFFIC_WINDOW = 84;
 const GUARDRAIL_MODEL = {
   upper: { width: 0.18, height: 0.18, depth: GUARDRAIL_SEGMENT_LENGTH, y: 0.88 },
   lower: { width: 0.14, height: 0.16, depth: GUARDRAIL_SEGMENT_LENGTH, y: 0.48 },
@@ -540,13 +544,69 @@ export class HighwayWorld {
     };
   }
 
-  applyRemodelRouteProfile(profile, { rebuild = true } = {}) {
-    this.routeProfile = this.sanitizeRouteProfile(profile);
+  applyRemodelRouteProfile(profile, { rebuild = true, preserveSpawnSegment = true } = {}) {
+    const nextProfile = this.sanitizeRouteProfile(profile);
+    if (preserveSpawnSegment) {
+      this.preserveSpawnSegmentControlPoints(nextProfile);
+    }
+    this.routeProfile = nextProfile;
     this.tunnelRuns = this.routeProfile.tunnels.map((run) => ({ ...run }));
     if (rebuild) {
       this.rebuildRoadGeometry();
     }
     return this.getRemodelRouteProfile();
+  }
+
+  preserveSpawnSegmentControlPoints(nextProfile) {
+    const currentPoints = this.routeProfile?.controlPoints ?? [];
+    const currentLockedPoints = this.getSpawnLockedControlPointIndices(this.routeProfile)
+      .map((index) => currentPoints[index])
+      .filter(Boolean);
+    const nextLocked = this.getSpawnLockedControlPointIndices(nextProfile);
+    for (const index of nextLocked) {
+      const point = nextProfile.controlPoints[index];
+      if (!point || !currentLockedPoints.length) {
+        continue;
+      }
+      const replacement = currentLockedPoints
+        .map((lockedPoint) => ({
+          point: lockedPoint,
+          distance: Math.hypot(point.x - lockedPoint.x, point.z - lockedPoint.z),
+        }))
+        .sort((a, b) => a.distance - b.distance)[0]?.point;
+      if (replacement) {
+        nextProfile.controlPoints[index] = { ...replacement };
+      }
+    }
+  }
+
+  getSpawnLockedControlPointIndices(profile = this.routeProfile) {
+    const points = profile?.controlPoints ?? [];
+    const start = this.getStartPose();
+    if (!start || points.length < 2) {
+      return [];
+    }
+
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    for (let i = 0; i < points.length; i += 1) {
+      const a = points[i];
+      const b = points[(i + 1) % points.length];
+      const distance = this.distancePointToRouteSegment2D(start.x, start.z, a, b);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    return [bestIndex, (bestIndex + 1) % points.length];
+  }
+
+  distancePointToRouteSegment2D(x, z, a, b) {
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const lengthSq = dx * dx + dz * dz || 1;
+    const t = clamp(((x - a.x) * dx + (z - a.z) * dz) / lengthSq, 0, 1);
+    return Math.hypot(x - (a.x + dx * t), z - (a.z + dz * t));
   }
 
   rebuildRoadGeometry() {
@@ -578,6 +638,8 @@ export class HighwayWorld {
     const mainSamples = [];
     for (let i = 0; i < ROAD_SAMPLE_COUNT; i += 1) {
       const sample = this.getFrameAtDistance((i / ROAD_SAMPLE_COUNT) * this.trackLength);
+      sample.routeId = "main";
+      sample.isBranch = false;
       mainSamples.push(sample);
       this.roadSamples.push(sample);
     }
@@ -599,17 +661,47 @@ export class HighwayWorld {
       curve.arcLengthDivisions = 1024;
       curve.updateArcLengths();
       const length = curve.getLength();
+      const startAttachment = this.createBranchAttachment(branch, curve, length, true);
+      const endAttachment = this.createBranchAttachment(branch, curve, length, false);
       const samples = [];
       const sampleCount = Math.max(60, Math.min(260, Math.ceil(length / 34)));
       for (let i = 0; i <= sampleCount; i += 1) {
         const sample = this.getFrameOnCurve(curve, length, (i / sampleCount) * length, false);
         sample.isBranch = true;
+        sample.routeId = branch.id;
+        sample.routeDistance = (i / sampleCount) * length;
         samples.push(sample);
         this.roadSamples.push(sample);
       }
-      this.branchRoutes.push({ id: branch.id, curve, length, samples });
+      this.branchRoutes.push({ id: branch.id, curve, length, samples, startAttachment, endAttachment });
       this.mapRoutes.push({ samples, closed: false });
     }
+  }
+
+  createBranchAttachment(branch, curve, length, atStart = true) {
+    const points = branch.points ?? [];
+    const endpoint = points[atStart ? 0 : points.length - 1];
+    const neighbor = points[atStart ? 1 : points.length - 2];
+    if (!endpoint || !neighbor) {
+      return null;
+    }
+
+    const nearest = this.getNearestMainRoadInfo(new THREE.Vector3(endpoint.x, 0, endpoint.z));
+    if (!nearest || nearest.distance > JUNCTION_ATTACHMENT_MAX_DISTANCE) {
+      return null;
+    }
+
+    const branchDirection = new THREE.Vector3(neighbor.x - endpoint.x, 0, neighbor.z - endpoint.z);
+    if (!atStart) {
+      branchDirection.multiplyScalar(-1);
+    }
+    const sideProjection = branchDirection.dot(nearest.normal);
+    const side = Math.sign(Math.abs(nearest.lateral) > 1 ? nearest.lateral : sideProjection) || 1;
+    return {
+      mainS: nearest.s,
+      side,
+      routeDistance: atStart ? 0 : length,
+    };
   }
 
   createEnvironment() {
@@ -813,7 +905,7 @@ export class HighwayWorld {
     for (let s = 0; s < this.trackLength; s += 18) {
       const frame = this.getFrameAtDistance(s);
       for (const side of [-1, 1]) {
-        if (this.isServiceOpening(frame.s, side)) {
+        if (this.isServiceOpening(frame.s, side) || this.isJunctionOpening(frame.s, side)) {
           continue;
         }
 
@@ -919,6 +1011,7 @@ export class HighwayWorld {
       parent.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 4.8, HIGHWAY_DECK_ELEVATION, this.materials.concrete, 260, route.curve, route.length, false));
       parent.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 4.2, ROAD_SHOULDER_ELEVATION, this.materials.shoulder, 260, route.curve, route.length, false));
       parent.add(this.createRibbonMesh(ROAD_HALF_WIDTH, ROAD_SURFACE_ELEVATION, this.materials.asphalt, 260, route.curve, route.length, false));
+      this.addJunctionFlares(parent, route);
 
       for (const laneOffset of [-2, 2]) {
         for (let s = 12; s < route.length - 12; s += 30) {
@@ -938,9 +1031,85 @@ export class HighwayWorld {
       for (let s = 0; s < route.length; s += 15) {
         const frame = this.getFrameOnCurve(route.curve, route.length, s, false);
         for (const side of [-1, 1]) {
+          if (this.isBranchJunctionOpening(route, s)) {
+            continue;
+          }
           this.addGuardrailSegment(parent, frame, side, 14.5);
         }
       }
+    }
+  }
+
+  isBranchJunctionOpening(route, s) {
+    return (route.startAttachment && s < JUNCTION_BRANCH_CLEARANCE)
+      || (route.endAttachment && s > route.length - JUNCTION_BRANCH_CLEARANCE);
+  }
+
+  addJunctionFlares(parent, route) {
+    for (const attachment of [route.startAttachment, route.endAttachment]) {
+      if (!attachment) {
+        continue;
+      }
+      const mainFrame = this.getFrameAtDistance(attachment.mainS);
+      const branchFrame = this.getFrameOnCurve(route.curve, route.length, attachment.routeDistance, false);
+      const side = attachment.side;
+      const branchDir = attachment.routeDistance <= 0 ? 1 : -1;
+      const branchNear = this.getFrameOnCurve(
+        route.curve,
+        route.length,
+        attachment.routeDistance + branchDir * Math.min(42, route.length * 0.18),
+        false,
+      );
+
+      this.addJunctionTransitionDeck(parent, mainFrame, branchFrame, branchNear, side);
+      this.addCurvedJunctionGuardrail(parent, mainFrame, branchNear, side);
+    }
+  }
+
+  addJunctionTransitionDeck(parent, mainFrame, branchFrame, branchNear, side) {
+    const center = new THREE.Vector3()
+      .copy(mainFrame.center)
+      .add(branchFrame.center)
+      .add(branchNear.center)
+      .multiplyScalar(1 / 3);
+    const yaw = Math.atan2(
+      branchNear.center.x - mainFrame.center.x,
+      branchNear.center.z - mainFrame.center.z,
+    );
+    const length = Math.max(34, mainFrame.center.distanceTo(branchNear.center) * 0.9);
+    this.addOrientedBox(parent, ROAD_WIDTH + 9.2, 0.08, length, this.materials.concrete, new THREE.Vector3(center.x, HIGHWAY_DECK_ELEVATION + 0.035, center.z), yaw);
+    this.addOrientedBox(parent, ROAD_WIDTH + 5.2, 0.07, length * 0.86, this.materials.shoulder, new THREE.Vector3(center.x, ROAD_SHOULDER_ELEVATION + 0.01, center.z), yaw);
+    this.addOrientedBox(parent, ROAD_WIDTH + 0.4, 0.055, length * 0.72, this.materials.asphalt, new THREE.Vector3(center.x, ROAD_SURFACE_ELEVATION + 0.014, center.z), yaw);
+  }
+
+  addCurvedJunctionGuardrail(parent, mainFrame, branchFrame, side) {
+    const anchorA = this.offsetAlong(mainFrame, side * RAIL_OFFSET, -20, GUARDRAIL_MODEL.upper.y);
+    const anchorB = this.offsetPoint(branchFrame, -side * RAIL_OFFSET, GUARDRAIL_MODEL.upper.y);
+    const mid = new THREE.Vector3()
+      .copy(this.offsetPoint(mainFrame, side * (RAIL_OFFSET + 6.5), GUARDRAIL_MODEL.upper.y))
+      .lerp(this.offsetPoint(branchFrame, -side * (RAIL_OFFSET + 3.2), GUARDRAIL_MODEL.upper.y), 0.54);
+    const previous = anchorA.clone();
+    const steps = 5;
+    for (let i = 1; i <= steps; i += 1) {
+      const t = i / steps;
+      const a = anchorA.clone().lerp(mid, t);
+      const b = mid.clone().lerp(anchorB, t);
+      const point = a.lerp(b, t);
+      const dx = point.x - previous.x;
+      const dz = point.z - previous.z;
+      const length = Math.max(4, Math.hypot(dx, dz));
+      const yaw = Math.atan2(dx, dz);
+      this.addOrientedBox(parent, GUARDRAIL_MODEL.upper.width, GUARDRAIL_MODEL.upper.height, length, this.materials.rail, point.clone(), yaw);
+      this.addOrientedBox(
+        parent,
+        GUARDRAIL_MODEL.lower.width,
+        GUARDRAIL_MODEL.lower.height,
+        length,
+        this.materials.railDark,
+        new THREE.Vector3(point.x, GUARDRAIL_MODEL.lower.y, point.z),
+        yaw,
+      );
+      previous.copy(point);
     }
   }
 
@@ -1647,6 +1816,9 @@ export class HighwayWorld {
     const yaw = frame.yaw + cityRange(seed + 7.9, -0.075, 0.075);
     const paletteIndex = Math.floor(cityNoise(seed + 8.3) * CITY_FACADE_PALETTE.length) % CITY_FACADE_PALETTE.length;
     const bodyHeight = height * cityRange(seed + 9.7, towerChance ? 0.96 : 0.88, towerChance ? 1.08 : 1.04);
+    if (this.isBuildingNearBranchRoad(base, Math.max(width, depth) * 0.58 + 30 + rowIndex * 1.5)) {
+      return;
+    }
     const footprint = {
       side,
       s: (s + forward + this.trackLength) % this.trackLength,
@@ -1867,6 +2039,23 @@ export class HighwayWorld {
     return true;
   }
 
+  isBuildingNearBranchRoad(position, clearance = 54) {
+    if (!this.branchRoutes?.length || !position) {
+      return false;
+    }
+    const clearanceSq = clearance * clearance;
+    for (const route of this.branchRoutes) {
+      for (const sample of route.samples ?? []) {
+        const dx = position.x - sample.center.x;
+        const dz = position.z - sample.center.z;
+        if (dx * dx + dz * dz < clearanceSq) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   offsetLocalPoint(origin, yaw, localX, localZ, y = origin.y) {
     const sin = Math.sin(yaw);
     const cos = Math.cos(yaw);
@@ -1881,9 +2070,13 @@ export class HighwayWorld {
     const type = BUILDING_TYPES.find((item) => item.id === placement.type) ?? BUILDING_TYPES[0];
     const scale = placement.scale ?? 1;
     const width = type.width * scale;
+    const depth = type.depth * scale;
     const lateral = ROAD_HALF_WIDTH + 12 + (placement.setback ?? 14) + width * 0.5;
     const frame = this.getFrameAtDistance(placement.s);
     const position = this.offsetAlong(frame, lateral * placement.side, placement.forward ?? 0, 0);
+    if (this.isBuildingNearBranchRoad(position, Math.max(width, depth) * 0.58 + 34)) {
+      return;
+    }
     const group = new THREE.Group();
     group.name = `Building_${type.id}_${Math.round(placement.s)}`;
     group.position.copy(position);
@@ -2998,6 +3191,26 @@ export class HighwayWorld {
     };
   }
 
+  getNearestMainRoadInfo(position) {
+    let best = null;
+    let bestDistanceSq = Infinity;
+
+    for (const sample of this.roadSamples) {
+      if (sample.isBranch) {
+        continue;
+      }
+      const dx = position.x - sample.center.x;
+      const dz = position.z - sample.center.z;
+      const distanceSq = dx * dx + dz * dz;
+      if (distanceSq < bestDistanceSq) {
+        bestDistanceSq = distanceSq;
+        best = this.projectRoadInfo(sample, position, Math.sqrt(distanceSq));
+      }
+    }
+
+    return best;
+  }
+
   getNearestRoadInfo(position) {
     let best = null;
     let bestDistanceSq = Infinity;
@@ -3013,6 +3226,81 @@ export class HighwayWorld {
     }
 
     return best;
+  }
+
+  getBranchRoute(id) {
+    return this.branchRoutes.find((route) => route.id === id) ?? null;
+  }
+
+  getBranchFrame(routeOrId, distance) {
+    const route = typeof routeOrId === "string" ? this.getBranchRoute(routeOrId) : routeOrId;
+    if (!route) {
+      return this.getFrameAtDistance(distance);
+    }
+    const frame = this.getFrameOnCurve(route.curve, route.length, distance, false);
+    frame.isBranch = true;
+    frame.routeId = route.id;
+    frame.routeDistance = clamp(distance, 0, route.length);
+    return frame;
+  }
+
+  getTrafficFrame(routeState = null) {
+    if (routeState?.type === "branch") {
+      return this.getBranchFrame(routeState.id, routeState.s);
+    }
+    return this.getFrameAtDistance(routeState?.s ?? 0);
+  }
+
+  findBranchChoiceForMainS(s, lane, random = Math.random) {
+    const laneOffset = LANES[clamp(lane, 0, LANES.length - 1)];
+    const laneSide = Math.sign(laneOffset || 0);
+    if (laneSide === 0) {
+      return null;
+    }
+
+    const candidates = [];
+    for (const route of this.branchRoutes) {
+      for (const attachmentName of ["startAttachment", "endAttachment"]) {
+        const attachment = route[attachmentName];
+        if (!attachment || Math.sign(attachment.side) !== laneSide) {
+          continue;
+        }
+        const distance = this.loopDistance(s, attachment.mainS);
+        if (distance <= JUNCTION_TRAFFIC_WINDOW) {
+          candidates.push({ route, attachment, distance });
+        }
+      }
+    }
+
+    if (!candidates.length) {
+      return null;
+    }
+
+    candidates.sort((a, b) => a.distance - b.distance);
+    const picked = candidates[Math.floor(random() * Math.min(candidates.length, 2))];
+    const startAtEnd = picked.attachment.routeDistance > picked.route.length * 0.5;
+    return {
+      id: picked.route.id,
+      s: picked.attachment.routeDistance,
+      direction: startAtEnd ? -1 : 1,
+    };
+  }
+
+  resolveBranchExit(routeState) {
+    const route = this.getBranchRoute(routeState?.id);
+    if (!route) {
+      return null;
+    }
+    const exitingAtEnd = routeState.direction >= 0
+      ? routeState.s >= route.length
+      : routeState.s <= 0;
+    if (!exitingAtEnd) {
+      return null;
+    }
+    const attachment = routeState.direction >= 0 ? route.endAttachment : route.startAttachment;
+    return attachment
+      ? { s: attachment.mainS, side: attachment.side }
+      : null;
   }
 
   projectRoadInfo(sample, position, distance = null) {
@@ -3048,7 +3336,7 @@ export class HighwayWorld {
       const limit = DRIVE_LIMIT;
       const over = Math.abs(road.lateral) - limit;
       const side = Math.sign(road.lateral || 1);
-      if (over > 0 && !this.isEntranceGap(road.s, side)) {
+      if (over > 0 && !this.isEntranceGap(road.s, side) && !this.isJunctionOpening(road.s, side)) {
         const normal = {
           x: -road.normal.x * side,
           z: -road.normal.z * side,
@@ -3174,6 +3462,20 @@ export class HighwayWorld {
 
   isServiceOpening(s, side) {
     return side < 0 && (s < 78 || s > this.trackLength - 32);
+  }
+
+  isJunctionOpening(s, side) {
+    return this.branchRoutes.some((route) => {
+      for (const attachment of [route.startAttachment, route.endAttachment]) {
+        if (!attachment || Math.sign(attachment.side) !== Math.sign(side)) {
+          continue;
+        }
+        if (this.loopDistance(s, attachment.mainS) <= JUNCTION_OPENING_HALF_LENGTH) {
+          return true;
+        }
+      }
+      return false;
+    });
   }
 
   isInMeetArea(position) {
