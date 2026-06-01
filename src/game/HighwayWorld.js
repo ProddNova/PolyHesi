@@ -418,12 +418,6 @@ export class HighwayWorld {
         flatShading: true,
       }),
       streetlightGlow: new THREE.MeshBasicMaterial({ color: 0xffd887 }),
-      streetlightPool: new THREE.MeshBasicMaterial({
-        color: 0xffc45f,
-        transparent: true,
-        opacity: 0.22,
-        depthWrite: false,
-      }),
       aviationBeacon: new THREE.MeshBasicMaterial({ color: 0xff1717 }),
       remodelCreated: new THREE.MeshStandardMaterial({
         color: 0x78e0c1,
@@ -443,7 +437,6 @@ export class HighwayWorld {
       material.name = name;
     }
     materials.streetlightGlow.toneMapped = false;
-    materials.streetlightPool.toneMapped = false;
     materials.aviationBeacon.toneMapped = false;
 
     return materials;
@@ -901,8 +894,7 @@ export class HighwayWorld {
     const roadLightStep = this.ultraGraphics ? 1 : profile.roadLightStep;
     this.roadLightStep = roadLightStep;
     for (const light of this.roadLights) {
-      const index = light.userData.qualityIndex ?? 0;
-      light.userData.qualityAllowed = Number.isFinite(roadLightStep) && index % roadLightStep === 0;
+      light.userData.qualityAllowed = true;
       light.visible = false;
       if (!light.visible) {
         light.intensity = 0;
@@ -1694,7 +1686,6 @@ export class HighwayWorld {
     const poles = [];
     const arms = [];
     const lamps = [];
-    const lightPools = [];
     const lightGroup = new THREE.Group();
     lightGroup.name = "RoadStreetLightEmitters";
     lightGroup.userData.remodelIgnore = true;
@@ -1729,20 +1720,13 @@ export class HighwayWorld {
           scale: { x: 0.44, y: 0.16, z: 0.34 },
           remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight lamp"),
         });
-        lightPools.push({
-          position: this.offsetPoint(frame, side * (ROAD_HALF_WIDTH - 1.1), ROAD_MARKING_ELEVATION + 0.002),
-          yaw: frame.yaw,
-          s,
-          scale: { x: 3.4, y: 0.018, z: 9.2 },
-          remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight pool"),
-        });
         const light = new THREE.PointLight(0xffd887, 0, 132, 1.02);
         light.position.copy(lampPosition);
         light.position.y -= 0.52;
         light.visible = false;
         light.userData.baseIntensity = 15.5;
         light.userData.qualityIndex = this.roadLights.length;
-        light.userData.qualityAllowed = false;
+        light.userData.qualityAllowed = true;
         light.userData.s = s;
         this.roadLights.push(light);
         lightGroup.add(light);
@@ -1752,7 +1736,6 @@ export class HighwayWorld {
     details.add(this.createChunkedScaledInstancedBoxes(poles, this.materials.streetlightPole, false, false));
     details.add(this.createChunkedScaledInstancedBoxes(arms, this.materials.streetlightPole, false, false));
     details.add(this.createChunkedScaledInstancedBoxes(lamps, this.materials.streetlightGlow, false, false));
-    details.add(this.createChunkedScaledInstancedBoxes(lightPools, this.materials.streetlightPool, false, false));
     details.add(lightGroup);
     parent.add(details);
   }
@@ -2150,12 +2133,16 @@ export class HighwayWorld {
     }
 
     if (bodyHeight > 70 && cityNoise(seed + 31.4) > 0.28) {
-      const beaconCount = cityNoise(seed + 32.1) > 0.62 ? 2 : 1;
-      for (let i = 0; i < beaconCount; i += 1) {
-        const localX = beaconCount === 1
-          ? cityRange(seed + 33.2, -width * 0.18, width * 0.18)
-          : (i === 0 ? -1 : 1) * width * cityRange(seed + 34.2 + i, 0.24, 0.38);
-        const localZ = cityRange(seed + 35.7 + i, -depth * 0.24, depth * 0.24);
+      const beaconInset = 1.35;
+      const beaconX = Math.max(0.8, width * 0.5 - beaconInset);
+      const beaconZ = Math.max(0.8, depth * 0.5 - beaconInset);
+      const beaconCorners = [
+        [-beaconX, -beaconZ],
+        [beaconX, -beaconZ],
+        [-beaconX, beaconZ],
+        [beaconX, beaconZ],
+      ];
+      for (const [localX, localZ] of beaconCorners) {
         roofBeacons.push({
           position: this.offsetLocalPoint(base, yaw, localX, localZ, bodyHeight + 1.18),
           yaw,
