@@ -67,6 +67,8 @@ const BUILDING_TYPES = [
   { id: "concreteTower", width: 18, depth: 15, height: 86, color: 0x777d7c, roof: 0x282d2d, floors: 19, columns: 4 },
   { id: "twin", width: 30, depth: 17, height: 58, color: 0x7f8990, roof: 0x293038, floors: 13, columns: 3 },
   { id: "parking", width: 34, depth: 24, height: 30, color: 0x777878, roof: 0x2d3032, floors: 7, columns: 6 },
+  { id: "shutokuSpire", width: 22, depth: 20, height: 168, color: 0x56636c, roof: 0x20272d, floors: 39, columns: 7 },
+  { id: "megaOffice", width: 34, depth: 28, height: 142, color: 0x64717a, roof: 0x252d33, floors: 32, columns: 9 },
 ];
 
 const CITY_BUILDING_PLACEMENTS = [
@@ -76,42 +78,50 @@ const CITY_BUILDING_PLACEMENTS = [
   { s: 186, side: -1, type: "mall", scale: 0.74, setback: 10, yaw: -0.05, forward: 14 },
   { s: 720, side: 1, type: "slab", scale: 1.0, setback: 12, yaw: 0.03 },
   { s: 1440, side: -1, type: "office", scale: 0.92, setback: 16, yaw: -0.05 },
+  { s: 1740, side: 1, type: "shutokuSpire", scale: 0.98, setback: 46, yaw: 0.02, forward: 18 },
   { s: 2180, side: 1, type: "warehouse", scale: 1.04, setback: 18, yaw: 0.0 },
   { s: 3160, side: -1, type: "corner", scale: 0.96, setback: 12, yaw: 0.08 },
   { s: 4520, side: 1, type: "thinTower", scale: 0.9, setback: 19, yaw: -0.04 },
   { s: 5620, side: -1, type: "mall", scale: 0.88, setback: 20, yaw: 0.04 },
   { s: 7040, side: 1, type: "stepped", scale: 0.98, setback: 13, yaw: -0.07 },
   { s: 8420, side: -1, type: "concreteTower", scale: 0.86, setback: 18, yaw: 0.02 },
+  { s: 9060, side: 1, type: "megaOffice", scale: 1.05, setback: 52, yaw: -0.03, forward: -22 },
   { s: 9800, side: 1, type: "twin", scale: 0.96, setback: 16, yaw: 0.06 },
   { s: 11180, side: -1, type: "parking", scale: 1.02, setback: 16, yaw: -0.03 },
   { s: 12620, side: 1, type: "office", scale: 1.06, setback: 18, yaw: 0.0 },
   { s: 13980, side: -1, type: "slab", scale: 0.94, setback: 13, yaw: 0.07 },
   { s: 15440, side: 1, type: "corner", scale: 1.04, setback: 12, yaw: -0.02 },
+  { s: 16140, side: -1, type: "shutokuSpire", scale: 1.12, setback: 58, yaw: 0.04, forward: 24 },
   { s: 16820, side: -1, type: "warehouse", scale: 0.92, setback: 21, yaw: 0.03 },
   { s: 18160, side: 1, type: "concreteTower", scale: 0.82, setback: 19, yaw: -0.06 },
   { s: 19420, side: -1, type: "thinTower", scale: 1.0, setback: 17, yaw: 0.04 },
   { s: 20760, side: 1, type: "mall", scale: 0.94, setback: 22, yaw: -0.03 },
   { s: 22140, side: -1, type: "twin", scale: 0.9, setback: 15, yaw: 0.02 },
+  { s: 22960, side: 1, type: "megaOffice", scale: 0.96, setback: 48, yaw: 0.06, forward: 16 },
   { s: 23820, side: 1, type: "parking", scale: 0.92, setback: 14, yaw: 0.07 },
   { s: 25280, side: -1, type: "stepped", scale: 1.08, setback: 13, yaw: -0.08 },
   { s: 26860, side: 1, type: "slab", scale: 0.88, setback: 15, yaw: 0.03 },
   { s: 28220, side: -1, type: "office", scale: 0.98, setback: 18, yaw: -0.01 },
   { s: 29680, side: 1, type: "warehouse", scale: 0.86, setback: 23, yaw: 0.05 },
+  { s: 30320, side: -1, type: "shutokuSpire", scale: 0.9, setback: 54, yaw: -0.02, forward: -18 },
   { s: 31120, side: -1, type: "corner", scale: 0.9, setback: 14, yaw: -0.04 },
   { s: 32640, side: 1, type: "thinTower", scale: 0.88, setback: 20, yaw: 0.08 },
   { s: 34180, side: -1, type: "mall", scale: 1.0, setback: 21, yaw: 0.0 },
   { s: 35720, side: 1, type: "stepped", scale: 0.92, setback: 14, yaw: -0.05 },
   { s: 37280, side: -1, type: "concreteTower", scale: 0.92, setback: 20, yaw: 0.03 },
+  { s: 37980, side: 1, type: "megaOffice", scale: 1.14, setback: 58, yaw: -0.05, forward: 20 },
   { s: 38860, side: 1, type: "twin", scale: 1.04, setback: 16, yaw: -0.02 },
   { s: 40240, side: -1, type: "parking", scale: 0.94, setback: 15, yaw: 0.05 },
   { s: 41820, side: 1, type: "office", scale: 0.9, setback: 19, yaw: -0.08 },
   { s: 43360, side: -1, type: "slab", scale: 1.08, setback: 12, yaw: 0.01 },
   { s: 44820, side: 1, type: "corner", scale: 0.98, setback: 14, yaw: 0.04 },
+  { s: 45540, side: -1, type: "shutokuSpire", scale: 1.02, setback: 50, yaw: 0.03, forward: 26 },
   { s: 46360, side: -1, type: "warehouse", scale: 1.0, setback: 22, yaw: -0.02 },
   { s: 47980, side: 1, type: "concreteTower", scale: 0.8, setback: 20, yaw: 0.06 },
   { s: 49360, side: -1, type: "thinTower", scale: 0.94, setback: 18, yaw: -0.03 },
   { s: 50840, side: 1, type: "mall", scale: 0.9, setback: 23, yaw: 0.02 },
   { s: 52360, side: -1, type: "twin", scale: 0.96, setback: 16, yaw: -0.05 },
+  { s: 53180, side: 1, type: "megaOffice", scale: 0.92, setback: 52, yaw: 0.01, forward: -20 },
   { s: 53880, side: 1, type: "parking", scale: 1.02, setback: 15, yaw: 0.04 },
   { s: 55260, side: -1, type: "stepped", scale: 0.96, setback: 13, yaw: -0.01 },
 ];
@@ -1336,13 +1346,15 @@ export class HighwayWorld {
     const frame = this.getFrameAtDistance(s);
     const width = cityRange(seed + 1.7, row.width[0], row.width[1]);
     const depth = cityRange(seed + 2.9, row.depth[0], row.depth[1]);
-    const height = cityRange(seed + 4.1, row.height[0], row.height[1]) * (rowIndex >= 3 ? 1.08 : 1) * CITY_BUILDING_HEIGHT_SCALE;
+    const towerChance = rowIndex >= 4 && cityNoise(seed + 3.35) > 0.82;
+    const skylineBoost = towerChance ? cityRange(seed + 3.85, 1.28, rowIndex >= 8 ? 1.82 : 1.58) : 1;
+    const height = cityRange(seed + 4.1, row.height[0], row.height[1]) * (rowIndex >= 3 ? 1.08 : 1) * skylineBoost * CITY_BUILDING_HEIGHT_SCALE;
     const lateral = side * (ROAD_HALF_WIDTH + row.lateral + width * 0.5 + cityRange(seed + 5.5, -row.lateralJitter, row.lateralJitter));
     const forward = cityRange(seed + 6.7, -row.forwardJitter, row.forwardJitter);
     const base = this.offsetAlong(frame, lateral, forward, 0);
     const yaw = frame.yaw + cityRange(seed + 7.9, -0.075, 0.075);
     const paletteIndex = Math.floor(cityNoise(seed + 8.3) * CITY_FACADE_PALETTE.length) % CITY_FACADE_PALETTE.length;
-    const bodyHeight = height * cityRange(seed + 9.7, 0.88, 1.04);
+    const bodyHeight = height * cityRange(seed + 9.7, towerChance ? 0.96 : 0.88, towerChance ? 1.08 : 1.04);
     const footprint = {
       side,
       s: (s + forward + this.trackLength) % this.trackLength,
@@ -1365,7 +1377,7 @@ export class HighwayWorld {
     roofs.push({
       position: new THREE.Vector3(base.x, bodyHeight + 0.18, base.z),
       yaw,
-      scale: { x: width * 1.04, y: 0.36, z: depth * 1.04 },
+      scale: { x: width * (towerChance ? 0.92 : 1.04), y: towerChance ? 0.72 : 0.36, z: depth * (towerChance ? 0.92 : 1.04) },
       remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "roof"),
     });
 
@@ -1387,12 +1399,16 @@ export class HighwayWorld {
       buildingLabel,
     });
 
-    if (height > 44 && cityNoise(seed + 18.2) > 0.5) {
+    if (height > 44 && (towerChance || cityNoise(seed + 18.2) > 0.5)) {
       const roofDetail = this.offsetLocalPoint(base, yaw, cityRange(seed + 19.1, -width * 0.24, width * 0.24), cityRange(seed + 19.9, -depth * 0.24, depth * 0.24), bodyHeight + 1.05);
       trim.push({
         position: roofDetail,
         yaw,
-        scale: { x: width * cityRange(seed + 20.1, 0.16, 0.34), y: cityRange(seed + 21.2, 1.1, 2.4), z: depth * cityRange(seed + 22.3, 0.12, 0.28) },
+        scale: {
+          x: width * cityRange(seed + 20.1, towerChance ? 0.12 : 0.16, towerChance ? 0.24 : 0.34),
+          y: cityRange(seed + 21.2, towerChance ? 3.2 : 1.1, towerChance ? 8.6 : 2.4),
+          z: depth * cityRange(seed + 22.3, towerChance ? 0.1 : 0.12, towerChance ? 0.22 : 0.28),
+        },
         remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "trim"),
       });
     }
@@ -1435,26 +1451,32 @@ export class HighwayWorld {
     const groundMargin = cityRange(seed + 11.1, 3.1, 5.4);
     const roofMargin = cityRange(seed + 12.7, 2.0, 4.8);
     const usableHeight = Math.max(4.8, bodyHeight - groundMargin - roofMargin);
-    const floorHeight = cityRange(seed + 13.6, 4.2, 5.6);
-    const maxRows = rowIndex === 0 ? 8 : 13;
+    const floorHeight = cityRange(seed + 13.6, rowIndex >= 4 ? 3.15 : 3.55, rowIndex >= 4 ? 4.25 : 4.8);
+    const maxRows = rowIndex === 0 ? 11 : rowIndex >= 5 ? 28 : 20;
     const rowCount = Math.floor(clamp(usableHeight / floorHeight, 3, maxRows));
-    const facadeDepth = depth * cityRange(seed + 14.4, 0.68, 0.92);
+    const facadeDepth = depth * cityRange(seed + 14.4, 0.78, 0.96);
     const facadeStartZ = -facadeDepth * 0.5;
     const style = cityNoise(seed + 15.3);
+    const outageChance = cityRange(seed + 15.9, 0.1, 0.28);
+    const warmChance = cityRange(seed + 16.2, 0.12, 0.26);
 
-    if (style < 0.56) {
-      const bandHeight = cityRange(seed + 16.8, 0.82, 1.16);
-      const segmentCount = Math.floor(clamp(facadeDepth / cityRange(seed + 17.2, 4.2, 5.8), 3, rowIndex === 0 ? 6 : 8));
-      const segmentDepth = Math.max(1.15, (facadeDepth / segmentCount) * cityRange(seed + 17.6, 0.54, 0.7));
+    if (style < 0.42) {
+      const bandHeight = cityRange(seed + 16.8, 0.52, 0.92);
+      const segmentCount = Math.floor(clamp(facadeDepth / cityRange(seed + 17.2, 2.1, 3.45), 5, rowIndex === 0 ? 9 : 16));
+      const segmentDepth = Math.max(0.58, (facadeDepth / segmentCount) * cityRange(seed + 17.6, 0.48, 0.68));
       for (let row = 0; row < rowCount; row += 1) {
         const y = groundMargin + (usableHeight * (row + 0.5)) / rowCount;
         for (let segment = 0; segment < segmentCount; segment += 1) {
           const z = facadeStartZ + (facadeDepth * (segment + 0.5)) / segmentCount;
-          const target = cityNoise(seed + row * 7.17 + segment * 4.91 + 19.4) > 0.86 ? warmWindows : glass;
+          const cellNoise = cityNoise(seed + row * 7.17 + segment * 4.91 + 19.4);
+          if (cellNoise < outageChance) {
+            continue;
+          }
+          const target = cellNoise > 1 - warmChance ? warmWindows : glass;
           trim.push({
             position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.006, z, y),
             yaw,
-            scale: { x: 0.08, y: bandHeight + 0.2, z: segmentDepth + 0.28 },
+            scale: { x: 0.08, y: bandHeight + 0.16, z: segmentDepth + 0.18 },
             remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window-frame"),
           });
           target.push({
@@ -1466,7 +1488,7 @@ export class HighwayWorld {
         }
       }
 
-      const mullionCount = 1 + Math.floor(cityNoise(seed + 20.2) * 2);
+      const mullionCount = 2 + Math.floor(cityNoise(seed + 20.2) * 4);
       for (let i = 1; i <= mullionCount; i += 1) {
         const z = facadeStartZ + (facadeDepth * i) / (mullionCount + 1);
         trim.push({
@@ -1479,18 +1501,22 @@ export class HighwayWorld {
       return;
     }
 
-    const columnCount = Math.floor(clamp(facadeDepth / cityRange(seed + 20.9, 4.3, 5.8), 3, rowIndex === 0 ? 6 : 8));
-    const windowDepth = Math.max(1.12, (facadeDepth / columnCount) * cityRange(seed + 21.8, 0.5, 0.66));
-    const windowHeight = cityRange(seed + 22.5, 0.92, 1.28);
+    const columnCount = Math.floor(clamp(facadeDepth / cityRange(seed + 20.9, 2.25, 3.75), 5, rowIndex === 0 ? 10 : 18));
+    const windowDepth = Math.max(0.62, (facadeDepth / columnCount) * cityRange(seed + 21.8, 0.46, 0.64));
+    const windowHeight = cityRange(seed + 22.5, 0.58, 0.98);
     for (let row = 0; row < rowCount; row += 1) {
       const y = groundMargin + (usableHeight * (row + 0.5)) / rowCount;
       for (let column = 0; column < columnCount; column += 1) {
         const z = facadeStartZ + (facadeDepth * (column + 0.5)) / columnCount;
-        const target = cityNoise(seed + row * 11.7 + column * 4.3 + 24.1) > 0.86 ? warmWindows : glass;
+        const cellNoise = cityNoise(seed + row * 11.7 + column * 4.3 + 24.1);
+        if (cellNoise < outageChance) {
+          continue;
+        }
+        const target = cellNoise > 1 - warmChance ? warmWindows : glass;
         trim.push({
           position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.006, z, y),
           yaw,
-          scale: { x: 0.08, y: windowHeight + 0.22, z: windowDepth + 0.26 },
+          scale: { x: 0.08, y: windowHeight + 0.18, z: windowDepth + 0.18 },
           remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window-frame"),
         });
         target.push({
@@ -1662,6 +1688,31 @@ export class HighwayWorld {
       return;
     }
 
+    if (type.id === "shutokuSpire") {
+      this.addLocalBox(group, w, h * 0.82, d, material, 0, h * 0.41, 0);
+      this.addLocalBox(group, w * 0.78, h * 0.18, d * 0.82, material, side * w * 0.04, h * 0.91, -d * 0.02);
+      this.addLocalBox(group, w * 0.52, h * 0.08, d * 0.54, roofMaterial, side * w * 0.08, h * 1.04, 0);
+      for (const z of [-0.34, -0.17, 0, 0.17, 0.34]) {
+        this.addLocalBox(group, 0.12, h * 0.78, 0.08, trim, -side * (w * 0.5 + 0.08), h * 0.43, z * d);
+      }
+      this.addFacadeWindows(group, w, h * 0.94, d, type.floors, type.columns, side, 0.42);
+      this.addLocalBox(group, 0.16, h * 0.16, 0.16, trim, side * w * 0.08, h * 1.13, 0);
+      return;
+    }
+
+    if (type.id === "megaOffice") {
+      this.addLocalBox(group, w, h, d, material, 0, h * 0.5, 0);
+      this.addLocalBox(group, w * 0.7, h * 0.22, d * 0.74, material, -side * w * 0.06, h * 1.08, 0);
+      this.addLocalBox(group, w * 1.02, 0.72, d * 1.02, roofMaterial, 0, h + 0.36, 0);
+      this.addLocalBox(group, w * 0.72, 0.62, d * 0.78, roofMaterial, -side * w * 0.06, h * 1.19, 0);
+      for (let i = 1; i <= 5; i += 1) {
+        this.addLocalBox(group, 0.11, h * 0.94, 0.08, trim, -side * (w * 0.5 + 0.08), h * 0.5, -d * 0.45 + (d * 0.9 * i) / 6);
+      }
+      this.addFacadeWindows(group, w, h, d, type.floors, type.columns, side, 0.48);
+      this.addBalconyBands(group, w, d, h, side, 9);
+      return;
+    }
+
     if (type.id === "mall") {
       this.addLocalBox(group, w, h, d, material, 0, h * 0.5, 0);
       this.addLocalBox(group, w * 1.02, 0.55, d * 1.04, roofMaterial, 0, h + 0.27, 0);
@@ -1723,17 +1774,22 @@ export class HighwayWorld {
   addFacadeWindows(group, width, height, depth, floors, columns, side, windowHeight = 0.96) {
     const facadeX = -side * (width * 0.5 + 0.055);
     const usableHeight = Math.max(1, height - 5);
-    const usableDepth = depth * 0.72;
+    const usableDepth = depth * 0.82;
     const startZ = -usableDepth * 0.5;
     const rowCount = Math.max(2, Math.floor(floors));
-    const columnCount = Math.max(2, Math.floor(columns));
-    const windowDepth = Math.max(1.05, usableDepth / (columnCount * 1.9));
+    const columnCount = Math.max(3, Math.floor(columns));
+    const windowDepth = Math.max(0.42, usableDepth / (columnCount * 2.35));
+    const outageModulo = Math.max(4, Math.floor((rowCount + columnCount) / 6));
 
     for (let row = 0; row < rowCount; row += 1) {
       const y = 3 + (usableHeight * (row + 0.5)) / rowCount;
       for (let column = 0; column < columnCount; column += 1) {
         const z = startZ + (usableDepth * (column + 0.5)) / columnCount;
-        const lit = (row + column) % 5 === 0;
+        const shadeSeed = row * 13 + column * 7 + Math.floor(width * 3 + depth);
+        if (shadeSeed % outageModulo === 1) {
+          continue;
+        }
+        const lit = shadeSeed % 9 === 0 || (row + column) % 11 === 0;
         this.addLocalBox(
           group,
           0.08,
