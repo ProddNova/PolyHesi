@@ -150,7 +150,7 @@ export class Game {
       this.settings.cameraFov,
       window.innerWidth / window.innerHeight,
       0.1,
-      this.settings.ultraGraphics ? 1800 : 900,
+      this.getViewDistance(),
     );
     this.camera.position.set(0, 5.2, -12);
 
@@ -2153,6 +2153,10 @@ export class Game {
       this.camera.fov = this.settings.cameraFov;
       this.camera.updateProjectionMatrix();
     }
+    if (changedKey === "viewDistance") {
+      this.camera.far = this.getViewDistance();
+      this.camera.updateProjectionMatrix();
+    }
 
     const playerRoad = this.world.getNearestRoadInfo(this.player.position);
     this.traffic.syncDensity(this.settings, playerRoad?.s ?? 0);
@@ -2474,10 +2478,16 @@ export class Game {
 
   resize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
-    this.camera.far = this.settings.ultraGraphics ? 1800 : 900;
+    this.camera.far = this.getViewDistance();
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(this.getRenderPixelRatio());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  getViewDistance() {
+    const rawDistance = Number(this.settings.viewDistance);
+    const distance = Number.isFinite(rawDistance) ? rawDistance : DEFAULT_SETTINGS.viewDistance;
+    return clamp(distance, 500, 2000);
   }
 
   getRenderPixelRatio() {
@@ -2494,7 +2504,7 @@ export class Game {
     const rawQuality = Number(this.settings.graphicsQuality);
     const quality = Number.isFinite(rawQuality) ? Math.round(rawQuality) : 1;
     const shadowEnabled = this.settings.ultraGraphics || quality >= 1;
-    this.camera.far = this.settings.ultraGraphics ? 1800 : quality <= 0 ? 640 : quality >= 2 ? 1100 : 820;
+    this.camera.far = this.getViewDistance();
     this.camera.updateProjectionMatrix();
     this.renderer.toneMappingExposure = this.settings.ultraGraphics ? 1.12 : 1;
     this.renderer.shadowMap.enabled = shadowEnabled;

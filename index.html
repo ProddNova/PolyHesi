@@ -128,6 +128,11 @@
             <output data-player-setting-out="cameraFov">64</output>
             <input data-player-setting="cameraFov" type="range" min="48" max="82" step="1" />
           </label>
+          <label>
+            <span>Distanza visuale</span>
+            <output data-player-setting-out="viewDistance">900 m</output>
+            <input data-player-setting="viewDistance" type="range" min="500" max="2000" step="50" />
+          </label>
           <label class="player-settings-toggle">
             <span>Traffico</span>
             <output data-player-setting-out="trafficEnabled">On</output>
@@ -182,6 +187,11 @@
             <span>Camera FOV</span>
             <output id="cameraFovOut">64</output>
             <input id="cameraFov" type="range" min="48" max="82" step="1" />
+          </label>
+          <label>
+            <span>View distance</span>
+            <output id="viewDistanceOut">900 m</output>
+            <input id="viewDistance" type="range" min="500" max="2000" step="50" />
           </label>
           <label class="dev-toggle">
             <span>Day/night cycle</span>
