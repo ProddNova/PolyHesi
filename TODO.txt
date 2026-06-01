@@ -23,13 +23,27 @@ tk's
 
 - Dal remodel sui veicoli psx oltre a varie posizioni e cose poter impostare anche il tipo di cerchione del rig e il colore del cerchione e anche colore auto) tutto ovviamente deve venire salvato in modo persistente come il rig fa già, i cerchioni vanno presi dalla cartella "PSXStyleCars-DevEdition/Wheels"
 
-- Le auto psx hanno i vetri colorati invece che essere neri/trasparenti (meglio neri)
+- Le auto psx hanno i vetri colorati invece che essere neri/trasparenti (meglio neri) infatti quella di default per esempio ha i vetri rossi...
 
 - Ottimizzazione performance, attualmente il gioco lagga molto, il controllo nelle impostazioni sulla qualità grafica sembra non funzionare
 
 - Fix lag alla collisione : attualmente quando collido si freeza il gioco per qualche secondo quando hitto i guardrail fixa questa cosa
 
 - Alzare e fixare sollevamento autostrada rispetto alla base
+
+- Togliere le 3 hitbox delle auto nella modalità remodel 
+
+- Fare si che gli npc cambino corsia in modo piu fluido ora lo fanno troppo in fretta va rallentato il movimento
+
+- Alcune scritte sulla strada sono rotte sono o stretchate oppure volano non sono sulla strada correttamente si confermo volano sono in verticale tipo son broken
+
+- Il body della macchina quando giro si inclina come per simulare le sospensioni ma lo fa in modo eccessivo è poco realistico in generale il movimento del corpo della macchina quando giro e fatto malez
+
+- Migliora l'illuminamento notturno infatti ora quando è notte si fatica a vedere la strada e le auto del traffico
+
+- Aggiungi i palazzi anche attorno allo spawn point ora infatti c'è un buco di palazzi attorno allo spawn point invece si deve trovare in mezzo alla città
+
+- Fare si che le linee tratteggiate siano piu corte, piu numerose e piu vicine fra loro fammi regolare questa cosa a mano nel dev panel 1 sola volta, appena salvero la prima volta voglio che l'impostazione sparisca per sempre una roba usa e getta style
 
 
 later-tk's
@@ -41,6 +55,12 @@ later-tk's
 - Controllare e testare game loop
 
 - Quando rientro nel garage fai si che sia chiuso e premendo e switchi alla scena iniziale dove la macchina è dentro il garage
+
+My tasks
+
+- Definire velocita auto
+
+- Definire grado auto fare una tier list
 
 
 AUTO PLAYER
