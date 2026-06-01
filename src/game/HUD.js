@@ -3,6 +3,7 @@ import {
   CAR_AUCTION_LISTINGS,
   CAR_PRESETS,
   DEFAULT_VEHICLE_RIG_TUNE,
+  LANE_DASH_TUNING_CONSUMED_KEY,
   PARTS_CATALOG,
   ROAD_WIDTH,
   SETTING_DEFS,
@@ -322,6 +323,7 @@ export class HUD {
     }
     this.bindSettings();
     this.bindPlayerSettings();
+    this.syncOneShotSettings();
     this.buildCarShop();
     this.setMarketSite("cars");
   }
@@ -479,6 +481,22 @@ export class HUD {
     input.checked = this.settings[key] !== false;
     if (output) {
       output.value = input.checked ? "On" : "Off";
+    }
+  }
+
+  syncOneShotSettings() {
+    let laneDashConsumed = false;
+    try {
+      laneDashConsumed = window.localStorage.getItem(LANE_DASH_TUNING_CONSUMED_KEY) === "1";
+    } catch {
+      laneDashConsumed = false;
+    }
+    this.setOneShotSettingConsumed("laneDash", laneDashConsumed);
+  }
+
+  setOneShotSettingConsumed(key, consumed) {
+    for (const element of document.querySelectorAll(`[data-one-shot-setting="${key}"]`)) {
+      element.classList.toggle("is-consumed", Boolean(consumed));
     }
   }
 

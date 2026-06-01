@@ -26,6 +26,7 @@ const SAFE_BACK_SPAWN = 85;
 const DENSITY_TO_ACTIVE_CARS = 0.145;
 const MIN_ACTIVE_CARS = 12;
 const MAX_ACTIVE_CARS = 72;
+const NIGHT_TRAFFIC_BOOST = 1.24;
 const GRAPHICS_TRAFFIC_LIMITS = [
   { min: 8, max: 30 },
   { min: 10, max: 48 },
@@ -128,8 +129,17 @@ export class TrafficSystem {
       ? 2
       : clamp(Number.isFinite(rawQuality) ? Math.round(rawQuality) : 1, 0, 2);
     const limit = GRAPHICS_TRAFFIC_LIMITS[quality] ?? GRAPHICS_TRAFFIC_LIMITS[1];
+    const hour = ((Number(settings.timeOfDay ?? 12) % 24) + 24) % 24;
+    const daylight = hour >= 7 && hour <= 18.5
+      ? 1
+      : hour > 5.5 && hour < 7
+        ? (hour - 5.5) / 1.5
+        : hour > 18.5 && hour < 20
+          ? 1 - (hour - 18.5) / 1.5
+          : 0;
+    const nightBoost = 1 + (1 - daylight) * (NIGHT_TRAFFIC_BOOST - 1);
     return clamp(
-      Math.round(settings.trafficDensity * DENSITY_TO_ACTIVE_CARS),
+      Math.round(settings.trafficDensity * DENSITY_TO_ACTIVE_CARS * nightBoost),
       limit.min,
       limit.max,
     );

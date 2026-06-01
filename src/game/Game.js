@@ -5,6 +5,7 @@ import {
   DEFAULT_VEHICLE_RIG_TUNE,
   DEFAULT_SETTINGS,
   DEV_STORAGE_KEY,
+  LANE_DASH_TUNING_CONSUMED_KEY,
   PLAYER_CAR_IDS,
   PARTS_CATALOG,
   PHYSICS_SETTING_KEYS,
@@ -173,7 +174,7 @@ export class Game {
     this.root.appendChild(this.renderer.domElement);
 
     this.input = new InputController(this.renderer.domElement);
-    this.world = new HighwayWorld(this.scene);
+    this.world = new HighwayWorld(this.scene, this.settings);
     this.player = new PlayerCar(this.scene, this.world.getStartPose());
     this.player.setCarPreset(this.getActiveVehiclePreset());
     this.garagePsxRemodelTarget = null;
@@ -2182,6 +2183,8 @@ export class Game {
 
     try {
       window.localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(payload));
+      window.localStorage.setItem(LANE_DASH_TUNING_CONSUMED_KEY, "1");
+      this.hud.setOneShotSettingConsumed?.("laneDash", true);
       this.hud.flashNotice("Dev saved", "loaded next session");
     } catch {
       this.hud.flashNotice("Save failed", "localStorage blocked");
@@ -2298,6 +2301,9 @@ export class Game {
     if (changedKey === "viewDistance") {
       this.camera.far = this.getViewDistance();
       this.camera.updateProjectionMatrix();
+    }
+    if (changedKey === null || changedKey === "laneDashLength" || changedKey === "laneDashSpacing") {
+      this.world?.setLaneDashSettings?.(this.settings);
     }
 
     const playerRoad = this.world.getNearestRoadInfo(this.player.position);

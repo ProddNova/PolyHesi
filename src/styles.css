@@ -737,6 +737,10 @@ canvas {
   opacity: 0.48;
 }
 
+.dev-panel label.is-consumed {
+  display: none;
+}
+
 .no-clip-readout {
   display: grid;
   gap: 4px;

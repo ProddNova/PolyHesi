@@ -149,9 +149,11 @@ const ROAD_TEXT_MARKING_ELEVATION = ROAD_MARKING_ELEVATION + 0.018;
 const HIGHWAY_DECK_ELEVATION = -0.26;
 const HIGHWAY_SUPPORT_INTERVAL = 260;
 const CITY_BUILDING_HEIGHT_SCALE = 1.44;
-const CITY_STREETLIGHT_INTERVAL = 112;
+const CITY_STREETLIGHT_INTERVAL = 68;
 const CITY_STREETLIGHT_POLE_OFFSET = ROAD_HALF_WIDTH + 2.65;
 const ROADSIDE_SIGN_OFFSET = ROAD_HALF_WIDTH + 4.8;
+const DEFAULT_LANE_DASH_LENGTH = 4.8;
+const DEFAULT_LANE_DASH_SPACING = 14.5;
 const ROAD_SIGN_PLACEMENTS = [
   { s: 420, type: "side", side: 1, title: "首都高速", route: "C1", lines: ["銀座 2km", "新橋 4km"] },
   { s: 1120, type: "gantry", title: "都心環状線", route: "C1", lines: ["渋谷", "霞が関", "羽田"] },
@@ -263,7 +265,7 @@ function hourDistance(hour, target) {
 }
 
 export class HighwayWorld {
-  constructor(scene) {
+  constructor(scene, settings = {}) {
     this.scene = scene;
     this.colliders = [];
     this.walkColliders = [];
@@ -289,6 +291,7 @@ export class HighwayWorld {
     this.roadLightStep = GRAPHICS_PROFILES[this.graphicsQuality]?.roadLightStep ?? 2;
     this.roadLightRange = 760;
     this.tunnelRuns = this.routeProfile.tunnels.map((run) => ({ ...run }));
+    this.setLaneDashSettings(settings, { rebuild: false });
 
     this.materials = this.createMaterials();
     this.createRoute();
@@ -803,7 +806,7 @@ export class HighwayWorld {
     fog.color.lerp(sky, smooth);
     fog.density = THREE.MathUtils.lerp(
       fog.density,
-      (this.ultraGraphics ? 0.0000025 : 0.000012) + night * 0.000014 + twilight * 0.000006,
+      (this.ultraGraphics ? 0.0000025 : 0.000009) + night * 0.000007 + twilight * 0.000004,
       smooth,
     );
 
@@ -813,7 +816,7 @@ export class HighwayWorld {
     hemisphere.groundColor.lerp(groundColor, smooth);
     hemisphere.intensity = THREE.MathUtils.lerp(
       hemisphere.intensity,
-      0.46 + daylight * 1.05 + twilight * 0.32,
+      0.58 + night * 0.2 + daylight * 1.05 + twilight * 0.32,
       smooth,
     );
 
@@ -832,7 +835,7 @@ export class HighwayWorld {
     keyLight.color.lerp(lightColor, smooth);
     keyLight.intensity = THREE.MathUtils.lerp(
       keyLight.intensity,
-      THREE.MathUtils.lerp(0.24 + daylight * 1.08 + twilight * 0.3, 0.48 + night * 0.26, moonBlend),
+      THREE.MathUtils.lerp(0.3 + daylight * 1.08 + twilight * 0.3, 0.66 + night * 0.34, moonBlend),
       smooth,
     );
     if (this.materials?.streetlightGlow) {
@@ -845,7 +848,7 @@ export class HighwayWorld {
       }
       light.intensity = THREE.MathUtils.lerp(
         light.intensity,
-        lampPower * (light.userData.baseIntensity ?? 1) * (this.ultraGraphics ? 1.65 : 1.28),
+        lampPower * (light.userData.baseIntensity ?? 1) * (this.ultraGraphics ? 2.35 : 1.82),
         smooth,
       );
     }
@@ -860,6 +863,16 @@ export class HighwayWorld {
 
   setUltraGraphics(enabled) {
     this.setGraphicsQuality(this.graphicsQuality, enabled);
+  }
+
+  setLaneDashSettings(settings = {}, { rebuild = true } = {}) {
+    const length = Number(settings.laneDashLength);
+    const spacing = Number(settings.laneDashSpacing);
+    this.laneDashLength = clamp(Number.isFinite(length) ? length : DEFAULT_LANE_DASH_LENGTH, 2, 10);
+    this.laneDashSpacing = clamp(Number.isFinite(spacing) ? spacing : DEFAULT_LANE_DASH_SPACING, 8, 30);
+    if (rebuild && this.scene?.getObjectByName("StaticHighwayLoop")) {
+      this.rebuildRoadGeometry();
+    }
   }
 
   setGraphicsQuality(quality = this.graphicsQuality, ultra = this.ultraGraphics) {
@@ -885,7 +898,7 @@ export class HighwayWorld {
         light.intensity = 0;
       }
     }
-    this.roadLightRange = this.ultraGraphics ? 1280 : this.graphicsQuality >= 2 ? 960 : this.graphicsQuality >= 1 ? 720 : 0;
+    this.roadLightRange = this.ultraGraphics ? 1640 : this.graphicsQuality >= 2 ? 1240 : this.graphicsQuality >= 1 ? 940 : 0;
     const garageShadowSize = this.ultraGraphics ? 1024 : this.graphicsQuality >= 2 ? 512 : 0;
     for (const light of this.garageLights) {
       light.castShadow = garageShadowSize > 0;
@@ -918,7 +931,7 @@ export class HighwayWorld {
 
     const laneMarkers = [];
     for (const laneOffset of [-2, 2]) {
-      for (let s = 9; s < this.trackLength; s += 34) {
+      for (let s = this.laneDashSpacing * 0.5; s < this.trackLength; s += this.laneDashSpacing) {
         if (this.isJunctionOpeningOnAnySide(s, JUNCTION_OPENING_HALF_LENGTH + 8)) {
           continue;
         }
@@ -930,7 +943,7 @@ export class HighwayWorld {
         });
       }
     }
-    highway.add(this.createChunkedInstancedBoxes(laneMarkers, 0.13, 0.038, 8.2, this.materials.lane));
+    highway.add(this.createChunkedInstancedBoxes(laneMarkers, 0.13, 0.038, this.laneDashLength, this.materials.lane));
 
     const edgeMarkers = [];
     for (const edgeOffset of [-6.55, 6.55]) {
@@ -1066,7 +1079,7 @@ export class HighwayWorld {
 
       const branchLaneMarkers = [];
       for (const laneOffset of [-2, 2]) {
-        for (let s = 12; s < route.length - 12; s += 30) {
+        for (let s = this.laneDashSpacing * 0.5; s < route.length - 12; s += this.laneDashSpacing) {
           if (this.isBranchJunctionOpening(route, s)) {
             continue;
           }
@@ -1078,7 +1091,7 @@ export class HighwayWorld {
           });
         }
       }
-      parent.add(this.createChunkedInstancedBoxes(branchLaneMarkers, 0.13, 0.038, 8.2, this.materials.lane, false, route.length));
+      parent.add(this.createChunkedInstancedBoxes(branchLaneMarkers, 0.13, 0.038, this.laneDashLength, this.materials.lane, false, route.length));
 
       const branchGuardrails = this.createGuardrailBatch();
       for (let s = 0; s < route.length; s += 15) {
@@ -1384,8 +1397,43 @@ export class HighwayWorld {
     this.addCollider(-23.5, -10.5, 2.4, 13);
 
     this.addGarage(meet);
+    this.addSpawnCityBuildings(meet);
     this.addServiceLotDetails(meet);
     this.scene.add(meet);
+  }
+
+  addSpawnCityBuildings(parent) {
+    const placements = [
+      { x: -142, z: -44, type: "office", scale: 0.82, yaw: 0.04 },
+      { x: -130, z: -94, type: "parking", scale: 0.72, yaw: -0.08 },
+      { x: -72, z: -124, type: "corner", scale: 0.8, yaw: 0.02 },
+      { x: -16, z: -111, type: "thinTower", scale: 0.74, yaw: -0.05 },
+      { x: 16, z: -54, type: "slab", scale: 0.78, yaw: 0.07 },
+      { x: -28, z: 24, type: "mall", scale: 0.7, yaw: -0.03 },
+      { x: -96, z: 28, type: "stepped", scale: 0.74, yaw: 0.06 },
+      { x: -154, z: 8, type: "concreteTower", scale: 0.68, yaw: -0.02 },
+    ];
+    const district = new THREE.Group();
+    district.name = "SpawnCityBlocks";
+
+    for (const placement of placements) {
+      const type = BUILDING_TYPES.find((item) => item.id === placement.type) ?? BUILDING_TYPES[0];
+      const scale = placement.scale ?? 1;
+      const group = new THREE.Group();
+      group.name = `SpawnBuilding_${type.id}_${Math.round(placement.x)}_${Math.round(placement.z)}`;
+      group.position.set(placement.x, 0, placement.z);
+      group.rotation.y = placement.yaw ?? 0;
+      this.buildBuildingType(group, type, scale, placement.x < -62 ? -1 : 1);
+      group.traverse((object) => {
+        if (object.isMesh) {
+          object.userData.remodelIgnore = true;
+        }
+      });
+      district.add(group);
+      this.addCollider(placement.x, placement.z, type.width * scale + 3, type.depth * scale + 3);
+    }
+
+    parent.add(district);
   }
 
   addGarage(parent) {
@@ -1670,12 +1718,12 @@ export class HighwayWorld {
           scale: { x: 0.44, y: 0.16, z: 0.34 },
           remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight lamp"),
         });
-        if (s % (CITY_STREETLIGHT_INTERVAL * 3) < 1 && Math.abs(side) === 1) {
-          const light = new THREE.PointLight(0xffd887, 0, 82, 1.12);
+        if (s % (CITY_STREETLIGHT_INTERVAL * 2) < 1 && Math.abs(side) === 1) {
+          const light = new THREE.PointLight(0xffd887, 0, 108, 1.04);
           light.position.copy(lampPosition);
           light.position.y -= 0.55;
           light.visible = false;
-          light.userData.baseIntensity = 7.8;
+          light.userData.baseIntensity = 11.4;
           light.userData.qualityIndex = this.roadLights.length;
           light.userData.qualityAllowed = false;
           light.userData.s = s;
