@@ -152,6 +152,7 @@ const HIGHWAY_SUPPORT_INTERVAL = 260;
 const CITY_BUILDING_HEIGHT_SCALE = 1.44;
 const CITY_SIDEWALK_INTERVAL = 24;
 const CITY_STREETLIGHT_INTERVAL = 112;
+const CITY_STREETLIGHT_POLE_OFFSET = ROAD_HALF_WIDTH + 4.95;
 const ROAD_SIGN_PLACEMENTS = [
   { s: 420, type: "side", side: 1, title: "首都高速", route: "C1", lines: ["銀座 2km", "新橋 4km"] },
   { s: 1120, type: "gantry", title: "都心環状線", route: "C1", lines: ["渋谷", "霞が関", "羽田"] },
@@ -1038,7 +1039,7 @@ export class HighwayWorld {
         if (this.isCityServiceClearance(frame.s, side)) {
           continue;
         }
-        const polePosition = this.offsetPoint(frame, side * (ROAD_HALF_WIDTH + 10.2), 3.05);
+        const polePosition = this.offsetPoint(frame, side * CITY_STREETLIGHT_POLE_OFFSET, 3.05);
         const armPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 0.76, 2.78, 5.96);
         const lampPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 1.55, 2.74, 5.88);
         poles.push({
@@ -1382,14 +1383,6 @@ export class HighwayWorld {
       remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "trim"),
     });
 
-    if (rowIndex === 0 && cityNoise(seed + 23.6) > 0.52) {
-      signs.push({
-        position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.05, cityRange(seed + 24.4, -depth * 0.28, depth * 0.28), 3.1),
-        yaw,
-        scale: { x: 0.16, y: cityRange(seed + 25.1, 0.42, 0.9), z: cityRange(seed + 26.2, 1.6, 4.8) },
-        remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "sign"),
-      });
-    }
   }
 
   makeBuildingRemodelMeta(groupId, label, part, selectable = false) {
