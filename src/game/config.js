@@ -44,8 +44,8 @@ export const DEFAULT_SETTINGS = {
   remodelMode: false,
   remodelSnapToGrid: false,
   remodelGridSize: 0.25,
-  laneDashLength: 2.6,
-  laneDashSpacing: 8.2,
+  laneDashLength: 1.7,
+  laneDashSpacing: 5.4,
 };
 
 const PSX_MODEL_IDS = [

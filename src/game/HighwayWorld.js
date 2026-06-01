@@ -152,8 +152,8 @@ const CITY_BUILDING_HEIGHT_SCALE = 1.44;
 const CITY_STREETLIGHT_INTERVAL = 68;
 const CITY_STREETLIGHT_POLE_OFFSET = ROAD_HALF_WIDTH + 2.65;
 const ROADSIDE_SIGN_OFFSET = ROAD_HALF_WIDTH + 4.8;
-const DEFAULT_LANE_DASH_LENGTH = 2.6;
-const DEFAULT_LANE_DASH_SPACING = 8.2;
+const DEFAULT_LANE_DASH_LENGTH = 1.7;
+const DEFAULT_LANE_DASH_SPACING = 5.4;
 const ROAD_SIGN_PLACEMENTS = [
   { s: 420, type: "side", side: 1, title: "首都高速", route: "C1", lines: ["銀座 2km", "新橋 4km"] },
   { s: 1120, type: "gantry", title: "都心環状線", route: "C1", lines: ["渋谷", "霞が関", "羽田"] },
@@ -418,6 +418,12 @@ export class HighwayWorld {
         flatShading: true,
       }),
       streetlightGlow: new THREE.MeshBasicMaterial({ color: 0xffd887 }),
+      streetlightPool: new THREE.MeshBasicMaterial({
+        color: 0xffc45f,
+        transparent: true,
+        opacity: 0.22,
+        depthWrite: false,
+      }),
       aviationBeacon: new THREE.MeshBasicMaterial({ color: 0xff1717 }),
       remodelCreated: new THREE.MeshStandardMaterial({
         color: 0x78e0c1,
@@ -436,6 +442,9 @@ export class HighwayWorld {
     for (const [name, material] of Object.entries(materials)) {
       material.name = name;
     }
+    materials.streetlightGlow.toneMapped = false;
+    materials.streetlightPool.toneMapped = false;
+    materials.aviationBeacon.toneMapped = false;
 
     return materials;
   }
@@ -797,7 +806,7 @@ export class HighwayWorld {
     const dusk = 1 - smoothstep(0, 3.1, hourDistance(hour, 18.25));
     const twilight = Math.max(dawn, dusk);
     const night = clamp(1 - daylight, 0, 1);
-    const lampPower = smoothstep(0.22, 0.74, night);
+    const lampPower = smoothstep(0.06, 0.46, night);
     const { hemisphere, keyLight, fog, colors } = this.environment;
 
     const sky = colors.nightSky.clone();
@@ -849,7 +858,7 @@ export class HighwayWorld {
       }
       light.intensity = THREE.MathUtils.lerp(
         light.intensity,
-        lampPower * (light.userData.baseIntensity ?? 1) * (this.ultraGraphics ? 2.35 : 1.82),
+        lampPower * (light.userData.baseIntensity ?? 1) * (this.ultraGraphics ? 3.1 : 2.45),
         smooth,
       );
     }
@@ -869,8 +878,8 @@ export class HighwayWorld {
   setLaneDashSettings(settings = {}, { rebuild = true } = {}) {
     const length = Number(settings.laneDashLength);
     const spacing = Number(settings.laneDashSpacing);
-    this.laneDashLength = clamp(Number.isFinite(length) ? length : DEFAULT_LANE_DASH_LENGTH, 2, 10);
-    this.laneDashSpacing = clamp(Number.isFinite(spacing) ? spacing : DEFAULT_LANE_DASH_SPACING, 8, 30);
+    this.laneDashLength = clamp(Number.isFinite(length) ? length : DEFAULT_LANE_DASH_LENGTH, 1.2, 10);
+    this.laneDashSpacing = clamp(Number.isFinite(spacing) ? spacing : DEFAULT_LANE_DASH_SPACING, 4.2, 30);
     if (rebuild && this.scene?.getObjectByName("StaticHighwayLoop")) {
       this.rebuildRoadGeometry();
     }
@@ -1685,6 +1694,7 @@ export class HighwayWorld {
     const poles = [];
     const arms = [];
     const lamps = [];
+    const lightPools = [];
     const lightGroup = new THREE.Group();
     lightGroup.name = "RoadStreetLightEmitters";
     lightGroup.userData.remodelIgnore = true;
@@ -1719,6 +1729,13 @@ export class HighwayWorld {
           scale: { x: 0.44, y: 0.16, z: 0.34 },
           remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight lamp"),
         });
+        lightPools.push({
+          position: this.offsetPoint(frame, side * (ROAD_HALF_WIDTH - 1.1), ROAD_MARKING_ELEVATION + 0.002),
+          yaw: frame.yaw,
+          s,
+          scale: { x: 3.4, y: 0.018, z: 9.2 },
+          remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight pool"),
+        });
         const light = new THREE.PointLight(0xffd887, 0, 132, 1.02);
         light.position.copy(lampPosition);
         light.position.y -= 0.52;
@@ -1735,6 +1752,7 @@ export class HighwayWorld {
     details.add(this.createChunkedScaledInstancedBoxes(poles, this.materials.streetlightPole, false, false));
     details.add(this.createChunkedScaledInstancedBoxes(arms, this.materials.streetlightPole, false, false));
     details.add(this.createChunkedScaledInstancedBoxes(lamps, this.materials.streetlightGlow, false, false));
+    details.add(this.createChunkedScaledInstancedBoxes(lightPools, this.materials.streetlightPool, false, false));
     details.add(lightGroup);
     parent.add(details);
   }
@@ -2131,8 +2149,8 @@ export class HighwayWorld {
       });
     }
 
-    if (bodyHeight > 92 && cityNoise(seed + 31.4) > 0.46) {
-      const beaconCount = cityNoise(seed + 32.1) > 0.72 ? 2 : 1;
+    if (bodyHeight > 70 && cityNoise(seed + 31.4) > 0.28) {
+      const beaconCount = cityNoise(seed + 32.1) > 0.62 ? 2 : 1;
       for (let i = 0; i < beaconCount; i += 1) {
         const localX = beaconCount === 1
           ? cityRange(seed + 33.2, -width * 0.18, width * 0.18)
@@ -2142,7 +2160,7 @@ export class HighwayWorld {
           position: this.offsetLocalPoint(base, yaw, localX, localZ, bodyHeight + 1.18),
           yaw,
           s,
-          scale: { x: 0.72, y: 0.48, z: 0.72 },
+          scale: { x: 1.25, y: 0.72, z: 1.25 },
           remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "aviation-beacon"),
         });
       }
@@ -2371,7 +2389,7 @@ export class HighwayWorld {
 
   addManualBuildingAviationBeacon(group, type, scale, placement) {
     const h = type.height * scale * CITY_BUILDING_HEIGHT_SCALE;
-    if (h < 82 || cityNoise(placement.s * 0.13 + type.height) <= 0.34) {
+    if (h < 70 || cityNoise(placement.s * 0.13 + type.height) <= 0.18) {
       return;
     }
     const w = type.width * scale;
@@ -2379,7 +2397,7 @@ export class HighwayWorld {
     const side = placement.side || 1;
     const x = side * w * cityRange(placement.s + 4.2, -0.18, 0.24);
     const z = d * cityRange(placement.s + 7.6, -0.22, 0.22);
-    this.addLocalBox(group, 0.7, 0.5, 0.7, this.materials.aviationBeacon, x, h + 1.22, z);
+    this.addLocalBox(group, 1.25, 0.72, 1.25, this.materials.aviationBeacon, x, h + 1.22, z);
   }
 
   createBuildingRemodelProxy(group, type, placement) {
