@@ -142,26 +142,27 @@ const CITY_FACADE_PALETTE = [
   0x6f6d67,
 ];
 const CITY_BLOCK_ROWS = [
-  { spacing: 36, lateral: 15, lateralJitter: 2, forwardJitter: 13, height: [26, 70], width: [14, 30], depth: [18, 34], skip: 0.0, serviceClearance: 82 },
-  { spacing: 50, lateral: 26, lateralJitter: 6, forwardJitter: 18, height: [34, 92], width: [17, 38], depth: [20, 40], skip: 0.0, serviceClearance: 120 },
-  { spacing: 68, lateral: 50, lateralJitter: 10, forwardJitter: 24, height: [46, 122], width: [20, 48], depth: [24, 48], skip: 0.0, serviceClearance: 164 },
-  { spacing: 92, lateral: 82, lateralJitter: 15, forwardJitter: 31, height: [58, 152], width: [24, 58], depth: [28, 56], skip: 0.003, serviceClearance: 216 },
-  { spacing: 122, lateral: 122, lateralJitter: 22, forwardJitter: 40, height: [70, 182], width: [28, 68], depth: [32, 66], skip: 0.006, serviceClearance: 276 },
-  { spacing: 158, lateral: 170, lateralJitter: 30, forwardJitter: 49, height: [84, 206], width: [30, 76], depth: [36, 74], skip: 0.01, serviceClearance: 340 },
-  { spacing: 204, lateral: 228, lateralJitter: 40, forwardJitter: 58, height: [98, 230], width: [34, 86], depth: [40, 84], skip: 0.014, serviceClearance: 420 },
-  { spacing: 262, lateral: 300, lateralJitter: 52, forwardJitter: 70, height: [118, 260], width: [40, 100], depth: [46, 96], skip: 0.018, serviceClearance: 520 },
-  { spacing: 330, lateral: 400, lateralJitter: 65, forwardJitter: 85, height: [140, 280], width: [50, 120], depth: [55, 110], skip: 0.022, serviceClearance: 620 },
-  { spacing: 420, lateral: 560, lateralJitter: 90, forwardJitter: 110, height: [180, 340], width: [65, 150], depth: [70, 140], skip: 0.028, serviceClearance: 740 },
-  { spacing: 540, lateral: 780, lateralJitter: 120, forwardJitter: 140, height: [220, 400], width: [80, 180], depth: [85, 170], skip: 0.034, serviceClearance: 900 },
-  { spacing: 680, lateral: 1080, lateralJitter: 160, forwardJitter: 180, height: [260, 480], width: [100, 220], depth: [100, 200], skip: 0.042, serviceClearance: 1100 },
+  { spacing: 27, lateral: 11, lateralJitter: 1.4, forwardJitter: 10, height: [28, 74], width: [15, 32], depth: [18, 34], skip: 0.0, serviceClearance: 66 },
+  { spacing: 38, lateral: 20, lateralJitter: 4, forwardJitter: 14, height: [36, 98], width: [18, 40], depth: [20, 40], skip: 0.0, serviceClearance: 92 },
+  { spacing: 52, lateral: 40, lateralJitter: 7, forwardJitter: 19, height: [48, 128], width: [21, 50], depth: [24, 48], skip: 0.0, serviceClearance: 128 },
+  { spacing: 70, lateral: 67, lateralJitter: 11, forwardJitter: 25, height: [60, 158], width: [25, 60], depth: [28, 56], skip: 0.0, serviceClearance: 170 },
+  { spacing: 94, lateral: 101, lateralJitter: 17, forwardJitter: 32, height: [72, 190], width: [29, 70], depth: [32, 66], skip: 0.002, serviceClearance: 220 },
+  { spacing: 122, lateral: 143, lateralJitter: 23, forwardJitter: 39, height: [86, 214], width: [31, 78], depth: [36, 74], skip: 0.004, serviceClearance: 278 },
+  { spacing: 158, lateral: 194, lateralJitter: 31, forwardJitter: 46, height: [100, 238], width: [35, 88], depth: [40, 84], skip: 0.006, serviceClearance: 348 },
+  { spacing: 204, lateral: 258, lateralJitter: 41, forwardJitter: 56, height: [120, 270], width: [42, 102], depth: [46, 96], skip: 0.008, serviceClearance: 432 },
+  { spacing: 258, lateral: 350, lateralJitter: 52, forwardJitter: 68, height: [144, 292], width: [52, 122], depth: [55, 110], skip: 0.012, serviceClearance: 520 },
+  { spacing: 330, lateral: 492, lateralJitter: 72, forwardJitter: 88, height: [184, 354], width: [68, 154], depth: [70, 140], skip: 0.016, serviceClearance: 640 },
+  { spacing: 420, lateral: 700, lateralJitter: 98, forwardJitter: 112, height: [224, 416], width: [84, 184], depth: [85, 170], skip: 0.02, serviceClearance: 780 },
+  { spacing: 530, lateral: 980, lateralJitter: 130, forwardJitter: 144, height: [266, 498], width: [104, 224], depth: [100, 200], skip: 0.026, serviceClearance: 960 },
 ];
-const CITY_MANUAL_CLEARANCE = 46;
+const CITY_MANUAL_CLEARANCE = 34;
 const CITY_DISTRICT_HALF_WIDTH = 520;
 const CITY_GROUND_ELEVATION = -10;
 const CITY_RELATIVE_ELEVATION = -10;
 const ROAD_SURFACE_ELEVATION = 0.055;
 const ROAD_SHOULDER_ELEVATION = 0.035;
 const ROAD_MARKING_ELEVATION = 0.115;
+const ROAD_TEXT_MARKING_ELEVATION = ROAD_MARKING_ELEVATION + 0.018;
 const HIGHWAY_DECK_ELEVATION = -0.26;
 const HIGHWAY_SUPPORT_INTERVAL = 260;
 const CITY_BUILDING_HEIGHT_SCALE = 1.44;
@@ -187,6 +188,38 @@ const ROAD_SIGN_PLACEMENTS = [
   { s: 43100, type: "gantry", title: "環状線", route: "C2", lines: ["板橋", "王子", "川口"] },
   { s: 48680, type: "side", side: 1, title: "出口", route: "出口 12", lines: ["汐留", "右出口"] },
   { s: 53240, type: "gantry", title: "首都高速", route: "C1", lines: ["日本橋", "上野", "浅草"] },
+];
+
+const ADDITIONAL_ROAD_SIGN_PLACEMENTS = [
+  { s: 820, type: "side", side: -1, theme: "route", title: "環状線", route: "C1", lines: ["都心方面", "左車線"] },
+  { s: 2860, type: "side", side: 1, theme: "warning", title: "合流注意", route: "注意", lines: ["左から合流", "車間注意"] },
+  { s: 6420, type: "side", side: -1, theme: "pa", title: "PA", route: "休憩", lines: ["箱崎 PA", "1.2km"] },
+  { s: 10320, type: "side", side: 1, theme: "warning", title: "急カーブ", route: "50", lines: ["速度注意", "追突注意"] },
+  { s: 18880, type: "side", side: 1, theme: "route", title: "八重洲線", route: "Y", lines: ["東京駅", "神田橋"] },
+  { s: 26640, type: "side", side: -1, theme: "warning", title: "車線変更注意", route: "注意", lines: ["分岐 500m", "右へ"] },
+  { s: 31240, type: "side", side: -1, theme: "pa", title: "非常駐車帯", route: "SOS", lines: ["300m", "緊急電話"] },
+  { s: 40620, type: "side", side: 1, theme: "warning", title: "渋滞注意", route: "情報", lines: ["この先", "低速車あり"] },
+  { s: 51260, type: "side", side: -1, theme: "route", title: "深川線", route: "9", lines: ["木場", "辰巳 JCT"] },
+];
+
+const ROAD_SURFACE_MARKINGS = [
+  { s: 760, lane: 1, text: "銀座", subtext: "出口", arrow: "straight" },
+  { s: 1480, lane: 2, text: "右車線", subtext: "渋谷", arrow: "right" },
+  { s: 2440, lane: 0, text: "合流注意", subtext: "速度注意", arrow: "left" },
+  { s: 4320, lane: 2, text: "芝公園", subtext: "出口 04", arrow: "right" },
+  { s: 7020, lane: 1, text: "首都高", subtext: "C1", arrow: "straight" },
+  { s: 8880, lane: 0, text: "大橋", subtext: "C2", arrow: "left" },
+  { s: 11620, lane: 2, text: "羽田空港", subtext: "湾岸線", arrow: "right" },
+  { s: 14460, lane: 1, text: "速度注意", subtext: "急カーブ", arrow: "straight" },
+  { s: 16920, lane: 0, text: "箱崎", subtext: "左分岐", arrow: "left" },
+  { s: 20480, lane: 2, text: "銀座", subtext: "出口 09", arrow: "right" },
+  { s: 24200, lane: 1, text: "有明", subtext: "湾岸線", arrow: "straight" },
+  { s: 28800, lane: 0, text: "神田橋", subtext: "竹橋", arrow: "left" },
+  { s: 33340, lane: 2, text: "六本木", subtext: "目黒", arrow: "right" },
+  { s: 37940, lane: 0, text: "辰巳 PA", subtext: "800m", arrow: "left" },
+  { s: 42900, lane: 1, text: "板橋", subtext: "C2", arrow: "straight" },
+  { s: 48480, lane: 2, text: "汐留", subtext: "出口 12", arrow: "right" },
+  { s: 53020, lane: 1, text: "日本橋", subtext: "上野", arrow: "straight" },
 ];
 
 const TUNNEL_RUNS = [
@@ -682,6 +715,7 @@ export class HighwayWorld {
       }
     }
     highway.add(this.createInstancedBoxes(edgeMarkers, 0.14, 0.035, 27, this.materials.roadEdge));
+    this.createRoadSurfaceMarkings(highway);
 
     const guardrails = this.createGuardrailBatch();
     for (let s = 0; s < this.trackLength; s += 18) {
@@ -701,6 +735,91 @@ export class HighwayWorld {
     this.createFixedCityscape(highway);
 
     this.scene.add(highway);
+  }
+
+  createRoadSurfaceMarkings(parent) {
+    const markings = new THREE.Group();
+    markings.name = "ShutokuRoadSurfaceMarkings";
+    markings.userData.remodelIgnore = true;
+
+    for (const marking of ROAD_SURFACE_MARKINGS) {
+      const frame = this.getFrameAtDistance(marking.s);
+      const laneOffset = LANES[clamp(marking.lane, 0, LANES.length - 1)];
+      const panel = new THREE.Mesh(
+        new THREE.PlaneGeometry(3.45, 13.2),
+        this.createRoadSurfaceMarkingMaterial(marking),
+      );
+      panel.name = `RoadMarking_${marking.text}_${Math.round(marking.s)}`;
+      panel.position.copy(this.offsetPoint(frame, laneOffset, ROAD_TEXT_MARKING_ELEVATION));
+      panel.rotation.set(-Math.PI * 0.5, frame.yaw, 0);
+      panel.renderOrder = 3;
+      panel.receiveShadow = false;
+      markings.add(panel);
+    }
+
+    parent.add(markings);
+  }
+
+  createRoadSurfaceMarkingMaterial(marking) {
+    const texture = makeCanvasTexture((ctx, canvas) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.save();
+      ctx.translate(canvas.width * 0.5, canvas.height * 0.5);
+      ctx.rotate(-Math.PI * 0.5);
+      ctx.fillStyle = "rgba(242, 246, 238, 0.92)";
+      ctx.strokeStyle = "rgba(24, 28, 30, 0.26)";
+      ctx.lineWidth = 5;
+      ctx.lineJoin = "round";
+      this.drawRoadArrow(ctx, marking.arrow ?? "straight", -34, 0);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "900 54px system-ui, sans-serif";
+      ctx.strokeText(marking.text, 42, -10);
+      ctx.fillText(marking.text, 42, -10);
+      ctx.font = "800 32px system-ui, sans-serif";
+      ctx.strokeText(marking.subtext ?? "", 42, 42);
+      ctx.fillText(marking.subtext ?? "", 42, 42);
+      ctx.restore();
+    });
+    texture.anisotropy = this.ultraGraphics ? 8 : 2;
+    return new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      side: THREE.DoubleSide,
+    });
+  }
+
+  drawRoadArrow(ctx, direction, x, y) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = "rgba(242, 246, 238, 0.92)";
+    const sign = direction === "left" ? -1 : 1;
+    ctx.beginPath();
+    ctx.moveTo(-14, 62);
+    ctx.lineTo(14, 62);
+    ctx.lineTo(14, -18);
+    if (direction === "left" || direction === "right") {
+      ctx.bezierCurveTo(14, -48, sign * 40, -60, sign * 62, -60);
+      ctx.lineTo(sign * 62, -84);
+      ctx.lineTo(sign * 104, -44);
+      ctx.lineTo(sign * 62, -4);
+      ctx.lineTo(sign * 62, -28);
+      ctx.bezierCurveTo(sign * 26, -28, -14, -18, -14, 20);
+    } else {
+      ctx.lineTo(-14, -18);
+      ctx.lineTo(-14, -62);
+      ctx.lineTo(-38, -62);
+      ctx.lineTo(0, -106);
+      ctx.lineTo(38, -62);
+      ctx.lineTo(14, -62);
+      ctx.lineTo(14, 62);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   }
 
   addBranchHighways(parent) {
@@ -1136,7 +1255,7 @@ export class HighwayWorld {
     });
     frameMaterial.name = "expresswaySignFrame";
 
-    for (const placement of ROAD_SIGN_PLACEMENTS) {
+    for (const placement of [...ROAD_SIGN_PLACEMENTS, ...ADDITIONAL_ROAD_SIGN_PLACEMENTS]) {
       const frame = this.getFrameAtDistance(placement.s);
       if (placement.type === "gantry") {
         this.addOverheadExpresswaySign(signs, frame, placement, poleMaterial, frameMaterial);
@@ -1217,25 +1336,40 @@ export class HighwayWorld {
   }
 
   createExpresswaySignMaterial(placement) {
+    const palettes = {
+      direction: { background: "#087243", border: "#dfeee6", text: "#ffffff", badge: "#f0f6ef" },
+      exit: { background: "#0b6f45", border: "#f3f6e8", text: "#ffffff", badge: "#ffe46a" },
+      junction: { background: "#075f78", border: "#e6f4f8", text: "#ffffff", badge: "#ffffff" },
+      route: { background: "#154d86", border: "#e7f2ff", text: "#ffffff", badge: "#ffffff" },
+      warning: { background: "#d3a51b", border: "#2d2410", text: "#1f1b12", badge: "#1f1b12" },
+      pa: { background: "#2f6d9a", border: "#e6f6ff", text: "#ffffff", badge: "#ffffff" },
+    };
+    const palette = palettes[placement.theme ?? "direction"] ?? palettes.direction;
     const texture = makeCanvasTexture((ctx, canvas) => {
-      ctx.fillStyle = "#087243";
+      ctx.fillStyle = palette.background;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.strokeStyle = "#dfeee6";
+      ctx.strokeStyle = palette.border;
       ctx.lineWidth = 7;
       ctx.strokeRect(9, 9, canvas.width - 18, canvas.height - 18);
-      ctx.fillStyle = "#dfeee6";
+      if (placement.theme === "warning") {
+        ctx.fillStyle = "rgba(255, 244, 185, 0.34)";
+        ctx.fillRect(16, 16, canvas.width - 32, 34);
+      }
+      ctx.fillStyle = placement.theme === "warning" ? palette.text : palette.border;
       ctx.font = "bold 22px system-ui, sans-serif";
       ctx.textBaseline = "middle";
       ctx.fillText(placement.title, 20, 31);
       ctx.font = "bold 17px system-ui, sans-serif";
+      ctx.textAlign = "right";
       ctx.fillText(placement.route, canvas.width - 76, 31);
-      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "left";
+      ctx.fillStyle = palette.text;
       ctx.font = "bold 23px system-ui, sans-serif";
       const lines = placement.lines ?? [];
       for (let i = 0; i < lines.length; i += 1) {
         ctx.fillText(lines[i], 22, 65 + i * 26);
       }
-      ctx.fillStyle = "#f0f6ef";
+      ctx.fillStyle = palette.badge;
       ctx.beginPath();
       ctx.moveTo(canvas.width - 34, canvas.height - 27);
       ctx.lineTo(canvas.width - 20, canvas.height - 39);
