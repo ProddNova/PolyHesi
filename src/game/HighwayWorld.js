@@ -128,13 +128,18 @@ const CITY_BUILDING_PLACEMENTS = [
 
 const CITY_FACADE_PALETTE = [
   0x596064,
+  0x62666a,
   0x687985,
+  0x6d7174,
   0x737f8d,
   0x777d7c,
+  0x808486,
   0x7b8587,
   0x878475,
   0x8a8077,
+  0x8f928c,
   0x8d8172,
+  0x6f6d67,
 ];
 const CITY_BLOCK_ROWS = [
   { spacing: 36, lateral: 15, lateralJitter: 2, forwardJitter: 13, height: [26, 70], width: [14, 30], depth: [18, 34], skip: 0.0, serviceClearance: 82 },
@@ -332,7 +337,7 @@ export class HighwayWorld {
       buildingWindow: new THREE.MeshBasicMaterial({ color: 0x9fb9c8 }),
       buildingWindowWarm: new THREE.MeshBasicMaterial({ color: 0xd7b45b }),
       buildingGlassDark: new THREE.MeshStandardMaterial({
-        color: 0x26323a,
+        color: 0x3d474d,
         roughness: 0.42,
         metalness: 0.16,
         flatShading: true,
@@ -1071,8 +1076,8 @@ export class HighwayWorld {
           continue;
         }
         const polePosition = this.offsetPoint(frame, side * CITY_STREETLIGHT_POLE_OFFSET, 3.05);
-        const armPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 0.76, 2.78, 5.96);
-        const lampPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 1.55, 2.74, 5.88);
+        const armPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 0.76, 0.02, 5.96);
+        const lampPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 1.55, 0.02, 5.88);
         poles.push({
           position: polePosition,
           yaw: frame.yaw,
@@ -1344,8 +1349,20 @@ export class HighwayWorld {
   addProceduralCityBlock(batches) {
     const { bodyBatches, roofs, glass, warmWindows, trim, signs, row, rowIndex, side, s, seed } = batches;
     const frame = this.getFrameAtDistance(s);
-    const width = cityRange(seed + 1.7, row.width[0], row.width[1]);
-    const depth = cityRange(seed + 2.9, row.depth[0], row.depth[1]);
+    let width = cityRange(seed + 1.7, row.width[0], row.width[1]);
+    let depth = cityRange(seed + 2.9, row.depth[0], row.depth[1]);
+    const footprintStyle = cityNoise(seed + 2.35);
+    if (footprintStyle < 0.3) {
+      const blockSize = (width + depth) * 0.5;
+      width = blockSize * cityRange(seed + 2.42, 0.88, 1.08);
+      depth = blockSize * cityRange(seed + 2.51, 0.9, 1.12);
+    } else if (footprintStyle < 0.62) {
+      width *= cityRange(seed + 2.42, 1.18, 1.58);
+      depth *= cityRange(seed + 2.51, 0.68, 0.92);
+    } else if (footprintStyle < 0.86) {
+      width *= cityRange(seed + 2.42, 0.66, 0.9);
+      depth *= cityRange(seed + 2.51, 1.12, 1.52);
+    }
     const towerChance = rowIndex >= 4 && cityNoise(seed + 3.35) > 0.82;
     const skylineBoost = towerChance ? cityRange(seed + 3.85, 1.28, rowIndex >= 8 ? 1.82 : 1.58) : 1;
     const height = cityRange(seed + 4.1, row.height[0], row.height[1]) * (rowIndex >= 3 ? 1.08 : 1) * skylineBoost * CITY_BUILDING_HEIGHT_SCALE;
@@ -1412,14 +1429,6 @@ export class HighwayWorld {
         remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "trim"),
       });
     }
-
-    trim.push({
-      position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.01, 0, bodyHeight * 0.18),
-      yaw,
-      scale: { x: 0.1, y: 0.18, z: depth * 0.84 },
-      remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "trim"),
-    });
-
   }
 
   makeBuildingRemodelMeta(groupId, label, part, selectable = false) {
@@ -1486,17 +1495,6 @@ export class HighwayWorld {
             remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window"),
           });
         }
-      }
-
-      const mullionCount = 2 + Math.floor(cityNoise(seed + 20.2) * 4);
-      for (let i = 1; i <= mullionCount; i += 1) {
-        const z = facadeStartZ + (facadeDepth * i) / (mullionCount + 1);
-        trim.push({
-          position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.025, z, groundMargin + usableHeight * 0.5),
-          yaw,
-          scale: { x: 0.1, y: usableHeight * 0.96, z: 0.08 },
-          remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "trim"),
-        });
       }
       return;
     }
@@ -1657,7 +1655,6 @@ export class HighwayWorld {
       this.addLocalBox(group, w * 0.72, h * 0.36, d * 0.72, material, side * w * 0.07, h * 0.82, -d * 0.04);
       this.addLocalBox(group, w * 0.8, 0.5, d * 0.78, roofMaterial, side * w * 0.07, h + 0.25, -d * 0.04);
       this.addFacadeWindows(group, w, h * 0.86, d, type.floors, type.columns, side);
-      this.addBalconyBands(group, w, d, h, side, 4);
       return;
     }
 
@@ -1665,7 +1662,6 @@ export class HighwayWorld {
       this.addLocalBox(group, w, h, d, material, 0, h * 0.5, 0);
       this.addLocalBox(group, w * 1.04, 0.7, d * 1.05, roofMaterial, 0, h + 0.35, 0);
       this.addFacadeWindows(group, w, h * 0.72, d, 4, Math.max(5, type.columns), side, 1.05);
-      this.addLocalBox(group, 0.16, 0.34, d * 0.82, trim, -side * (w * 0.5 + 0.1), h * 0.78, 0);
       return;
     }
 
@@ -1680,9 +1676,6 @@ export class HighwayWorld {
     if (type.id === "thinTower" || type.id === "concreteTower") {
       this.addLocalBox(group, w, h, d, material, 0, h * 0.5, 0);
       this.addLocalBox(group, w * 1.08, 0.6, d * 1.08, roofMaterial, 0, h + 0.3, 0);
-      for (const x of [-0.38, 0.38]) {
-        this.addLocalBox(group, 0.14, h * 0.94, 0.18, trim, x * w, h * 0.5, -d * 0.5 - 0.08);
-      }
       this.addFacadeWindows(group, w, h, d, type.floors, type.columns, side, 0.28);
       this.addLocalBox(group, 0.18, h * 0.12, 0.18, trim, 0, h + 1.15, 0);
       return;
@@ -1692,9 +1685,6 @@ export class HighwayWorld {
       this.addLocalBox(group, w, h * 0.82, d, material, 0, h * 0.41, 0);
       this.addLocalBox(group, w * 0.78, h * 0.18, d * 0.82, material, side * w * 0.04, h * 0.91, -d * 0.02);
       this.addLocalBox(group, w * 0.52, h * 0.08, d * 0.54, roofMaterial, side * w * 0.08, h * 1.04, 0);
-      for (const z of [-0.34, -0.17, 0, 0.17, 0.34]) {
-        this.addLocalBox(group, 0.12, h * 0.78, 0.08, trim, -side * (w * 0.5 + 0.08), h * 0.43, z * d);
-      }
       this.addFacadeWindows(group, w, h * 0.94, d, type.floors, type.columns, side, 0.42);
       this.addLocalBox(group, 0.16, h * 0.16, 0.16, trim, side * w * 0.08, h * 1.13, 0);
       return;
@@ -1705,11 +1695,7 @@ export class HighwayWorld {
       this.addLocalBox(group, w * 0.7, h * 0.22, d * 0.74, material, -side * w * 0.06, h * 1.08, 0);
       this.addLocalBox(group, w * 1.02, 0.72, d * 1.02, roofMaterial, 0, h + 0.36, 0);
       this.addLocalBox(group, w * 0.72, 0.62, d * 0.78, roofMaterial, -side * w * 0.06, h * 1.19, 0);
-      for (let i = 1; i <= 5; i += 1) {
-        this.addLocalBox(group, 0.11, h * 0.94, 0.08, trim, -side * (w * 0.5 + 0.08), h * 0.5, -d * 0.45 + (d * 0.9 * i) / 6);
-      }
       this.addFacadeWindows(group, w, h, d, type.floors, type.columns, side, 0.48);
-      this.addBalconyBands(group, w, d, h, side, 9);
       return;
     }
 
@@ -1725,7 +1711,6 @@ export class HighwayWorld {
     if (type.id === "twin") {
       this.addLocalBox(group, w * 0.38, h, d, material, -w * 0.26, h * 0.5, 0);
       this.addLocalBox(group, w * 0.38, h * 0.86, d, material, w * 0.26, h * 0.43, 0);
-      this.addLocalBox(group, w * 0.5, h * 0.12, d * 0.72, trim, 0, h * 0.58, 0);
       this.addLocalBox(group, w * 0.9, 0.48, d * 0.95, roofMaterial, 0, h + 0.24, 0);
       this.addFacadeWindows(group, w, h, d, type.floors, type.columns + 2, side, 0.24);
       return;
@@ -1734,9 +1719,6 @@ export class HighwayWorld {
     if (type.id === "parking") {
       this.addLocalBox(group, w, h, d, material, 0, h * 0.5, 0);
       this.addLocalBox(group, w * 1.02, 0.42, d * 1.02, roofMaterial, 0, h + 0.21, 0);
-      for (let i = 1; i < type.floors; i += 1) {
-        this.addLocalBox(group, 0.12, 0.16, d * 0.86, trim, -side * (w * 0.5 + 0.08), (h / type.floors) * i, 0);
-      }
       this.addLocalBox(group, 0.15, h * 0.56, d * 0.2, this.materials.buildingGlassDark, -side * (w * 0.5 + 0.08), h * 0.42, -d * 0.26);
       this.addLocalBox(group, 0.15, h * 0.56, d * 0.2, this.materials.buildingGlassDark, -side * (w * 0.5 + 0.08), h * 0.42, d * 0.26);
       return;
@@ -1744,12 +1726,6 @@ export class HighwayWorld {
 
     this.addLocalBox(group, w, h, d, material, 0, h * 0.5, 0);
     this.addLocalBox(group, w * 1.04, 0.52, d * 1.04, roofMaterial, 0, h + 0.26, 0);
-    if (type.id === "office") {
-      for (const z of [-0.34, -0.12, 0.12, 0.34]) {
-        this.addLocalBox(group, 0.13, h * 0.84, 0.08, trim, -side * (w * 0.5 + 0.09), h * 0.51, z * d);
-      }
-      this.addLocalBox(group, w * 0.82, h * 0.1, d * 0.82, trim, 0, h * 0.48, 0);
-    }
     this.addFacadeWindows(group, w, h, d, type.floors, type.columns, side);
   }
 
@@ -1811,21 +1787,6 @@ export class HighwayWorld {
           z,
         );
       }
-    }
-  }
-
-  addBalconyBands(group, width, depth, height, side, count) {
-    for (let i = 1; i <= count; i += 1) {
-      this.addLocalBox(
-        group,
-        0.18,
-        0.12,
-        depth * 0.82,
-        this.materials.buildingTrim,
-        -side * (width * 0.5 + 0.12),
-        (height * i) / (count + 1),
-        0,
-      );
     }
   }
 
