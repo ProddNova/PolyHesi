@@ -321,7 +321,6 @@ export class HighwayWorld {
       reflectorRed: new THREE.MeshBasicMaterial({ color: 0x9d2d24 }),
       buildingWindow: new THREE.MeshBasicMaterial({ color: 0x9fb9c8 }),
       buildingWindowWarm: new THREE.MeshBasicMaterial({ color: 0xd7b45b }),
-      buildingWindowBlue: new THREE.MeshBasicMaterial({ color: 0x6c8ebf }), // new: extra cool tone
       buildingGlassDark: new THREE.MeshStandardMaterial({
         color: 0x26323a,
         roughness: 0.42,
@@ -1272,9 +1271,6 @@ export class HighwayWorld {
 
     this.createProceduralRoadsideDistrict(city);
     
-    // Aggiungiamo alcuni grattacieli iconici ogni tanto
-    this.addSkyscraperHighlights(city);
-    
     this.createHorizonBuildings(city);
 
     for (const placement of CITY_BUILDING_PLACEMENTS) {
@@ -1293,7 +1289,6 @@ export class HighwayWorld {
     const roofs = [];
     const glass = [];
     const warmWindows = [];
-    const blueWindows = []; // new batch for cool windows
     const trim = [];
     const signs = [];
 
@@ -1313,7 +1308,6 @@ export class HighwayWorld {
             roofs,
             glass,
             warmWindows,
-            blueWindows,
             trim,
             signs,
             row,
@@ -1332,23 +1326,17 @@ export class HighwayWorld {
     district.add(this.createScaledInstancedBoxes(roofs, this.materials.buildingTrim, false, false));
     district.add(this.createScaledInstancedBoxes(glass, this.materials.buildingWindow, false, false));
     district.add(this.createScaledInstancedBoxes(warmWindows, this.materials.buildingWindowWarm, false, false));
-    district.add(this.createScaledInstancedBoxes(blueWindows, this.materials.buildingWindowBlue, false, false)); // new
     district.add(this.createScaledInstancedBoxes(trim, this.materials.buildingGlassDark, false, false));
     district.add(this.createScaledInstancedBoxes(signs, this.materials.tunnelSign, false, false));
     parent.add(district);
   }
 
   addProceduralCityBlock(batches) {
-    const { bodyBatches, roofs, glass, warmWindows, blueWindows, trim, signs, row, rowIndex, side, s, seed } = batches;
+    const { bodyBatches, roofs, glass, warmWindows, trim, signs, row, rowIndex, side, s, seed } = batches;
     const frame = this.getFrameAtDistance(s);
     const width = cityRange(seed + 1.7, row.width[0], row.width[1]);
     const depth = cityRange(seed + 2.9, row.depth[0], row.depth[1]);
-    // Possibilità di grattacielo: 5% di probabilità, altezza moltiplicata fino a 2.5x
-    let heightMultiplier = 1;
-    if (cityNoise(seed + 33.7) < 0.05 && rowIndex >= 3) {
-      heightMultiplier = cityRange(seed + 33.9, 1.8, 2.5);
-    }
-    const height = cityRange(seed + 4.1, row.height[0], row.height[1]) * (rowIndex >= 3 ? 1.08 : 1) * CITY_BUILDING_HEIGHT_SCALE * heightMultiplier;
+    const height = cityRange(seed + 4.1, row.height[0], row.height[1]) * (rowIndex >= 3 ? 1.08 : 1) * CITY_BUILDING_HEIGHT_SCALE;
     const lateral = side * (ROAD_HALF_WIDTH + row.lateral + width * 0.5 + cityRange(seed + 5.5, -row.lateralJitter, row.lateralJitter));
     const forward = cityRange(seed + 6.7, -row.forwardJitter, row.forwardJitter);
     const base = this.offsetAlong(frame, lateral, forward, 0);
@@ -1381,37 +1369,24 @@ export class HighwayWorld {
       remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "roof"),
     });
 
-    // Aggiungi finestre su tutte e quattro le facciate
-    const facades = [
-      { dir: 'front', offsetX: -side * (width * 0.5 + 0.07), offsetZ: 0, depth: depth, label: 'front' },
-      { dir: 'back', offsetX: side * (width * 0.5 + 0.07), offsetZ: 0, depth: depth, label: 'back' },
-      { dir: 'left', offsetX: 0, offsetZ: -side * (depth * 0.5 + 0.07), depth: width, label: 'left' },
-      { dir: 'right', offsetX: 0, offsetZ: side * (depth * 0.5 + 0.07), depth: width, label: 'right' },
-    ];
+    const facadeX = -side * (width * 0.5 + 0.07);
+    this.addProceduralFacadeDetails({
+      glass,
+      warmWindows,
+      trim,
+      base,
+      yaw,
+      width,
+      depth,
+      bodyHeight,
+      side,
+      rowIndex,
+      seed,
+      facadeX,
+      buildingId,
+      buildingLabel,
+    });
 
-    for (const facade of facades) {
-      this.addProceduralFacadeDetails({
-        glass,
-        warmWindows,
-        blueWindows,
-        trim,
-        base,
-        yaw,
-        width: facade.dir === 'left' || facade.dir === 'right' ? depth : width,
-        depth: facade.depth,
-        bodyHeight,
-        side: facade.dir === 'back' || facade.dir === 'right' ? -side : side,
-        rowIndex,
-        seed: seed + facades.indexOf(facade) * 0.37,
-        facadeX: facade.offsetX,
-        facadeZ: facade.offsetZ,
-        buildingId,
-        buildingLabel,
-        facadeDir: facade.dir,
-      });
-    }
-
-    // Roof details
     if (height > 44 && cityNoise(seed + 18.2) > 0.5) {
       const roofDetail = this.offsetLocalPoint(base, yaw, cityRange(seed + 19.1, -width * 0.24, width * 0.24), cityRange(seed + 19.9, -depth * 0.24, depth * 0.24), bodyHeight + 1.05);
       trim.push({
@@ -1428,6 +1403,7 @@ export class HighwayWorld {
       scale: { x: 0.1, y: 0.18, z: depth * 0.84 },
       remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "trim"),
     });
+
   }
 
   makeBuildingRemodelMeta(groupId, label, part, selectable = false) {
@@ -1444,85 +1420,86 @@ export class HighwayWorld {
   addProceduralFacadeDetails({
     glass,
     warmWindows,
-    blueWindows,
     trim,
     base,
     yaw,
-    width,
     depth,
     bodyHeight,
     side,
     rowIndex,
     seed,
     facadeX,
-    facadeZ = 0,
     buildingId,
     buildingLabel,
   }) {
-    const groundMargin = cityRange(seed + 11.1, 2.5, 4.5);
-    const roofMargin = cityRange(seed + 12.7, 1.5, 3.5);
-    const usableHeight = Math.max(6, bodyHeight - groundMargin - roofMargin);
-    // Aumento densità: più piani, più colonne
-    const maxRows = rowIndex === 0 ? 12 : 20;
-    const rowCount = Math.floor(clamp(usableHeight / 3.8, 4, maxRows));
-    const facadeDepth = depth * cityRange(seed + 14.4, 0.72, 0.94);
-    const startZ = -facadeDepth * 0.5;
-    const columnCount = Math.floor(clamp(facadeDepth / 2.2, 4, 14)); // finestre più strette
-    const windowHeight = 0.65 + cityRange(seed + 13.6, -0.15, 0.25);
-    const windowDepth = (facadeDepth / columnCount) * 0.82;
+    const groundMargin = cityRange(seed + 11.1, 3.1, 5.4);
+    const roofMargin = cityRange(seed + 12.7, 2.0, 4.8);
+    const usableHeight = Math.max(4.8, bodyHeight - groundMargin - roofMargin);
+    const floorHeight = cityRange(seed + 13.6, 4.2, 5.6);
+    const maxRows = rowIndex === 0 ? 8 : 13;
+    const rowCount = Math.floor(clamp(usableHeight / floorHeight, 3, maxRows));
+    const facadeDepth = depth * cityRange(seed + 14.4, 0.68, 0.92);
+    const facadeStartZ = -facadeDepth * 0.5;
+    const style = cityNoise(seed + 15.3);
 
+    if (style < 0.56) {
+      const bandHeight = cityRange(seed + 16.8, 0.82, 1.16);
+      const segmentCount = Math.floor(clamp(facadeDepth / cityRange(seed + 17.2, 4.2, 5.8), 3, rowIndex === 0 ? 6 : 8));
+      const segmentDepth = Math.max(1.15, (facadeDepth / segmentCount) * cityRange(seed + 17.6, 0.54, 0.7));
+      for (let row = 0; row < rowCount; row += 1) {
+        const y = groundMargin + (usableHeight * (row + 0.5)) / rowCount;
+        for (let segment = 0; segment < segmentCount; segment += 1) {
+          const z = facadeStartZ + (facadeDepth * (segment + 0.5)) / segmentCount;
+          const target = cityNoise(seed + row * 7.17 + segment * 4.91 + 19.4) > 0.86 ? warmWindows : glass;
+          trim.push({
+            position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.006, z, y),
+            yaw,
+            scale: { x: 0.08, y: bandHeight + 0.2, z: segmentDepth + 0.28 },
+            remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window-frame"),
+          });
+          target.push({
+            position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.026, z, y),
+            yaw,
+            scale: { x: 0.18, y: bandHeight, z: segmentDepth },
+            remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window"),
+          });
+        }
+      }
+
+      const mullionCount = 1 + Math.floor(cityNoise(seed + 20.2) * 2);
+      for (let i = 1; i <= mullionCount; i += 1) {
+        const z = facadeStartZ + (facadeDepth * i) / (mullionCount + 1);
+        trim.push({
+          position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.025, z, groundMargin + usableHeight * 0.5),
+          yaw,
+          scale: { x: 0.1, y: usableHeight * 0.96, z: 0.08 },
+          remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "trim"),
+        });
+      }
+      return;
+    }
+
+    const columnCount = Math.floor(clamp(facadeDepth / cityRange(seed + 20.9, 4.3, 5.8), 3, rowIndex === 0 ? 6 : 8));
+    const windowDepth = Math.max(1.12, (facadeDepth / columnCount) * cityRange(seed + 21.8, 0.5, 0.66));
+    const windowHeight = cityRange(seed + 22.5, 0.92, 1.28);
     for (let row = 0; row < rowCount; row += 1) {
       const y = groundMargin + (usableHeight * (row + 0.5)) / rowCount;
       for (let column = 0; column < columnCount; column += 1) {
-        const z = startZ + (facadeDepth * (column + 0.5)) / columnCount;
-        // Varietà illuminazione: tre colori possibili
-        const noiseVal = cityNoise(seed + row * 7.17 + column * 4.91 + 19.4);
-        let windowMat;
-        if (noiseVal < 0.6) windowMat = glass;
-        else if (noiseVal < 0.85) windowMat = warmWindows;
-        else windowMat = blueWindows;
-
-        // Telaio
+        const z = facadeStartZ + (facadeDepth * (column + 0.5)) / columnCount;
+        const target = cityNoise(seed + row * 11.7 + column * 4.3 + 24.1) > 0.86 ? warmWindows : glass;
         trim.push({
-          position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.006, z + (facadeZ), y),
+          position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.006, z, y),
           yaw,
-          scale: { x: 0.08, y: windowHeight + 0.16, z: windowDepth + 0.18 },
+          scale: { x: 0.08, y: windowHeight + 0.22, z: windowDepth + 0.26 },
           remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window-frame"),
         });
-        // Vetro
-        windowMat === glass
-          ? glass.push({
-              position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.026, z + facadeZ, y),
-              yaw,
-              scale: { x: 0.18, y: windowHeight, z: windowDepth },
-              remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window"),
-            })
-          : windowMat === warmWindows
-          ? warmWindows.push({
-              position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.026, z + facadeZ, y),
-              yaw,
-              scale: { x: 0.18, y: windowHeight, z: windowDepth },
-              remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window"),
-            })
-          : blueWindows.push({
-              position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.026, z + facadeZ, y),
-              yaw,
-              scale: { x: 0.18, y: windowHeight, z: windowDepth },
-              remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window"),
-            });
+        target.push({
+          position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.026, z, y),
+          yaw,
+          scale: { x: 0.18, y: windowHeight, z: windowDepth },
+          remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window"),
+        });
       }
-    }
-
-    // Mullions verticali
-    const mullionCount = Math.min(4, Math.floor(columnCount / 3));
-    for (let i = 1; i <= mullionCount; i++) {
-      const z = startZ + (facadeDepth * i) / (mullionCount + 1);
-      trim.push({
-        position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.025, z + facadeZ, groundMargin + usableHeight * 0.5),
-        yaw,
-        scale: { x: 0.06, y: usableHeight * 0.96, z: 0.06 },
-        remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "trim"),
-      });
     }
   }
 
@@ -1800,81 +1777,6 @@ export class HighwayWorld {
     const mesh = makeBox(width, height, depth, material, new THREE.Vector3(x, y, z), false);
     parent.add(mesh);
     return mesh;
-  }
-
-  // NUOVO: Aggiunge grattacieli iconici casuali lungo il percorso
-  addSkyscraperHighlights(parent) {
-    const group = new THREE.Group();
-    group.name = "SkyscraperHighlights";
-    // Piazzeremo alcuni grattacieli molto alti in punti specifici con grande scala
-    const skyscrapers = [
-      { s: 1800, side: 1, type: "thinTower", scale: 1.2, heightBoost: 2.0 },   // 156m effettivi
-      { s: 6200, side: -1, type: "concreteTower", scale: 1.1, heightBoost: 1.8 },
-      { s: 10500, side: 1, type: "office", scale: 1.3, heightBoost: 2.2 },      // ufficio altissimo
-      { s: 19200, side: -1, type: "thinTower", scale: 1.4, heightBoost: 2.3 },
-      { s: 26800, side: 1, type: "concreteTower", scale: 1.2, heightBoost: 2.0 },
-      { s: 34900, side: -1, type: "office", scale: 1.1, heightBoost: 1.9 },
-      { s: 43600, side: 1, type: "thinTower", scale: 1.3, heightBoost: 2.1 },
-      { s: 52700, side: -1, type: "concreteTower", scale: 1.0, heightBoost: 2.4 },
-    ];
-
-    for (const spec of skyscrapers) {
-      const type = BUILDING_TYPES.find(t => t.id === spec.type) || BUILDING_TYPES[0];
-      const frame = this.getFrameAtDistance(spec.s);
-      const width = type.width * spec.scale;
-      const depth = type.depth * spec.scale;
-      const height = type.height * spec.scale * CITY_BUILDING_HEIGHT_SCALE * spec.heightBoost;
-      const lateral = ROAD_HALF_WIDTH + 18 + width * 0.5 + cityNoise(spec.s) * 10;
-      const forward = cityNoise(spec.s + 5) * 30 - 15;
-      const position = this.offsetAlong(frame, lateral * spec.side, forward, 0);
-      const yaw = frame.yaw + (spec.side * 0.05);
-
-      const buildingGroup = new THREE.Group();
-      buildingGroup.name = `Skyscraper_${type.id}_${Math.round(spec.s)}`;
-      buildingGroup.position.copy(position);
-      buildingGroup.rotation.y = yaw;
-
-      const material = this.makeFacadeMaterial(type.color);
-      const roofMaterial = this.makeFacadeMaterial(type.roof, 0.82, 0.08);
-      const trim = this.materials.buildingTrim;
-
-      // Corpo snello
-      buildingGroup.add(makeBox(width, height, depth, material, new THREE.Vector3(0, height * 0.5, 0), true));
-      buildingGroup.add(makeBox(width * 1.08, 0.8, depth * 1.08, roofMaterial, new THREE.Vector3(0, height + 0.4, 0), true));
-      
-      // Finestre su tutti i lati con alta densità
-      const facadeData = [
-        { x: -spec.side * (width * 0.5 + 0.05), z: 0, depth: depth },
-        { x: spec.side * (width * 0.5 + 0.05), z: 0, depth: depth },
-        { x: 0, z: -spec.side * (depth * 0.5 + 0.05), depth: width },
-        { x: 0, z: spec.side * (depth * 0.5 + 0.05), depth: width },
-      ];
-      const usableHeight = height * 0.85;
-      const rowCount = Math.floor(usableHeight / 3.5); // finestre ogni 3.5 unità
-      const columnCount = 8;
-      for (const face of facadeData) {
-        const fDepth = face.depth * 0.8;
-        const startZ = -fDepth * 0.5;
-        for (let row = 0; row < rowCount; row++) {
-          const y = 4 + (usableHeight * (row + 0.5)) / rowCount;
-          for (let col = 0; col < columnCount; col++) {
-            const z = startZ + (fDepth * (col + 0.5)) / columnCount;
-            const windowMat = (row + col) % 3 === 0 ? this.materials.buildingWindowWarm : this.materials.buildingWindow;
-            buildingGroup.add(makeBox(0.1, 0.9, fDepth / columnCount * 0.7, trim, new THREE.Vector3(face.x - spec.side * 0.01, y, face.z + z), true));
-            buildingGroup.add(makeBox(0.22, 0.75, fDepth / columnCount * 0.5, windowMat, new THREE.Vector3(face.x - spec.side * 0.04, y, face.z + z), false));
-          }
-        }
-      }
-
-      // Antenna o guglia sulla cima
-      if (height > 120) {
-        buildingGroup.add(makeBox(0.4, height * 0.08, 0.4, this.materials.streetlightPole, new THREE.Vector3(0, height + height * 0.04 + 0.3, 0), true));
-        buildingGroup.add(makeBox(0.8, 0.25, 0.8, this.materials.reflectorRed, new THREE.Vector3(0, height + height * 0.04 + 0.15, 0), false));
-      }
-
-      buildingGroup.traverse(obj => { if (obj.isMesh) obj.userData.remodelIgnore = true; });
-      parent.add(buildingGroup);
-    }
   }
 
   createTunnelRuns(parent) {
