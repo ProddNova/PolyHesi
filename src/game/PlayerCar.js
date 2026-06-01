@@ -33,6 +33,8 @@ export class PlayerCar {
     this.activePresetId = null;
     this.activePresetKey = "";
     this.activePreset = getCarPreset();
+    this.graphicsQuality = 1;
+    this.ultraGraphics = false;
     this.position = new THREE.Vector3(0, 0, 0);
     this.previousPosition = new THREE.Vector3(0, 0, 0);
     this.velocity = new THREE.Vector3(0, 0, 0);
@@ -51,6 +53,7 @@ export class PlayerCar {
     try {
       this.group.add(createPlayerCarAsset(preset));
       this.addHeadLight(preset.bodyLength);
+      this.applyGraphicsQualityToLights();
       return;
     } catch (error) {
       console.warn("Unable to build PSX car asset; using procedural fallback.", error);
@@ -143,6 +146,7 @@ export class PlayerCar {
     headLight.shadow.camera.far = 120;
     this.group.add(headLight);
     this.group.add(headLight.target);
+    this.applyGraphicsQualityToLights();
   }
 
   addHeadLight(length) {
@@ -156,6 +160,26 @@ export class PlayerCar {
     headLight.shadow.camera.far = 120;
     this.group.add(headLight);
     this.group.add(headLight.target);
+  }
+
+  setGraphicsQuality(quality = this.graphicsQuality, ultra = this.ultraGraphics) {
+    this.graphicsQuality = Math.max(0, Math.min(2, Math.round(Number(quality) || 0)));
+    this.ultraGraphics = Boolean(ultra);
+    this.applyGraphicsQualityToLights();
+  }
+
+  applyGraphicsQualityToLights() {
+    const shadowSize = this.ultraGraphics ? 1024 : this.graphicsQuality >= 2 ? 768 : 0;
+    this.group.traverse((child) => {
+      if (!child.isLight) {
+        return;
+      }
+      child.castShadow = shadowSize > 0;
+      if (shadowSize > 0 && child.shadow?.mapSize) {
+        child.shadow.mapSize.set(shadowSize, shadowSize);
+        child.shadow.needsUpdate = true;
+      }
+    });
   }
 
   setCarPreset(car) {

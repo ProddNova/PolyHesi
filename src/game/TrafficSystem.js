@@ -12,6 +12,11 @@ const SAFE_BACK_SPAWN = 85;
 const DENSITY_TO_ACTIVE_CARS = 0.145;
 const MIN_ACTIVE_CARS = 12;
 const MAX_ACTIVE_CARS = 72;
+const GRAPHICS_TRAFFIC_LIMITS = [
+  { min: 8, max: 30 },
+  { min: 10, max: 48 },
+  { min: MIN_ACTIVE_CARS, max: MAX_ACTIVE_CARS },
+];
 const LANE_CHANGE_SIGNAL_LEAD = 1.15;
 const LANE_CHANGE_SIGNAL_HOLD = 0.55;
 const LANE_CHANGE_FINISH_EPSILON = 0.16;
@@ -99,10 +104,15 @@ export class TrafficSystem {
       return 0;
     }
 
+    const rawQuality = Number(settings.graphicsQuality);
+    const quality = settings.ultraGraphics
+      ? 2
+      : clamp(Number.isFinite(rawQuality) ? Math.round(rawQuality) : 1, 0, 2);
+    const limit = GRAPHICS_TRAFFIC_LIMITS[quality] ?? GRAPHICS_TRAFFIC_LIMITS[1];
     return clamp(
       Math.round(settings.trafficDensity * DENSITY_TO_ACTIVE_CARS),
-      MIN_ACTIVE_CARS,
-      MAX_ACTIVE_CARS,
+      limit.min,
+      limit.max,
     );
   }
 

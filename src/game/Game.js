@@ -28,8 +28,10 @@ import { clamp, damp } from "./utils.js";
 
 const WALKER_EYE_HEIGHT = 1.92;
 const DAMAGE_INVULNERABILITY_SECONDS = 5;
-const IMPACT_RECOVERY_SECONDS = 0.035;
+const IMPACT_RECOVERY_SECONDS = 0;
 const MAX_SIMULATION_DT = 1 / 30;
+const HUD_SLOW_UPDATE_INTERVAL = 0.25;
+const TIME_SETTING_UI_INTERVAL = 0.2;
 const CAMERA_MODES = ["hood", "roof", "chaseClose", "chaseFar", "cinematic"];
 const GARAGE_PSX_CAR_TARGET_ID = "psx:garage-player-car";
 const REMODEL_PRESETS = {
@@ -101,6 +103,9 @@ export class Game {
     this.cameraLookAtInitialized = false;
     this.cameraMode = "hood";
     this.cameraModeIndex = 0;
+    this.hudSlowUpdateTimer = 0;
+    this.timeSettingUiTimer = 0;
+    this.upgradeCosts = this.getUpgradeCosts();
     this.remodelClipboard = null;
     this.remodelUndoStack = [];
     this.vehicleRigOverrides = {};
@@ -161,7 +166,6 @@ export class Game {
 
     this.input = new InputController(this.renderer.domElement);
     this.world = new HighwayWorld(this.scene);
-    this.world.setUltraGraphics(Boolean(this.settings.ultraGraphics));
     this.player = new PlayerCar(this.scene, this.world.getStartPose());
     this.player.setCarPreset(this.getActiveVehiclePreset());
     this.garagePsxRemodelTarget = null;
@@ -251,6 +255,7 @@ export class Game {
     this.setSaveStatus(this.authClient ? "pronto" : "");
 
     this.world.update();
+    this.applyGraphicsQuality();
     this.traffic.reset(this.settings);
     this.enterGarageMode(true);
 
@@ -1672,16 +1677,20 @@ export class Game {
       crashed: this.crashed,
       canRestart: this.canRestart(),
     });
-    this.hud.updateGarageState({
-      coins: this.coins,
-      upgrades: this.upgrades,
-      installedUpgrades: this.installedUpgrades,
-      costs: this.getUpgradeCosts(),
-      ownedCars: [...this.ownedCars],
-      ownedVehicles: this.ownedVehicles,
-      activeCar: this.settings.carPreset,
-      activeVehicleId: this.activeVehicleId,
-    });
+    this.hudSlowUpdateTimer -= rawDt;
+    if (this.hudSlowUpdateTimer <= 0) {
+      this.hudSlowUpdateTimer = HUD_SLOW_UPDATE_INTERVAL;
+      this.hud.updateGarageState({
+        coins: this.coins,
+        upgrades: this.upgrades,
+        installedUpgrades: this.installedUpgrades,
+        costs: this.upgradeCosts,
+        ownedCars: [...this.ownedCars],
+        ownedVehicles: this.ownedVehicles,
+        activeCar: this.settings.carPreset,
+        activeVehicleId: this.activeVehicleId,
+      });
+    }
     this.hud.updateNoClipInfo({
       active: this.settings.noClip,
       position: this.settings.noClip
@@ -1710,7 +1719,11 @@ export class Game {
     if (this.settings.dayNightCycle) {
       const speedMinutesPerSecond = Math.max(0, Number(this.settings.dayNightSpeed) || 0);
       this.settings.timeOfDay = (this.settings.timeOfDay + (dt * speedMinutesPerSecond) / 60) % 24;
-      this.hud.updateSettingValue?.("timeOfDay", this.settings.timeOfDay);
+      this.timeSettingUiTimer -= dt;
+      if (this.timeSettingUiTimer <= 0) {
+        this.timeSettingUiTimer = TIME_SETTING_UI_INTERVAL;
+        this.hud.updateSettingValue?.("timeOfDay", this.settings.timeOfDay, { skipPlayerSync: true });
+      }
     }
     this.world.applyEnvironment?.(this.settings, dt);
   }
@@ -2469,19 +2482,28 @@ export class Game {
 
   getRenderPixelRatio() {
     if (this.settings.ultraGraphics) {
-      return Math.min(window.devicePixelRatio || 1, 4);
+      return Math.min(window.devicePixelRatio || 1, 2);
     }
-    const quality = Math.round(Number(this.settings.graphicsQuality) || 1);
-    const cap = quality <= 0 ? 0.82 : quality >= 2 ? 1.5 : 1.15;
-    return Math.min(window.devicePixelRatio, cap);
+    const rawQuality = Number(this.settings.graphicsQuality);
+    const quality = Number.isFinite(rawQuality) ? Math.round(rawQuality) : 1;
+    const cap = quality <= 0 ? 0.7 : quality >= 2 ? 1.25 : 0.95;
+    return Math.min(window.devicePixelRatio || 1, cap);
   }
 
   applyGraphicsQuality() {
-    this.camera.far = this.settings.ultraGraphics ? 1800 : 900;
+    const rawQuality = Number(this.settings.graphicsQuality);
+    const quality = Number.isFinite(rawQuality) ? Math.round(rawQuality) : 1;
+    const shadowEnabled = this.settings.ultraGraphics || quality >= 1;
+    this.camera.far = this.settings.ultraGraphics ? 1800 : quality <= 0 ? 640 : quality >= 2 ? 1100 : 820;
     this.camera.updateProjectionMatrix();
     this.renderer.toneMappingExposure = this.settings.ultraGraphics ? 1.12 : 1;
+    this.renderer.shadowMap.enabled = shadowEnabled;
+    this.renderer.shadowMap.type = quality >= 2 || this.settings.ultraGraphics
+      ? THREE.PCFSoftShadowMap
+      : THREE.BasicShadowMap;
     this.renderer.setPixelRatio(this.getRenderPixelRatio());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.world?.setUltraGraphics?.(Boolean(this.settings.ultraGraphics));
+    this.world?.setGraphicsQuality?.(quality, Boolean(this.settings.ultraGraphics));
+    this.player?.setGraphicsQuality?.(quality, Boolean(this.settings.ultraGraphics));
   }
 }

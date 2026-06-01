@@ -183,6 +183,11 @@ const TUNNEL_RUNS = [
   { start: 51080, length: 1120, name: "South Long Gallery" },
 ];
 const TUNNEL_MODULE_LENGTH = 18;
+const GRAPHICS_PROFILES = [
+  { shadowSize: 0, anisotropy: 1, roadLightStep: Infinity },
+  { shadowSize: 1024, anisotropy: 2, roadLightStep: 2 },
+  { shadowSize: 2048, anisotropy: 8, roadLightStep: 1 },
+];
 
 function seededRandom(seed) {
   let state = seed >>> 0;
@@ -235,6 +240,7 @@ export class HighwayWorld {
     this.roadLights = [];
     this.garageLights = [];
     this.ultraGraphics = false;
+    this.graphicsQuality = 1;
     this.tunnelRuns = TUNNEL_RUNS.map((run) => ({ ...run }));
 
     this.materials = this.createMaterials();
@@ -564,6 +570,10 @@ export class HighwayWorld {
       this.materials.streetlightGlow.color.lerp(new THREE.Color(lampPower > 0.02 ? 0xffe0a0 : 0x6f5a32), smooth);
     }
     for (const light of this.roadLights) {
+      if (!light.visible) {
+        light.intensity = 0;
+        continue;
+      }
       light.intensity = THREE.MathUtils.lerp(
         light.intensity,
         lampPower * (light.userData.baseIntensity ?? 1) * (this.ultraGraphics ? 1.65 : 1.28),
@@ -580,11 +590,37 @@ export class HighwayWorld {
   }
 
   setUltraGraphics(enabled) {
-    this.ultraGraphics = Boolean(enabled);
+    this.setGraphicsQuality(this.graphicsQuality, enabled);
+  }
+
+  setGraphicsQuality(quality = this.graphicsQuality, ultra = this.ultraGraphics) {
+    const rawQuality = Number(quality);
+    this.graphicsQuality = clamp(Number.isFinite(rawQuality) ? Math.round(rawQuality) : 1, 0, 2);
+    this.ultraGraphics = Boolean(ultra);
+    const profile = GRAPHICS_PROFILES[this.graphicsQuality] ?? GRAPHICS_PROFILES[1];
     if (this.environment?.keyLight) {
-      const shadowSize = this.ultraGraphics ? 4096 : 2048;
-      this.environment.keyLight.shadow.mapSize.set(shadowSize, shadowSize);
-      this.environment.keyLight.shadow.needsUpdate = true;
+      const shadowSize = this.ultraGraphics ? 4096 : profile.shadowSize;
+      this.environment.keyLight.castShadow = shadowSize > 0;
+      if (shadowSize > 0) {
+        this.environment.keyLight.shadow.mapSize.set(shadowSize, shadowSize);
+        this.environment.keyLight.shadow.needsUpdate = true;
+      }
+    }
+    const roadLightStep = this.ultraGraphics ? 1 : profile.roadLightStep;
+    for (const light of this.roadLights) {
+      const index = light.userData.qualityIndex ?? 0;
+      light.visible = Number.isFinite(roadLightStep) && index % roadLightStep === 0;
+      if (!light.visible) {
+        light.intensity = 0;
+      }
+    }
+    const garageShadowSize = this.ultraGraphics ? 1024 : this.graphicsQuality >= 2 ? 512 : 0;
+    for (const light of this.garageLights) {
+      light.castShadow = garageShadowSize > 0;
+      if (garageShadowSize > 0 && light.shadow?.mapSize) {
+        light.shadow.mapSize.set(garageShadowSize, garageShadowSize);
+        light.shadow.needsUpdate = true;
+      }
     }
     for (const texture of [
       this.materials?.cityGround?.map,
@@ -592,7 +628,7 @@ export class HighwayWorld {
       this.materials?.concrete?.map,
     ]) {
       if (texture) {
-        texture.anisotropy = this.ultraGraphics ? 16 : 1;
+        texture.anisotropy = this.ultraGraphics ? 16 : profile.anisotropy;
         texture.needsUpdate = true;
       }
     }
@@ -1050,6 +1086,7 @@ export class HighwayWorld {
           light.position.copy(lampPosition);
           light.position.y -= 0.55;
           light.userData.baseIntensity = 7.8;
+          light.userData.qualityIndex = this.roadLights.length;
           this.roadLights.push(light);
           lightGroup.add(light);
         }
@@ -2736,7 +2773,15 @@ export class HighwayWorld {
       }
     }
 
+    const playerColliderHalfX = 1.05;
+    const playerColliderHalfZ = 2.25;
     for (const collider of this.colliders) {
+      if (
+        Math.abs(player.position.x - collider.x) > collider.halfX + playerColliderHalfX ||
+        Math.abs(player.position.z - collider.z) > collider.halfZ + playerColliderHalfZ
+      ) {
+        continue;
+      }
       if (this.resolveAabb(player, collider)) {
         result.hit = result.hit || result.impactSpeed > 5.5;
         result.source = result.source ?? "Concrete";

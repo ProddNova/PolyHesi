@@ -425,10 +425,12 @@ export class HUD {
     }
   }
 
-  updateSettingValue(key, value) {
+  updateSettingValue(key, value, options = {}) {
     const def = SETTING_DEFS.find((item) => item.key === key);
     if (!def) {
-      this.syncPlayerSettings();
+      if (!options.skipPlayerSync) {
+        this.syncPlayerSettings();
+      }
       return;
     }
 
@@ -440,7 +442,9 @@ export class HUD {
     if (output) {
       output.value = def.format(value);
     }
-    this.syncPlayerSettings();
+    if (!options.skipPlayerSync) {
+      this.syncPlayerSettings();
+    }
   }
 
   setRemodelAvailable(available) {
