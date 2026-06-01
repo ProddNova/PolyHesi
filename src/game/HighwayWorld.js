@@ -150,9 +150,9 @@ const ROAD_MARKING_ELEVATION = 0.115;
 const HIGHWAY_DECK_ELEVATION = -0.26;
 const HIGHWAY_SUPPORT_INTERVAL = 260;
 const CITY_BUILDING_HEIGHT_SCALE = 1.44;
-const CITY_SIDEWALK_INTERVAL = 24;
 const CITY_STREETLIGHT_INTERVAL = 112;
-const CITY_STREETLIGHT_POLE_OFFSET = ROAD_HALF_WIDTH + 4.95;
+const CITY_STREETLIGHT_POLE_OFFSET = ROAD_HALF_WIDTH + 2.65;
+const ROADSIDE_SIGN_OFFSET = ROAD_HALF_WIDTH + 4.8;
 const ROAD_SIGN_PLACEMENTS = [
   { s: 420, type: "side", side: 1, title: "首都高速", route: "C1", lines: ["銀座 2km", "新橋 4km"] },
   { s: 1120, type: "gantry", title: "都心環状線", route: "C1", lines: ["渋谷", "霞が関", "羽田"] },
@@ -1011,27 +1011,12 @@ export class HighwayWorld {
     const details = new THREE.Group();
     details.name = "RoadsideCityInfrastructure";
 
-    const sidewalks = [];
     const poles = [];
     const arms = [];
     const lamps = [];
     const lightGroup = new THREE.Group();
     lightGroup.name = "RoadStreetLightEmitters";
     lightGroup.userData.remodelIgnore = true;
-
-    for (let s = 0; s < this.trackLength; s += CITY_SIDEWALK_INTERVAL) {
-      const frame = this.getFrameAtDistance(s);
-      for (const side of [-1, 1]) {
-        if (this.isCityServiceClearance(frame.s, side)) {
-          continue;
-        }
-        sidewalks.push({
-          position: this.offsetPoint(frame, side * (ROAD_HALF_WIDTH + 8.45), 0.09),
-          yaw: frame.yaw,
-          scale: { x: 3.4, y: 0.055, z: 15.5 },
-        });
-      }
-    }
 
     for (let s = 36; s < this.trackLength; s += CITY_STREETLIGHT_INTERVAL) {
       const frame = this.getFrameAtDistance(s);
@@ -1071,7 +1056,6 @@ export class HighwayWorld {
       }
     }
 
-    details.add(this.createScaledInstancedBoxes(sidewalks, this.materials.concrete));
     details.add(this.createScaledInstancedBoxes(poles, this.materials.streetlightPole, false, false));
     details.add(this.createScaledInstancedBoxes(arms, this.materials.streetlightPole, false, false));
     details.add(this.createScaledInstancedBoxes(lamps, this.materials.streetlightGlow, false, false));
@@ -1116,7 +1100,7 @@ export class HighwayWorld {
     const side = placement.side ?? 1;
     const group = new THREE.Group();
     group.name = `RoadsideSign_${Math.round(frame.s)}`;
-    group.position.copy(this.offsetPoint(frame, side * (ROAD_HALF_WIDTH + 5.9), 0));
+    group.position.copy(this.offsetPoint(frame, side * ROADSIDE_SIGN_OFFSET, 0));
     group.rotation.y = frame.yaw;
 
     this.addLocalBox(group, 0.28, 5.2, 0.28, poleMaterial, 0, 2.6, 0);
