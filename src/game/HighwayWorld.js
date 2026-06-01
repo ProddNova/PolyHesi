@@ -156,9 +156,11 @@ const CITY_BLOCK_ROWS = [
   { spacing: 350, lateral: 790, lateralJitter: 96, forwardJitter: 94, height: [266, 498], width: [104, 224], depth: [100, 200], skip: 0.016, serviceClearance: 780 },
 ];
 const CITY_MANUAL_CLEARANCE = 34;
-const CITY_DISTRICT_HALF_WIDTH = 520;
+const CITY_DISTRICT_HALF_WIDTH = 1880;
 const CITY_GROUND_ELEVATION = -10;
 const CITY_RELATIVE_ELEVATION = -10;
+const CITY_MOUNTAIN_INNER_LATERAL = 1580;
+const CITY_MOUNTAIN_OUTER_LATERAL = 1840;
 const ROAD_SURFACE_ELEVATION = 0.055;
 const ROAD_SHOULDER_ELEVATION = 0.035;
 const ROAD_MARKING_ELEVATION = 0.115;
@@ -315,7 +317,7 @@ export class HighwayWorld {
     const concreteTexture = this.createSurfaceTexture("#3a424b", "#48525d", "#252c34", 120);
     concreteTexture.repeat.set(18, 18);
     const cityGroundTexture = this.createSurfaceTexture("#333b42", "#46515b", "#242b31", 220);
-    cityGroundTexture.repeat.set(86, 86);
+    cityGroundTexture.repeat.set(190, 86);
 
     const materials = {
       cityGround: new THREE.MeshStandardMaterial({
@@ -323,6 +325,20 @@ export class HighwayWorld {
         map: cityGroundTexture,
         roughness: 0.9,
         metalness: 0.02,
+        flatShading: true,
+        side: THREE.DoubleSide,
+      }),
+      mountain: new THREE.MeshStandardMaterial({
+        color: 0x26333b,
+        roughness: 0.96,
+        metalness: 0.0,
+        flatShading: true,
+        side: THREE.DoubleSide,
+      }),
+      mountainFar: new THREE.MeshStandardMaterial({
+        color: 0x1c272e,
+        roughness: 0.98,
+        metalness: 0.0,
         flatShading: true,
         side: THREE.DoubleSide,
       }),
@@ -1408,6 +1424,55 @@ export class HighwayWorld {
     parent.add(horizonGroup);
   }
 
+  createMountainBackdrop(parent) {
+    const mountains = new THREE.Group();
+    mountains.name = "DistantMountainBackdrop";
+
+    for (const side of [-1, 1]) {
+      mountains.add(this.createMountainRidge(side, CITY_MOUNTAIN_INNER_LATERAL, 42, 150, 62, this.materials.mountain));
+      mountains.add(this.createMountainRidge(side, CITY_MOUNTAIN_OUTER_LATERAL, 18, 115, 89, this.materials.mountainFar));
+    }
+
+    parent.add(mountains);
+  }
+
+  createMountainRidge(side, lateral, baseHeight, peakHeight, seedOffset, material) {
+    const segments = 220;
+    const vertices = [];
+    const uvs = [];
+    const indices = [];
+
+    for (let i = 0; i <= segments; i += 1) {
+      const t = i / segments;
+      const distance = t * this.trackLength;
+      const frame = this.getFrameAtDistance(distance);
+      const foot = this.offsetPoint(frame, side * lateral, 0);
+      const crest = this.offsetPoint(frame, side * lateral, 0);
+      const ridgeNoise = cityNoise(seedOffset + i * 1.73);
+      const shoulderNoise = cityNoise(seedOffset + i * 0.61 + 14.2);
+      crest.y = baseHeight + peakHeight * (0.46 + ridgeNoise * 0.54) + shoulderNoise * 34;
+
+      vertices.push(foot.x, foot.y, foot.z, crest.x, crest.y, crest.z);
+      uvs.push(t, 0, t, 1);
+
+      if (i < segments) {
+        const a = i * 2;
+        indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+      }
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    return mesh;
+  }
+
   createFixedCityscape(parent) {
     const city = new THREE.Group();
     city.name = "FixedRoadsideCityscape";
@@ -1419,7 +1484,7 @@ export class HighwayWorld {
     }
 
     this.createProceduralRoadsideDistrict(city);
-    
+    this.createMountainBackdrop(city);
     this.createHorizonBuildings(city);
 
     for (const placement of CITY_BUILDING_PLACEMENTS) {
