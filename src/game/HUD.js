@@ -4,6 +4,7 @@ import {
   CAR_PRESETS,
   DEFAULT_VEHICLE_RIG_TUNE,
   PARTS_CATALOG,
+  ROAD_WIDTH,
   SETTING_DEFS,
   WHEEL_MODEL_OPTIONS,
   getCarPreset,
@@ -1446,11 +1447,11 @@ export class HUD {
     const nearest = this.lastMapWorld?.getNearestRoadInfo?.(new THREE.Vector3(world.x, 0, world.z));
     const frame = nearest ?? { center: new THREE.Vector3(world.x, 0, world.z), normal: new THREE.Vector3(1, 0, 0), tangent: new THREE.Vector3(0, 0, 1) };
     const side = nearest?.lateral && nearest.lateral < 0 ? -1 : 1;
-    const base = frame.center;
+    const base = frame.center.clone().add(frame.normal.clone().multiplyScalar(side * (ROAD_WIDTH * 0.5 + 0.6)));
     const points = [
       { x: base.x, z: base.z },
-      { x: base.x + frame.normal.x * side * 180 + frame.tangent.x * 130, z: base.z + frame.normal.z * side * 180 + frame.tangent.z * 130 },
-      { x: base.x + frame.normal.x * side * 360 + frame.tangent.x * 360, z: base.z + frame.normal.z * side * 360 + frame.tangent.z * 360 },
+      { x: frame.center.x + frame.normal.x * side * 190 + frame.tangent.x * 130, z: frame.center.z + frame.normal.z * side * 190 + frame.tangent.z * 130 },
+      { x: frame.center.x + frame.normal.x * side * 380 + frame.tangent.x * 360, z: frame.center.z + frame.normal.z * side * 380 + frame.tangent.z * 360 },
     ];
     const branch = {
       id: `branch:${Date.now().toString(36)}:${Math.floor(Math.random() * 1e5).toString(36)}`,

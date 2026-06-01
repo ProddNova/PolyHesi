@@ -1865,6 +1865,8 @@ export class Game {
         this.hud.updateSettingValue?.("timeOfDay", this.settings.timeOfDay, { skipPlayerSync: true });
       }
     }
+    const road = this.world.getNearestRoadInfo?.(this.player.position);
+    this.world.updateRoadLightVisibility?.(road?.s ?? 0, this.getViewDistance());
     this.world.applyEnvironment?.(this.settings, dt);
   }
 

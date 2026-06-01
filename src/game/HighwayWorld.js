@@ -8,6 +8,8 @@ const DRIVE_LIMIT = RAIL_OFFSET - 1.1;
 const TWO_PI = Math.PI * 2;
 const ROAD_SAMPLE_COUNT = 560;
 const ROAD_RIBBON_SEGMENTS = 960;
+const ROAD_DETAIL_CHUNK_LENGTH = 1200;
+const CITY_DETAIL_CHUNK_LENGTH = 900;
 const REMODEL_CREATED_GROUP = "RemodelCreatedPieces";
 const REMODEL_HITBOX_GROUP = "RemodelHitboxTemplates";
 const REMODEL_ROOT_NAMES = new Set([
@@ -284,6 +286,8 @@ export class HighwayWorld {
     this.garageLights = [];
     this.ultraGraphics = false;
     this.graphicsQuality = 1;
+    this.roadLightStep = GRAPHICS_PROFILES[this.graphicsQuality]?.roadLightStep ?? 2;
+    this.roadLightRange = 760;
     this.tunnelRuns = this.routeProfile.tunnels.map((run) => ({ ...run }));
 
     this.materials = this.createMaterials();
@@ -617,6 +621,7 @@ export class HighwayWorld {
         object.geometry?.dispose?.();
       });
     }
+    this.roadLights = [];
     this.createRoute();
     this.createStaticHighway();
     this.rebuildRemodelTargets();
@@ -652,8 +657,9 @@ export class HighwayWorld {
       if (!branch.points?.length || branch.points.length < 2) {
         continue;
       }
+      const adjustedPoints = this.createAdjustedBranchPoints(branch);
       const curve = new THREE.CatmullRomCurve3(
-        branch.points.map((point) => new THREE.Vector3(point.x, 0, point.z)),
+        adjustedPoints,
         false,
         "catmullrom",
         0.24,
@@ -661,8 +667,12 @@ export class HighwayWorld {
       curve.arcLengthDivisions = 1024;
       curve.updateArcLengths();
       const length = curve.getLength();
-      const startAttachment = this.createBranchAttachment(branch, curve, length, true);
-      const endAttachment = this.createBranchAttachment(branch, curve, length, false);
+      const adjustedBranch = {
+        ...branch,
+        points: adjustedPoints.map((point) => ({ x: point.x, z: point.z })),
+      };
+      const startAttachment = this.createBranchAttachment(adjustedBranch, curve, length, true);
+      const endAttachment = this.createBranchAttachment(adjustedBranch, curve, length, false);
       const samples = [];
       const sampleCount = Math.max(60, Math.min(260, Math.ceil(length / 34)));
       for (let i = 0; i <= sampleCount; i += 1) {
@@ -676,6 +686,33 @@ export class HighwayWorld {
       this.branchRoutes.push({ id: branch.id, curve, length, samples, startAttachment, endAttachment });
       this.mapRoutes.push({ samples, closed: false });
     }
+  }
+
+  createAdjustedBranchPoints(branch) {
+    const points = branch.points.map((point) => new THREE.Vector3(point.x, 0, point.z));
+    if (points.length < 2) {
+      return points;
+    }
+
+    points[0] = this.getSnappedBranchEndpoint(points[0], points[1], true) ?? points[0];
+    const last = points.length - 1;
+    points[last] = this.getSnappedBranchEndpoint(points[last], points[last - 1], false) ?? points[last];
+    return points;
+  }
+
+  getSnappedBranchEndpoint(endpoint, neighbor, atStart = true) {
+    const nearest = this.getNearestMainRoadInfo(endpoint);
+    if (!nearest || nearest.distance > JUNCTION_ATTACHMENT_MAX_DISTANCE) {
+      return null;
+    }
+
+    const branchDirection = new THREE.Vector3(neighbor.x - endpoint.x, 0, neighbor.z - endpoint.z);
+    if (!atStart) {
+      branchDirection.multiplyScalar(-1);
+    }
+    const sideProjection = branchDirection.dot(nearest.normal);
+    const side = Math.sign(Math.abs(nearest.lateral) > 1 ? nearest.lateral : sideProjection) || 1;
+    return this.offsetPoint(nearest, side * (ROAD_HALF_WIDTH + 0.6), 0);
   }
 
   createBranchAttachment(branch, curve, length, atStart = true) {
@@ -839,13 +876,16 @@ export class HighwayWorld {
       }
     }
     const roadLightStep = this.ultraGraphics ? 1 : profile.roadLightStep;
+    this.roadLightStep = roadLightStep;
     for (const light of this.roadLights) {
       const index = light.userData.qualityIndex ?? 0;
-      light.visible = Number.isFinite(roadLightStep) && index % roadLightStep === 0;
+      light.userData.qualityAllowed = Number.isFinite(roadLightStep) && index % roadLightStep === 0;
+      light.visible = false;
       if (!light.visible) {
         light.intensity = 0;
       }
     }
+    this.roadLightRange = this.ultraGraphics ? 1280 : this.graphicsQuality >= 2 ? 960 : this.graphicsQuality >= 1 ? 720 : 0;
     const garageShadowSize = this.ultraGraphics ? 1024 : this.graphicsQuality >= 2 ? 512 : 0;
     for (const light of this.garageLights) {
       light.castShadow = garageShadowSize > 0;
@@ -879,26 +919,34 @@ export class HighwayWorld {
     const laneMarkers = [];
     for (const laneOffset of [-2, 2]) {
       for (let s = 9; s < this.trackLength; s += 34) {
+        if (this.isJunctionOpeningOnAnySide(s, JUNCTION_OPENING_HALF_LENGTH + 8)) {
+          continue;
+        }
         const frame = this.getFrameAtDistance(s);
         laneMarkers.push({
           position: this.offsetPoint(frame, laneOffset, ROAD_MARKING_ELEVATION),
           yaw: frame.yaw,
+          s,
         });
       }
     }
-    highway.add(this.createInstancedBoxes(laneMarkers, 0.13, 0.038, 8.2, this.materials.lane));
+    highway.add(this.createChunkedInstancedBoxes(laneMarkers, 0.13, 0.038, 8.2, this.materials.lane));
 
     const edgeMarkers = [];
     for (const edgeOffset of [-6.55, 6.55]) {
       for (let s = 0; s < this.trackLength; s += 52) {
+        if (this.isJunctionOpeningForOffset(s, edgeOffset)) {
+          continue;
+        }
         const frame = this.getFrameAtDistance(s);
         edgeMarkers.push({
           position: this.offsetPoint(frame, edgeOffset, ROAD_MARKING_ELEVATION),
           yaw: frame.yaw,
+          s,
         });
       }
     }
-    highway.add(this.createInstancedBoxes(edgeMarkers, 0.14, 0.035, 27, this.materials.roadEdge));
+    highway.add(this.createChunkedInstancedBoxes(edgeMarkers, 0.14, 0.035, 27, this.materials.roadEdge));
     this.createRoadSurfaceMarkings(highway);
 
     const guardrails = this.createGuardrailBatch();
@@ -927,6 +975,9 @@ export class HighwayWorld {
     markings.userData.remodelIgnore = true;
 
     for (const marking of ROAD_SURFACE_MARKINGS) {
+      if (this.isJunctionOpeningOnAnySide(marking.s, JUNCTION_OPENING_HALF_LENGTH + 18)) {
+        continue;
+      }
       const frame = this.getFrameAtDistance(marking.s);
       const laneOffset = LANES[clamp(marking.lane, 0, LANES.length - 1)];
       const panel = new THREE.Mesh(
@@ -1013,29 +1064,46 @@ export class HighwayWorld {
       parent.add(this.createRibbonMesh(ROAD_HALF_WIDTH, ROAD_SURFACE_ELEVATION, this.materials.asphalt, 260, route.curve, route.length, false));
       this.addJunctionFlares(parent, route);
 
+      const branchLaneMarkers = [];
       for (const laneOffset of [-2, 2]) {
         for (let s = 12; s < route.length - 12; s += 30) {
+          if (this.isBranchJunctionOpening(route, s)) {
+            continue;
+          }
           const frame = this.getFrameOnCurve(route.curve, route.length, s, false);
-          this.addOrientedBox(
-            parent,
-            0.13,
-            0.038,
-            8.2,
-            this.materials.lane,
-            this.offsetPoint(frame, laneOffset, ROAD_MARKING_ELEVATION),
-            frame.yaw,
-          );
+          branchLaneMarkers.push({
+            position: this.offsetPoint(frame, laneOffset, ROAD_MARKING_ELEVATION),
+            yaw: frame.yaw,
+            s,
+          });
         }
       }
+      parent.add(this.createChunkedInstancedBoxes(branchLaneMarkers, 0.13, 0.038, 8.2, this.materials.lane, false, route.length));
 
+      const branchGuardrails = this.createGuardrailBatch();
       for (let s = 0; s < route.length; s += 15) {
         const frame = this.getFrameOnCurve(route.curve, route.length, s, false);
         for (const side of [-1, 1]) {
           if (this.isBranchJunctionOpening(route, s)) {
             continue;
           }
-          this.addGuardrailSegment(parent, frame, side, 14.5);
+          this.addGuardrailSegment(parent, frame, side, 14.5, branchGuardrails);
         }
+      }
+      this.flushGuardrailBatch(parent, branchGuardrails, 14.5, route.length);
+    }
+  }
+
+  updateRoadLightVisibility(focusS = 0, viewDistance = 900) {
+    const range = Math.min(Math.max(0, viewDistance * 0.9), this.roadLightRange);
+    const hasRange = range > 0 && this.trackLength > 0;
+    for (const light of this.roadLights) {
+      const allowed = Boolean(light.userData.qualityAllowed);
+      const lightS = light.userData.s ?? 0;
+      const visible = hasRange && allowed && this.loopDistance(focusS, lightS) <= range;
+      light.visible = visible;
+      if (!visible) {
+        light.intensity = 0;
       }
     }
   }
@@ -1067,19 +1135,90 @@ export class HighwayWorld {
   }
 
   addJunctionTransitionDeck(parent, mainFrame, branchFrame, branchNear, side) {
-    const center = new THREE.Vector3()
-      .copy(mainFrame.center)
-      .add(branchFrame.center)
-      .add(branchNear.center)
-      .multiplyScalar(1 / 3);
-    const yaw = Math.atan2(
-      branchNear.center.x - mainFrame.center.x,
-      branchNear.center.z - mainFrame.center.z,
-    );
-    const length = Math.max(34, mainFrame.center.distanceTo(branchNear.center) * 0.9);
-    this.addOrientedBox(parent, ROAD_WIDTH + 9.2, 0.08, length, this.materials.concrete, new THREE.Vector3(center.x, HIGHWAY_DECK_ELEVATION + 0.035, center.z), yaw);
-    this.addOrientedBox(parent, ROAD_WIDTH + 5.2, 0.07, length * 0.86, this.materials.shoulder, new THREE.Vector3(center.x, ROAD_SHOULDER_ELEVATION + 0.01, center.z), yaw);
-    this.addOrientedBox(parent, ROAD_WIDTH + 0.4, 0.055, length * 0.72, this.materials.asphalt, new THREE.Vector3(center.x, ROAD_SURFACE_ELEVATION + 0.014, center.z), yaw);
+    const mouth = Math.min(JUNCTION_OPENING_HALF_LENGTH * 0.88, Math.max(28, mainFrame.center.distanceTo(branchNear.center) * 0.42));
+    const mainBack = this.getFrameAtDistance(mainFrame.s - mouth);
+    const mainFront = this.getFrameAtDistance(mainFrame.s + mouth);
+    this.addJunctionPatchLayer(parent, mainBack, mainFront, branchFrame, branchNear, ROAD_HALF_WIDTH + 5.4, HIGHWAY_DECK_ELEVATION + 0.035, this.materials.concrete, 1);
+    this.addJunctionPatchLayer(parent, mainBack, mainFront, branchFrame, branchNear, ROAD_HALF_WIDTH + 4.8, ROAD_SHOULDER_ELEVATION + 0.018, this.materials.shoulder, 2);
+    this.addJunctionPatchLayer(parent, mainBack, mainFront, branchFrame, branchNear, ROAD_HALF_WIDTH + 0.35, ROAD_SURFACE_ELEVATION + 0.022, this.materials.asphalt, 3);
+    this.addMergeGuideMarkings(parent, mainFrame, branchNear, side);
+  }
+
+  addJunctionPatchLayer(parent, mainBack, mainFront, branchFrame, branchNear, halfWidth, y, material, renderOrder = 0) {
+    const candidates = [
+      this.offsetPoint(mainBack, -halfWidth, y),
+      this.offsetPoint(mainBack, halfWidth, y),
+      this.offsetPoint(mainFront, -halfWidth, y),
+      this.offsetPoint(mainFront, halfWidth, y),
+      this.offsetPoint(branchFrame, -halfWidth, y),
+      this.offsetPoint(branchFrame, halfWidth, y),
+      this.offsetPoint(branchNear, -halfWidth, y),
+      this.offsetPoint(branchNear, halfWidth, y),
+    ];
+    const hull = this.computeConvexHull2D(candidates);
+    if (hull.length < 3) {
+      return null;
+    }
+    const mesh = this.createFlatPolygonMesh(hull, y, material);
+    mesh.name = "JunctionBlendPatch";
+    mesh.renderOrder = renderOrder;
+    parent.add(mesh);
+    return mesh;
+  }
+
+  addMergeGuideMarkings(parent, mainFrame, branchNear, side) {
+    const center = this.offsetPoint(mainFrame, side * (ROAD_HALF_WIDTH * 0.48), ROAD_MARKING_ELEVATION + 0.012);
+    const target = this.offsetPoint(branchNear, -side * (ROAD_HALF_WIDTH * 0.44), ROAD_MARKING_ELEVATION + 0.012);
+    const dx = target.x - center.x;
+    const dz = target.z - center.z;
+    const length = Math.max(10, Math.min(32, Math.hypot(dx, dz) * 0.42));
+    const yaw = Math.atan2(dx, dz);
+    this.addOrientedBox(parent, 0.16, 0.036, length, this.materials.roadEdge, center, yaw);
+  }
+
+  createFlatPolygonMesh(points, y, material) {
+    const shape = new THREE.Shape([...points].reverse().map((point) => new THREE.Vector2(point.x, point.z)));
+    const geometry = new THREE.ShapeGeometry(shape);
+    const position = geometry.getAttribute("position");
+    for (let i = 0; i < position.count; i += 1) {
+      const x = position.getX(i);
+      const z = position.getY(i);
+      position.setXYZ(i, x, y, z);
+    }
+    geometry.computeVertexNormals();
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.receiveShadow = true;
+    return mesh;
+  }
+
+  computeConvexHull2D(points) {
+    const sorted = points
+      .map((point) => ({ x: point.x, y: point.z, source: point }))
+      .sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+    if (sorted.length <= 3) {
+      return sorted.map((point) => point.source);
+    }
+
+    const cross = (origin, a, b) =>
+      (a.x - origin.x) * (b.y - origin.y) - (a.y - origin.y) * (b.x - origin.x);
+    const lower = [];
+    for (const point of sorted) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) {
+        lower.pop();
+      }
+      lower.push(point);
+    }
+    const upper = [];
+    for (let i = sorted.length - 1; i >= 0; i -= 1) {
+      const point = sorted[i];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) {
+        upper.pop();
+      }
+      upper.push(point);
+    }
+    upper.pop();
+    lower.pop();
+    return lower.concat(upper).map((point) => point.source);
   }
 
   addCurvedJunctionGuardrail(parent, mainFrame, branchFrame, side) {
@@ -1182,12 +1321,12 @@ export class HighwayWorld {
     );
 
     if (batch) {
-      batch.upper.push({ position: upper, yaw: frame.yaw });
-      batch.lower.push({ position: lower, yaw: frame.yaw });
-      batch.posts.push({ position: post, yaw: frame.yaw });
+      batch.upper.push({ position: upper, yaw: frame.yaw, s: frame.s });
+      batch.lower.push({ position: lower, yaw: frame.yaw, s: frame.s });
+      batch.posts.push({ position: post, yaw: frame.yaw, s: frame.s });
       if (Math.floor(frame.s / 40.5) % 2 === 0) {
         const target = side < 0 ? batch.amber : batch.red;
-        target.push({ position: reflector, yaw: frame.yaw });
+        target.push({ position: reflector, yaw: frame.yaw, s: frame.s });
       }
       return;
     }
@@ -1413,6 +1552,23 @@ export class HighwayWorld {
     return mesh;
   }
 
+  createChunkedInstancedBoxes(instances, width, height, depth, material, castShadow = false, routeLength = this.trackLength, chunkLength = ROAD_DETAIL_CHUNK_LENGTH) {
+    if (!instances.length) {
+      return new THREE.Group();
+    }
+
+    const chunks = this.chunkInstancesByDistance(instances, routeLength, chunkLength);
+    if (chunks.length === 1) {
+      return this.createInstancedBoxes(chunks[0], width, height, depth, material, castShadow);
+    }
+
+    const group = new THREE.Group();
+    for (const chunk of chunks) {
+      group.add(this.createInstancedBoxes(chunk, width, height, depth, material, castShadow));
+    }
+    return group;
+  }
+
   createScaledInstancedBoxes(instances, material, castShadow = false, remodelIgnore = true) {
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const mesh = new THREE.InstancedMesh(geometry, material, Math.max(1, instances.length));
@@ -1438,6 +1594,41 @@ export class HighwayWorld {
     return mesh;
   }
 
+  createChunkedScaledInstancedBoxes(instances, material, castShadow = false, remodelIgnore = true, routeLength = this.trackLength, chunkLength = CITY_DETAIL_CHUNK_LENGTH) {
+    if (!instances.length) {
+      return new THREE.Group();
+    }
+
+    const chunks = this.chunkInstancesByDistance(instances, routeLength, chunkLength);
+    if (chunks.length === 1) {
+      return this.createScaledInstancedBoxes(chunks[0], material, castShadow, remodelIgnore);
+    }
+
+    const group = new THREE.Group();
+    for (const chunk of chunks) {
+      group.add(this.createScaledInstancedBoxes(chunk, material, castShadow, remodelIgnore));
+    }
+    return group;
+  }
+
+  chunkInstancesByDistance(instances, routeLength = this.trackLength, chunkLength = ROAD_DETAIL_CHUNK_LENGTH) {
+    const length = Math.max(1, routeLength || this.trackLength || 1);
+    const chunkSize = Math.max(120, chunkLength);
+    const chunkCount = Math.max(1, Math.ceil(length / chunkSize));
+    const chunks = Array.from({ length: chunkCount }, () => []);
+
+    for (const instance of instances) {
+      const rawS = Number(instance.s);
+      const normalizedS = Number.isFinite(rawS)
+        ? ((rawS % length) + length) % length
+        : 0;
+      const index = clamp(Math.floor(normalizedS / chunkSize), 0, chunkCount - 1);
+      chunks[index].push(instance);
+    }
+
+    return chunks.filter((chunk) => chunk.length);
+  }
+
   createRoadsideInfrastructure(parent) {
     const details = new THREE.Group();
     details.name = "RoadsideCityInfrastructure";
@@ -1461,18 +1652,21 @@ export class HighwayWorld {
         poles.push({
           position: polePosition,
           yaw: frame.yaw,
+          s,
           scale: { x: 0.14, y: 6.1, z: 0.14 },
           remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight pole"),
         });
         arms.push({
           position: armPosition,
           yaw: frame.yaw,
+          s,
           scale: { x: 1.62, y: 0.11, z: 0.11 },
           remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight arm"),
         });
         lamps.push({
           position: lampPosition,
           yaw: frame.yaw,
+          s,
           scale: { x: 0.44, y: 0.16, z: 0.34 },
           remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight lamp"),
         });
@@ -1480,17 +1674,20 @@ export class HighwayWorld {
           const light = new THREE.PointLight(0xffd887, 0, 82, 1.12);
           light.position.copy(lampPosition);
           light.position.y -= 0.55;
+          light.visible = false;
           light.userData.baseIntensity = 7.8;
           light.userData.qualityIndex = this.roadLights.length;
+          light.userData.qualityAllowed = false;
+          light.userData.s = s;
           this.roadLights.push(light);
           lightGroup.add(light);
         }
       }
     }
 
-    details.add(this.createScaledInstancedBoxes(poles, this.materials.streetlightPole, false, false));
-    details.add(this.createScaledInstancedBoxes(arms, this.materials.streetlightPole, false, false));
-    details.add(this.createScaledInstancedBoxes(lamps, this.materials.streetlightGlow, false, false));
+    details.add(this.createChunkedScaledInstancedBoxes(poles, this.materials.streetlightPole, false, false));
+    details.add(this.createChunkedScaledInstancedBoxes(arms, this.materials.streetlightPole, false, false));
+    details.add(this.createChunkedScaledInstancedBoxes(lamps, this.materials.streetlightGlow, false, false));
     details.add(lightGroup);
     parent.add(details);
   }
@@ -1655,17 +1852,20 @@ export class HighwayWorld {
     const width = 90;
     const depth = 90;
     const material = new THREE.MeshStandardMaterial({ color: 0x2a3035, roughness: 0.9, flatShading: true });
+    const buildings = [];
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       const distance = t * this.trackLength;
       const frame = this.getFrameAtDistance(distance);
       const pos = this.offsetPoint(frame, lateral, 0);
-      const building = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
-      building.position.set(pos.x, height * 0.5, pos.z);
-      building.castShadow = false;
-      building.receiveShadow = false;
-      horizonGroup.add(building);
+      buildings.push({
+        position: new THREE.Vector3(pos.x, height * 0.5, pos.z),
+        yaw: frame.yaw,
+        s: distance,
+        scale: { x: width, y: height, z: depth },
+      });
     }
+    horizonGroup.add(this.createChunkedScaledInstancedBoxes(buildings, material, false, true, this.trackLength, ROAD_DETAIL_CHUNK_LENGTH * 2));
     parent.add(horizonGroup);
   }
 
@@ -1780,13 +1980,13 @@ export class HighwayWorld {
     }
 
     for (let i = 0; i < bodyBatches.length; i += 1) {
-      district.add(this.createScaledInstancedBoxes(bodyBatches[i], this.makeFacadeMaterial(CITY_FACADE_PALETTE[i], 0.82, 0.04), false, false));
+      district.add(this.createChunkedScaledInstancedBoxes(bodyBatches[i], this.makeFacadeMaterial(CITY_FACADE_PALETTE[i], 0.82, 0.04), false, false));
     }
-    district.add(this.createScaledInstancedBoxes(roofs, this.materials.buildingTrim, false, false));
-    district.add(this.createScaledInstancedBoxes(glass, this.materials.buildingWindow, false, false));
-    district.add(this.createScaledInstancedBoxes(warmWindows, this.materials.buildingWindowWarm, false, false));
-    district.add(this.createScaledInstancedBoxes(trim, this.materials.buildingGlassDark, false, false));
-    district.add(this.createScaledInstancedBoxes(signs, this.materials.tunnelSign, false, false));
+    district.add(this.createChunkedScaledInstancedBoxes(roofs, this.materials.buildingTrim, false, false));
+    district.add(this.createChunkedScaledInstancedBoxes(glass, this.materials.buildingWindow, false, false));
+    district.add(this.createChunkedScaledInstancedBoxes(warmWindows, this.materials.buildingWindowWarm, false, false));
+    district.add(this.createChunkedScaledInstancedBoxes(trim, this.materials.buildingGlassDark, false, false));
+    district.add(this.createChunkedScaledInstancedBoxes(signs, this.materials.tunnelSign, false, false));
     parent.add(district);
   }
 
@@ -1835,12 +2035,14 @@ export class HighwayWorld {
     bodyBatches[paletteIndex].push({
       position: new THREE.Vector3(base.x, bodyHeight * 0.5, base.z),
       yaw,
+      s,
       scale: { x: width, y: bodyHeight, z: depth },
       remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "body", true),
     });
     roofs.push({
       position: new THREE.Vector3(base.x, bodyHeight + 0.18, base.z),
       yaw,
+      s,
       scale: { x: width * (towerChance ? 0.92 : 1.04), y: towerChance ? 0.72 : 0.36, z: depth * (towerChance ? 0.92 : 1.04) },
       remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "roof"),
     });
@@ -1861,6 +2063,7 @@ export class HighwayWorld {
       facadeX,
       buildingId,
       buildingLabel,
+      s,
     });
 
     if (height > 44 && (towerChance || cityNoise(seed + 18.2) > 0.5)) {
@@ -1868,6 +2071,7 @@ export class HighwayWorld {
       trim.push({
         position: roofDetail,
         yaw,
+        s,
         scale: {
           x: width * cityRange(seed + 20.1, towerChance ? 0.12 : 0.16, towerChance ? 0.24 : 0.34),
           y: cityRange(seed + 21.2, towerChance ? 3.2 : 1.1, towerChance ? 8.6 : 2.4),
@@ -1903,6 +2107,7 @@ export class HighwayWorld {
     facadeX,
     buildingId,
     buildingLabel,
+    s,
   }) {
     const groundMargin = cityRange(seed + 11.1, 3.1, 5.4);
     const roofMargin = cityRange(seed + 12.7, 2.0, 4.8);
@@ -1932,12 +2137,14 @@ export class HighwayWorld {
           trim.push({
             position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.006, z, y),
             yaw,
+            s,
             scale: { x: 0.08, y: bandHeight + 0.16, z: segmentDepth + 0.18 },
             remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window-frame"),
           });
           target.push({
             position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.026, z, y),
             yaw,
+            s,
             scale: { x: 0.18, y: bandHeight, z: segmentDepth },
             remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window"),
           });
@@ -1961,12 +2168,14 @@ export class HighwayWorld {
         trim.push({
           position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.006, z, y),
           yaw,
+          s,
           scale: { x: 0.08, y: windowHeight + 0.18, z: windowDepth + 0.18 },
           remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window-frame"),
         });
         target.push({
           position: this.offsetLocalPoint(base, yaw, facadeX - side * 0.026, z, y),
           yaw,
+          s,
           scale: { x: 0.18, y: windowHeight, z: windowDepth },
           remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "window"),
         });
@@ -3112,12 +3321,12 @@ export class HighwayWorld {
     };
   }
 
-  flushGuardrailBatch(parent, batch, railLength) {
-    parent.add(this.createInstancedBoxes(batch.upper, GUARDRAIL_MODEL.upper.width, GUARDRAIL_MODEL.upper.height, railLength, this.materials.rail));
-    parent.add(this.createInstancedBoxes(batch.lower, GUARDRAIL_MODEL.lower.width, GUARDRAIL_MODEL.lower.height, railLength, this.materials.railDark));
-    parent.add(this.createInstancedBoxes(batch.posts, GUARDRAIL_MODEL.post.width, GUARDRAIL_MODEL.post.height, GUARDRAIL_MODEL.post.depth, this.materials.railDark));
-    parent.add(this.createInstancedBoxes(batch.amber, GUARDRAIL_MODEL.reflector.width, GUARDRAIL_MODEL.reflector.height, GUARDRAIL_MODEL.reflector.depth, this.materials.reflectorAmber));
-    parent.add(this.createInstancedBoxes(batch.red, GUARDRAIL_MODEL.reflector.width, GUARDRAIL_MODEL.reflector.height, GUARDRAIL_MODEL.reflector.depth, this.materials.reflectorRed));
+  flushGuardrailBatch(parent, batch, railLength, routeLength = this.trackLength) {
+    parent.add(this.createChunkedInstancedBoxes(batch.upper, GUARDRAIL_MODEL.upper.width, GUARDRAIL_MODEL.upper.height, railLength, this.materials.rail, false, routeLength));
+    parent.add(this.createChunkedInstancedBoxes(batch.lower, GUARDRAIL_MODEL.lower.width, GUARDRAIL_MODEL.lower.height, railLength, this.materials.railDark, false, routeLength));
+    parent.add(this.createChunkedInstancedBoxes(batch.posts, GUARDRAIL_MODEL.post.width, GUARDRAIL_MODEL.post.height, GUARDRAIL_MODEL.post.depth, this.materials.railDark, false, routeLength));
+    parent.add(this.createChunkedInstancedBoxes(batch.amber, GUARDRAIL_MODEL.reflector.width, GUARDRAIL_MODEL.reflector.height, GUARDRAIL_MODEL.reflector.depth, this.materials.reflectorAmber, false, routeLength));
+    parent.add(this.createChunkedInstancedBoxes(batch.red, GUARDRAIL_MODEL.reflector.width, GUARDRAIL_MODEL.reflector.height, GUARDRAIL_MODEL.reflector.depth, this.materials.reflectorRed, false, routeLength));
   }
 
   addCollider(x, z, width, depth) {
@@ -3471,6 +3680,32 @@ export class HighwayWorld {
           continue;
         }
         if (this.loopDistance(s, attachment.mainS) <= JUNCTION_OPENING_HALF_LENGTH) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  isJunctionOpeningForOffset(s, lateralOffset, extraLength = 0) {
+    const side = Math.sign(lateralOffset || 1);
+    return this.branchRoutes.some((route) => {
+      for (const attachment of [route.startAttachment, route.endAttachment]) {
+        if (!attachment || Math.sign(attachment.side) !== side) {
+          continue;
+        }
+        if (this.loopDistance(s, attachment.mainS) <= JUNCTION_OPENING_HALF_LENGTH + extraLength) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }
+
+  isJunctionOpeningOnAnySide(s, halfLength = JUNCTION_OPENING_HALF_LENGTH) {
+    return this.branchRoutes.some((route) => {
+      for (const attachment of [route.startAttachment, route.endAttachment]) {
+        if (attachment && this.loopDistance(s, attachment.mainS) <= halfLength) {
           return true;
         }
       }
