@@ -45,6 +45,16 @@ tk's
 
 - Fare si che le linee tratteggiate siano piu corte, piu numerose e piu vicine fra loro fammi regolare questa cosa a mano nel dev panel 1 sola volta, appena salvero la prima volta voglio che l'impostazione sparisca per sempre una roba usa e getta style
 
+- Aggiungere una funzione molto importante : remodel mappa. Questa funzionerà quando saremo in modalita remodel (y); infatti una volta in modalità remodel se aprirò la mappa (m) invece che vedere la classica mappa vedro la mappa di remodel potro modificare il tracciato usando dei punti modificabili per le curve isomma punti di aggancio che potrò aggiungere rimuovere spostare, si potranno anche modificare le gallerie quindi crearne di nuove o eliminarle o modifcare la lunghezza di quelle esistenti , oltre a poter quindi modificare il circuito già esistente proviamo ad aggiungere la possibilità di fare intersezioni stradali bisognerà star attenti a non rompere la grafica della strada, il traffico, i guardaril, bisonga studiare come renderlo fatto bene questo punto aggiuntivo
+
+- Quando provo a cancellare un palazzo si blocca tutto il gioco
+
+
+
+
+
+map tks-s
+
 
 later-tk's
 
@@ -55,6 +65,8 @@ later-tk's
 - Controllare e testare game loop
 
 - Quando rientro nel garage fai si che sia chiuso e premendo e switchi alla scena iniziale dove la macchina è dentro il garage
+
+- Aggiungere un toggle carriera real per switchare da admin a player 
 
 My tasks
 
