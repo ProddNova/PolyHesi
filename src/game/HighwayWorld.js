@@ -127,7 +127,7 @@ const CITY_FACADE_PALETTE = [
   0x8d8172,
 ];
 const CITY_BLOCK_ROWS = [
-  { spacing: 36, lateral: 8, lateralJitter: 3, forwardJitter: 13, height: [26, 70], width: [14, 30], depth: [18, 34], skip: 0.0, serviceClearance: 82 },
+  { spacing: 36, lateral: 15, lateralJitter: 2, forwardJitter: 13, height: [26, 70], width: [14, 30], depth: [18, 34], skip: 0.0, serviceClearance: 82 },
   { spacing: 50, lateral: 26, lateralJitter: 6, forwardJitter: 18, height: [34, 92], width: [17, 38], depth: [20, 40], skip: 0.0, serviceClearance: 120 },
   { spacing: 68, lateral: 50, lateralJitter: 10, forwardJitter: 24, height: [46, 122], width: [20, 48], depth: [24, 48], skip: 0.0, serviceClearance: 164 },
   { spacing: 92, lateral: 82, lateralJitter: 15, forwardJitter: 31, height: [58, 152], width: [24, 58], depth: [28, 56], skip: 0.003, serviceClearance: 216 },
@@ -142,8 +142,8 @@ const CITY_BLOCK_ROWS = [
 ];
 const CITY_MANUAL_CLEARANCE = 46;
 const CITY_DISTRICT_HALF_WIDTH = 520;
-const CITY_GROUND_ELEVATION = -2.65;
-const CITY_RELATIVE_ELEVATION = -2.65;
+const CITY_GROUND_ELEVATION = -3.45;
+const CITY_RELATIVE_ELEVATION = -3.45;
 const ROAD_SURFACE_ELEVATION = 0.055;
 const ROAD_SHOULDER_ELEVATION = 0.035;
 const ROAD_MARKING_ELEVATION = 0.115;
