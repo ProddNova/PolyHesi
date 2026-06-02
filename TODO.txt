@@ -23,25 +23,13 @@ tk's
 
 - Le auto psx hanno i vetri colorati invece che essere neri/trasparenti (meglio neri) infatti quella di default per esempio ha i vetri rossi...
 
-- Ottimizzazione performance, attualmente se metto al massimo nonostante un buon computer da gaming lagga e fa 20-30 fps, inoltre collegato a questo quando è appena caricato il gioco sembra ingiocabile : attualmente quando collido si freeza il gioco per qualche secondo quando hitto i guardrail, ma anche quando guido i primi 1-2 min di gioco a volte freeza poi dopo 3-4 minuti si riprende
-
 - Il body della macchina quando giro si inclina come per simulare le sospensioni ma lo fa in modo eccessivo è poco realistico in generale il movimento del corpo della macchina quando giro e fatto malez 
-
-- Fixare i palazzi vicini all spawn point : 1 La loro base è volante non è collegata alla base principale dove appoggiano tutti gli altri palazzi 2 sono pochi e dovrebbero essere dietro anche e di fianco alla base dello swpan point 3 alcuni palazzi si trovano sulla strada invece questo non deve assolutamente accadere yk bro...
-
-- Usare un qualche filtro o qualcosa su texutre e tutto in generale stile PSX infatti i modelli sono stile psx vorrei fosse cosi anche il resto ovvero quello che costruisci te palazzi strada etc etc
 
 - Spesso si riesce ad uscire fuori dal guardrail passandoci attraverso cio non deve accadere
 
 
 
 map tks-s
-
-- Aggiungere cartelloni pubblicitari in giapponese sulle pareti di alcuni palazzi, sui tetti con pali o nel pavimento in mezzo ai palazzi (facendo spazio per essi) 
-
-- Alterare ai guardrail delle barriere esattamente come nella shutoku expressay, barriere alte circa 2 volte la macchina bianche panna leggermente sporca con linee sulla superificie leggermente piu scure che dividono in 5 l'altezza della barriera, essa non appoggia direttamente sulla strada bensi su un muretto di cemento basso, e ogni blocco di barriera è largo circa la metà di un auto con dei sottili pali scuri che dividono la "tile" del "pattern" 
-
-- Fai si che alcuni dei cartelli versione larga non abbiano un unico cartellone ma magari 2 cartelli diversi, o 3 o addirittura uno solo a destra o uno solo a sinistra
 
 - Migliora la segnaletica stradale orizzontale esattamente come in foto seguendo quello stile delal shutoku expressway (vedi foto in allegato)
 
