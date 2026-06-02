@@ -417,7 +417,7 @@ export class HighwayWorld {
         metalness: 0.18,
         flatShading: true,
       }),
-      streetlightGlow: new THREE.MeshBasicMaterial({ color: 0xf4f8ff }),
+      streetlightGlow: new THREE.MeshBasicMaterial({ color: 0xfff1d8 }),
       aviationBeacon: new THREE.MeshBasicMaterial({ color: 0xff1717 }),
       remodelCreated: new THREE.MeshStandardMaterial({
         color: 0x78e0c1,
@@ -842,7 +842,7 @@ export class HighwayWorld {
       smooth,
     );
     if (this.materials?.streetlightGlow) {
-      this.materials.streetlightGlow.color.lerp(new THREE.Color(lampPower > 0.02 ? 0xf4f8ff : 0x56606a), smooth);
+      this.materials.streetlightGlow.color.lerp(new THREE.Color(lampPower > 0.02 ? 0xfff1d8 : 0x665f56), smooth);
     }
     for (const light of this.roadLights) {
       if (!light.visible) {
@@ -1728,7 +1728,7 @@ export class HighwayWorld {
           scale: { x: 0.44, y: 0.16, z: 0.34 },
           remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight lamp"),
         });
-        const light = new THREE.PointLight(0xf4f8ff, 0, 132, 1.02);
+        const light = new THREE.PointLight(0xfff1d8, 0, 132, 1.02);
         light.position.copy(lampPosition);
         light.position.y -= 0.52;
         light.visible = false;
