@@ -356,6 +356,10 @@ export class HighwayWorld {
     trimTexture.repeat.set(5, 5);
     const tunnelTexture = this.createSurfaceTexture("#62696d", "#787f82", "#363d41", 92);
     tunnelTexture.repeat.set(12, 12);
+    const tunnelBrickTexture = this.createTunnelBrickTexture();
+    tunnelBrickTexture.repeat.set(1.8, 4.6);
+    const tunnelUpperTexture = this.createSurfaceTexture("#34383a", "#4b5052", "#1b1e20", 110);
+    tunnelUpperTexture.repeat.set(4, 8);
 
     const materials = {
       cityGround: new THREE.MeshStandardMaterial({
@@ -462,6 +466,20 @@ export class HighwayWorld {
         metalness: 0.02,
         flatShading: true,
       }),
+      tunnelBrickLower: new THREE.MeshStandardMaterial({
+        color: 0xc0ad78,
+        map: tunnelBrickTexture,
+        roughness: 0.92,
+        metalness: 0.01,
+        flatShading: true,
+      }),
+      tunnelCementUpper: new THREE.MeshStandardMaterial({
+        color: 0x34383a,
+        map: tunnelUpperTexture,
+        roughness: 0.9,
+        metalness: 0.02,
+        flatShading: true,
+      }),
       tunnelDark: new THREE.MeshStandardMaterial({
         color: 0x1b2024,
         map: this.createSurfaceTexture("#1b2024", "#242b30", "#080b0e", 48),
@@ -469,8 +487,16 @@ export class HighwayWorld {
         flatShading: true,
       }),
       tunnelLight: new THREE.MeshBasicMaterial({ color: 0xffe19a }),
-      tunnelWarning: new THREE.MeshBasicMaterial({ color: 0xd2a33d }),
+      tunnelWarning: new THREE.MeshBasicMaterial({ color: 0xd23324 }),
       tunnelSign: new THREE.MeshBasicMaterial({ color: 0x263f57 }),
+      tunnelElectricalPanel: new THREE.MeshStandardMaterial({
+        color: 0x687076,
+        roughness: 0.58,
+        metalness: 0.18,
+        flatShading: true,
+      }),
+      tunnelEmergencySign: this.createTunnelEmergencyMaterial(),
+      tunnelExitSign: this.createTunnelExitMaterial(),
       streetlightPole: new THREE.MeshStandardMaterial({
         color: 0x25292c,
         roughness: 0.72,
@@ -530,6 +556,107 @@ export class HighwayWorld {
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
     return texture;
+  }
+
+  createTunnelBrickTexture() {
+    const texture = makeCanvasTexture((ctx, canvas) => {
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = "#bcae78";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const brickW = 32;
+      const brickH = 15;
+      for (let y = 0; y < canvas.height; y += brickH) {
+        const stagger = Math.floor(y / brickH) % 2 ? brickW * 0.5 : 0;
+        for (let x = -brickW; x < canvas.width + brickW; x += brickW) {
+          const seed = x * 0.11 + y * 0.37;
+          const shade = 0.82 + cityNoise(seed + 4.2) * 0.22;
+          ctx.fillStyle = `rgb(${Math.floor(190 * shade)}, ${Math.floor(171 * shade)}, ${Math.floor(111 * shade)})`;
+          ctx.fillRect(x + stagger + 1, y + 1, brickW - 2, brickH - 2);
+        }
+      }
+
+      ctx.fillStyle = "rgba(82, 72, 52, 0.45)";
+      for (let y = 0; y < canvas.height; y += brickH) {
+        ctx.fillRect(0, y, canvas.width, 2);
+      }
+      for (let y = 0; y < canvas.height; y += brickH) {
+        const stagger = Math.floor(y / brickH) % 2 ? brickW * 0.5 : 0;
+        for (let x = -brickW; x < canvas.width + brickW; x += brickW) {
+          ctx.fillRect(x + stagger, y, 2, brickH);
+        }
+      }
+
+      for (let i = 0; i < 120; i += 1) {
+        const seed = i * 18.31;
+        ctx.globalAlpha = 0.12 + cityNoise(seed + 1.1) * 0.26;
+        ctx.fillStyle = cityNoise(seed + 2.2) > 0.35 ? "#5b523d" : "#eadfbb";
+        const x = Math.floor(cityNoise(seed + 3.3) * canvas.width);
+        const y = Math.floor(cityNoise(seed + 4.4) * canvas.height);
+        const w = 3 + Math.floor(cityNoise(seed + 5.5) * 18);
+        const h = 2 + Math.floor(cityNoise(seed + 6.6) * 8);
+        ctx.fillRect(x, y, w, h);
+      }
+      ctx.globalAlpha = 1;
+    });
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+  }
+
+  createTunnelEmergencyMaterial() {
+    const texture = makeCanvasTexture((ctx, canvas) => {
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = "#b51f1b";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "#ffe9dc";
+      ctx.lineWidth = 8;
+      ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+      ctx.fillStyle = "#ffe9dc";
+      ctx.font = "bold 42px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("SOS", canvas.width * 0.5, canvas.height * 0.42);
+      ctx.font = "bold 22px sans-serif";
+      ctx.fillText("EMERGENCY", canvas.width * 0.5, canvas.height * 0.68);
+    });
+    texture.anisotropy = 1;
+    const material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
+    material.name = "tunnelEmergencySign";
+    return material;
+  }
+
+  createTunnelExitMaterial() {
+    const texture = makeCanvasTexture((ctx, canvas) => {
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = "#0f8f4a";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "#d9ffe8";
+      ctx.lineWidth = 6;
+      ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(46, 34, 28, 42);
+      ctx.fillRect(75, 50, 38, 12);
+      ctx.beginPath();
+      ctx.arc(61, 24, 10, 0, TWO_PI);
+      ctx.fill();
+      ctx.fillRect(124, 37, 34, 34);
+      ctx.fillRect(158, 45, 22, 8);
+      ctx.beginPath();
+      ctx.moveTo(180, 37);
+      ctx.lineTo(210, 49);
+      ctx.lineTo(180, 61);
+      ctx.closePath();
+      ctx.fill();
+      ctx.font = "bold 29px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("EXIT", canvas.width * 0.72, canvas.height * 0.72);
+    });
+    texture.anisotropy = 1;
+    const material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
+    material.name = "tunnelExitSign";
+    return material;
   }
 
   createAsphaltTexture() {
@@ -1165,6 +1292,8 @@ export class HighwayWorld {
       this.materials?.buildingGlassDark?.map,
       this.materials?.buildingTrim?.map,
       this.materials?.tunnelConcrete?.map,
+      this.materials?.tunnelBrickLower?.map,
+      this.materials?.tunnelCementUpper?.map,
       this.materials?.tunnelDark?.map,
     ]) {
       if (texture) {
@@ -1638,24 +1767,7 @@ export class HighwayWorld {
   }
 
   shouldUseShutokuBarrier(s, side) {
-    const tunnelSwitches = TUNNEL_RUNS
-      .map((run) => ((run.start + run.length + this.trackLength) % this.trackLength))
-      .sort((a, b) => a - b);
-    let section = 0;
-    for (const switchS of tunnelSwitches) {
-      if (s >= switchS) {
-        section += 1;
-      }
-    }
-
-    const mode = TUNNEL_BARRIER_MODES[section % TUNNEL_BARRIER_MODES.length];
-    if (mode === "guardrail") {
-      return false;
-    }
-    if (mode === "both") {
-      return true;
-    }
-    return mode === "right" ? side > 0 : side < 0;
+    return false;
   }
 
   addShutokuBarrierSegment(parent, frame, side, length, batch = null) {
@@ -2025,9 +2137,6 @@ export class HighwayWorld {
     const details = new THREE.Group();
     details.name = "RoadsideCityInfrastructure";
 
-    const poles = [];
-    const arms = [];
-    const lamps = [];
     const lightGroup = new THREE.Group();
     lightGroup.name = "RoadStreetLightEmitters";
     lightGroup.userData.remodelIgnore = true;
@@ -2039,29 +2148,7 @@ export class HighwayWorld {
           continue;
         }
         const polePosition = this.offsetPoint(frame, side * CITY_STREETLIGHT_POLE_OFFSET, 3.05);
-        const armPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 0.76, 0.02, 5.96);
         const lampPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 1.55, 0.02, 5.88);
-        poles.push({
-          position: polePosition,
-          yaw: frame.yaw,
-          s,
-          scale: { x: 0.14, y: 6.1, z: 0.14 },
-          remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight pole"),
-        });
-        arms.push({
-          position: armPosition,
-          yaw: frame.yaw,
-          s,
-          scale: { x: 1.62, y: 0.11, z: 0.11 },
-          remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight arm"),
-        });
-        lamps.push({
-          position: lampPosition,
-          yaw: frame.yaw,
-          s,
-          scale: { x: 0.44, y: 0.16, z: 0.34 },
-          remodel: this.makeInfrastructureRemodelMeta(s, side, "Streetlight lamp"),
-        });
         const light = new THREE.PointLight(0xfff1d8, 0, 132, 1.02);
         light.position.copy(lampPosition);
         light.position.y -= 0.52;
@@ -2075,9 +2162,6 @@ export class HighwayWorld {
       }
     }
 
-    details.add(this.createChunkedScaledInstancedBoxes(poles, this.materials.streetlightPole, false, false));
-    details.add(this.createChunkedScaledInstancedBoxes(arms, this.materials.streetlightPole, false, false));
-    details.add(this.createChunkedScaledInstancedBoxes(lamps, this.materials.streetlightGlow, false, false));
     details.add(lightGroup);
     parent.add(details);
   }
@@ -2441,6 +2525,7 @@ export class HighwayWorld {
         }
       }
     }
+    this.addDedicatedHighwayBillboards(billboardGroup, billboardPads, billboardPosts);
 
     for (let i = 0; i < bodyBatches.length; i += 1) {
       district.add(this.createChunkedScaledInstancedBoxes(bodyBatches[i], this.makeFacadeMaterial(CITY_FACADE_PALETTE[i], 0.82, 0.04), false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
@@ -2605,6 +2690,51 @@ export class HighwayWorld {
     });
   }
 
+  addDedicatedHighwayBillboards(billboardGroup, billboardPads, billboardPosts) {
+    for (let s = 180; s < this.trackLength; s += 360) {
+      for (const side of [-1, 1]) {
+        const seed = s * 0.41 + (side > 0 ? 19.7 : 53.2);
+        if (this.isCityServiceClearance(s, side) || this.isJunctionOpening(s, side) || cityNoise(seed + 0.8) < 0.18) {
+          continue;
+        }
+        const frame = this.getFrameAtDistance(s + cityRange(seed + 1.2, -48, 48));
+        const boardWidth = cityRange(seed + 2.3, 13.5, 27.0);
+        const boardHeight = cityRange(seed + 3.4, 5.2, 9.2);
+        const postHeight = cityRange(seed + 4.5, 4.8, 7.8);
+        const lateral = side * cityRange(seed + 5.6, ROAD_HALF_WIDTH + 18, ROAD_HALF_WIDTH + 36);
+        const forward = cityRange(seed + 6.7, -18, 18);
+        const yaw = frame.yaw - side * Math.PI * 0.5 + cityRange(seed + 7.8, -0.16, 0.16);
+        const base = this.offsetAlong(frame, lateral, forward, 0);
+        const padS = (frame.s + forward + this.trackLength) % this.trackLength;
+
+        billboardPads.push({
+          position: this.offsetLocalPoint(base, yaw, 0, 0, 0.04),
+          yaw,
+          s: padS,
+          scale: { x: boardWidth + 2.2, y: 0.1, z: 6.6 },
+        });
+        for (const postX of [-boardWidth * 0.36, boardWidth * 0.36]) {
+          billboardPosts.push({
+            position: this.offsetLocalPoint(base, yaw, postX, 0, postHeight * 0.5),
+            yaw,
+            s: padS,
+            scale: { x: 0.28, y: postHeight, z: 0.28 },
+          });
+        }
+        this.addJapaneseBillboardPlane(
+          billboardGroup,
+          this.offsetLocalPoint(base, yaw, 0, 0, postHeight + boardHeight * 0.52),
+          yaw,
+          boardWidth,
+          boardHeight,
+          seed + 8.9,
+          `roadside-ad:${Math.round(s)}:${side}`,
+          `Roadside billboard ${Math.round(s)}`,
+        );
+      }
+    }
+  }
+
   addProceduralCityBillboards({
     billboardGroup,
     billboardPads,
@@ -2629,7 +2759,7 @@ export class HighwayWorld {
 
     const wallNoise = cityNoise(seed + 41.2);
     const wallMega = rowIndex >= 2 && cityNoise(seed + 41.9) > 0.84;
-    if (rowIndex <= 8 && bodyHeight > 28 && depth > 15 && wallNoise > (wallMega ? 0.91 : 0.948)) {
+    if (rowIndex <= 8 && bodyHeight > 28 && depth > 15 && wallNoise > (wallMega ? 0.74 : 0.82)) {
       const boardWidth = wallMega
         ? clamp(depth * cityRange(seed + 42.1, 1.05, 1.55), 18.0, 42.0)
         : clamp(depth * cityRange(seed + 42.1, 0.68, 1.14), 9.5, 24.0);
@@ -2658,7 +2788,7 @@ export class HighwayWorld {
 
     const roofNoise = cityNoise(seed + 50.8);
     const roofMega = rowIndex >= 1 && cityNoise(seed + 50.1) > 0.78;
-    if (rowIndex <= 8 && bodyHeight > 34 && width > 14 && roofNoise > (roofMega ? 0.92 : 0.955)) {
+    if (rowIndex <= 8 && bodyHeight > 34 && width > 14 && roofNoise > (roofMega ? 0.76 : 0.84)) {
       const boardWidth = roofMega
         ? clamp(width * cityRange(seed + 51.2, 0.9, 1.35), 20.0, 46.0)
         : clamp(width * cityRange(seed + 51.2, 0.64, 1.04), 12.0, 27.0);
@@ -2693,7 +2823,7 @@ export class HighwayWorld {
 
     const groundNoise = cityNoise(seed + 60.9);
     const groundMega = rowIndex >= 1 && cityNoise(seed + 60.2) > 0.8;
-    if (rowIndex <= 5 && width > 18 && groundNoise > (groundMega ? 0.925 : 0.958)) {
+    if (rowIndex <= 5 && width > 18 && groundNoise > (groundMega ? 0.78 : 0.86)) {
       const boardWidth = groundMega ? cityRange(seed + 61.7, 16.0, 30.0) : cityRange(seed + 61.7, 8.5, 16.5);
       const boardHeight = groundMega ? cityRange(seed + 62.1, 6.2, 10.4) : cityRange(seed + 62.1, 3.8, 5.9);
       const postHeight = groundMega ? cityRange(seed + 63.4, 5.2, 8.4) : cityRange(seed + 63.4, 3.1, 5.0);
@@ -3311,18 +3441,35 @@ export class HighwayWorld {
 
     const wallX = ROAD_HALF_WIDTH + 4.7;
     const wallHeight = 8.4;
+    const lowerWallHeight = wallHeight * 0.75;
+    const upperWallHeight = wallHeight - lowerWallHeight;
     const roofWidth = ROAD_WIDTH + 11.6;
     const wallDepth = length + 0.45;
-    this.addLocalBox(section, 0.74, wallHeight, wallDepth, this.materials.tunnelConcrete, -wallX, wallHeight * 0.5, 0);
-    this.addLocalBox(section, 0.74, wallHeight, wallDepth, this.materials.tunnelConcrete, wallX, wallHeight * 0.5, 0);
+    this.addLocalBox(section, 0.74, lowerWallHeight, wallDepth, this.materials.tunnelBrickLower, -wallX, lowerWallHeight * 0.5, 0);
+    this.addLocalBox(section, 0.74, lowerWallHeight, wallDepth, this.materials.tunnelBrickLower, wallX, lowerWallHeight * 0.5, 0);
+    this.addLocalBox(section, 0.74, upperWallHeight, wallDepth, this.materials.tunnelCementUpper, -wallX, lowerWallHeight + upperWallHeight * 0.5, 0);
+    this.addLocalBox(section, 0.74, upperWallHeight, wallDepth, this.materials.tunnelCementUpper, wallX, lowerWallHeight + upperWallHeight * 0.5, 0);
     this.addLocalBox(section, roofWidth, 0.7, wallDepth, this.materials.tunnelConcrete, 0, wallHeight + 0.35, 0);
     this.addLocalBox(section, ROAD_WIDTH + 3.0, 0.16, wallDepth, this.materials.tunnelDark, 0, wallHeight - 0.12, 0);
-    this.addLocalBox(section, 0.16, 1.4, wallDepth * 0.92, this.materials.tunnelDark, -ROAD_HALF_WIDTH - 2.15, 1.65, 0);
-    this.addLocalBox(section, 0.16, 1.4, wallDepth * 0.92, this.materials.tunnelDark, ROAD_HALF_WIDTH + 2.15, 1.65, 0);
 
     if (index % 2 === 0) {
       this.addLocalBox(section, 0.18, 0.1, length * 0.46, this.materials.tunnelLight, -3.8, wallHeight - 0.42, 0);
       this.addLocalBox(section, 0.18, 0.1, length * 0.46, this.materials.tunnelLight, 3.8, wallHeight - 0.42, 0);
+    }
+
+    for (const side of [-1, 1]) {
+      const innerX = side * (wallX - 0.43);
+      if (index % 5 === 1) {
+        this.addLocalBox(section, 0.08, 1.18, 1.45, this.materials.tunnelElectricalPanel, innerX, 2.35, -length * 0.22);
+        this.addLocalBox(section, 0.09, 0.05, 1.16, this.materials.railDark, innerX - side * 0.01, 2.78, -length * 0.22);
+        this.addLocalBox(section, 0.09, 0.05, 1.16, this.materials.railDark, innerX - side * 0.01, 2.18, -length * 0.22);
+      }
+      if (index % 7 === 3) {
+        this.addLocalBox(section, 0.08, 0.58, 1.16, this.materials.tunnelEmergencySign, innerX, 4.95, length * 0.18);
+      }
+      if (index % 6 === 0) {
+        this.addLocalBox(section, 0.08, 0.62, 1.38, this.materials.tunnelExitSign, innerX, 5.72, -length * 0.16);
+      }
     }
 
     parent.add(section);
