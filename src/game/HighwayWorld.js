@@ -41,6 +41,13 @@ const SHUTOKU_BARRIER_MODEL = {
   base: { width: 0.82, height: 0.55, y: 0.275 },
   wall: { width: 0.46, height: 2.34, y: 1.72 },
 };
+const SIDEWALK_EDGE_WALL_MODEL = {
+  width: 0.62,
+  height: 0.78,
+  y: 0.39,
+  length: 15.6,
+  lateralOffset: ROAD_HALF_WIDTH + 6.35,
+};
 const HITBOX_TEMPLATES = [];
 
 function normalizeRoadBarrierType(value) {
@@ -192,6 +199,16 @@ const JAPANESE_BILLBOARD_ADS = [
   { title: "たい焼き", brand: "銀座甘味", sub: "焼きたて", bg: "#ffd166", fg: "#2b2520", accent: "#ef476f" },
   { title: "ラジオ", brand: "BAY FM 88", sub: "CITY POP", bg: "#073b4c", fg: "#eefaff", accent: "#06d6a0" },
   { title: "写真", brand: "PHOTO BOOTH", sub: "証明写真", bg: "#f8f9fa", fg: "#1f2d3d", accent: "#4361ee" },
+  { title: "温泉", brand: "月見の湯", sub: "深夜営業", bg: "#165a72", fg: "#fff7de", accent: "#f5c542" },
+  { title: "味噌", brand: "北の麺", sub: "辛口ラーメン", bg: "#b8202f", fg: "#fff7df", accent: "#ffcf33" },
+  { title: "銭湯", brand: "富士の湯", sub: "朝6時から", bg: "#f4efe2", fg: "#1e2b33", accent: "#2b77c2" },
+  { title: "推し", brand: "LIVE HOUSE 88", sub: "今夜公演", bg: "#ff4fa3", fg: "#fff9ff", accent: "#7df9ff" },
+  { title: "玩具", brand: "ガチャ星", sub: "新作入荷", bg: "#ffe066", fg: "#20222a", accent: "#3b82f6" },
+  { title: "そば", brand: "江戸スタンド", sub: "天ぷらセット", bg: "#243b2f", fg: "#f7f0d8", accent: "#d9a441" },
+  { title: "漫画", brand: "神田ブックス", sub: "中古フロア", bg: "#ffffff", fg: "#17191d", accent: "#e63946" },
+  { title: "配車", brand: "東京無線", sub: "今すぐ呼出", bg: "#111827", fg: "#f8fafc", accent: "#22c55e" },
+  { title: "クレープ", brand: "原宿小町", sub: "いちご増量", bg: "#ffd6e7", fg: "#331525", accent: "#ff7a00" },
+  { title: "酒場", brand: "湾岸横丁", sub: "飲み放題", bg: "#2a1e1a", fg: "#fff1d6", accent: "#f97316" },
 ];
 const DEFAULT_LANE_DASH_LENGTH = 1.7;
 const DEFAULT_LANE_DASH_SPACING = 5.4;
@@ -452,6 +469,13 @@ export class HighwayWorld {
         color: 0xb2b4b0,
         map: barrierBaseTexture,
         roughness: 0.94,
+        metalness: 0.02,
+        flatShading: true,
+      }),
+      sidewalkEdgeWall: new THREE.MeshStandardMaterial({
+        color: 0xc8cbc7,
+        map: barrierBaseTexture,
+        roughness: 0.82,
         metalness: 0.02,
         flatShading: true,
       }),
@@ -1457,6 +1481,7 @@ export class HighwayWorld {
       }
     }
     this.flushGuardrailBatch(highway, guardrails, GUARDRAIL_SEGMENT_LENGTH);
+    this.createSidewalkEdgeWalls(highway);
     this.createLaneClosureRoadblocks(highway);
     this.createTunnelRuns(highway);
     this.createRoadsideInfrastructure(highway);
@@ -1873,6 +1898,50 @@ export class HighwayWorld {
         frame.yaw,
       );
     }
+  }
+
+  createSidewalkEdgeWalls(parent) {
+    const walls = new THREE.Group();
+    walls.name = "SidewalkEdgeLowWalls";
+
+    const wallInstances = [];
+    const capInstances = [];
+    for (let s = 0; s < this.trackLength; s += SIDEWALK_EDGE_WALL_MODEL.length) {
+      const frame = this.getFrameAtDistance(s);
+      for (const side of [-1, 1]) {
+        if (this.isServiceOpening(frame.s, side) || this.isJunctionOpening(frame.s, side)) {
+          continue;
+        }
+
+        const lateral = side * SIDEWALK_EDGE_WALL_MODEL.lateralOffset;
+        wallInstances.push({
+          position: this.offsetPoint(frame, lateral, SIDEWALK_EDGE_WALL_MODEL.y),
+          yaw: frame.yaw,
+          s: frame.s,
+          scale: {
+            x: SIDEWALK_EDGE_WALL_MODEL.width,
+            y: SIDEWALK_EDGE_WALL_MODEL.height,
+            z: SIDEWALK_EDGE_WALL_MODEL.length,
+          },
+          remodel: this.makeInfrastructureRemodelMeta(s, side, "Sidewalk edge low wall"),
+        });
+        capInstances.push({
+          position: this.offsetPoint(frame, lateral, SIDEWALK_EDGE_WALL_MODEL.height + 0.08),
+          yaw: frame.yaw,
+          s: frame.s,
+          scale: {
+            x: SIDEWALK_EDGE_WALL_MODEL.width + 0.16,
+            y: 0.16,
+            z: SIDEWALK_EDGE_WALL_MODEL.length,
+          },
+          remodel: this.makeInfrastructureRemodelMeta(s, side, "Sidewalk edge low wall cap"),
+        });
+      }
+    }
+
+    walls.add(this.createChunkedScaledInstancedBoxes(wallInstances, this.materials.sidewalkEdgeWall, false, false, this.trackLength, ROAD_DETAIL_CHUNK_LENGTH));
+    walls.add(this.createChunkedScaledInstancedBoxes(capInstances, this.materials.shutokuBarrierBase, false, false, this.trackLength, ROAD_DETAIL_CHUNK_LENGTH));
+    parent.add(walls);
   }
 
   shouldUseShutokuBarrier(s, side) {
@@ -2845,18 +2914,18 @@ export class HighwayWorld {
   }
 
   addDedicatedHighwayBillboards(billboardGroup, billboardPads, billboardPosts) {
-    for (let s = 180; s < this.trackLength; s += 360) {
+    for (let s = 120; s < this.trackLength; s += 155) {
       for (const side of [-1, 1]) {
         const seed = s * 0.41 + (side > 0 ? 19.7 : 53.2);
-        if (this.isCityServiceClearance(s, side) || this.isJunctionOpening(s, side) || cityNoise(seed + 0.8) < 0.18) {
+        if (this.isCityServiceClearance(s, side) || this.isJunctionOpening(s, side) || cityNoise(seed + 0.8) < 0.05) {
           continue;
         }
-        const frame = this.getFrameAtDistance(s + cityRange(seed + 1.2, -48, 48));
-        const boardWidth = cityRange(seed + 2.3, 13.5, 27.0);
-        const boardHeight = cityRange(seed + 3.4, 5.2, 9.2);
-        const postHeight = cityRange(seed + 4.5, 4.8, 7.8);
-        const lateral = side * cityRange(seed + 5.6, ROAD_HALF_WIDTH + 18, ROAD_HALF_WIDTH + 36);
-        const forward = cityRange(seed + 6.7, -18, 18);
+        const frame = this.getFrameAtDistance(s + cityRange(seed + 1.2, -34, 34));
+        const boardWidth = cityRange(seed + 2.3, 10.5, 28.5);
+        const boardHeight = cityRange(seed + 3.4, 4.2, 10.6);
+        const postHeight = cityRange(seed + 4.5, 3.9, 8.4);
+        const lateral = side * cityRange(seed + 5.6, ROAD_HALF_WIDTH + 12, ROAD_HALF_WIDTH + 34);
+        const forward = cityRange(seed + 6.7, -15, 15);
         const yaw = frame.yaw - side * Math.PI * 0.5 + cityRange(seed + 7.8, -0.16, 0.16);
         const base = this.offsetAlong(frame, lateral, forward, 0);
         const padS = (frame.s + forward + this.trackLength) % this.trackLength;
@@ -2912,8 +2981,8 @@ export class HighwayWorld {
     }
 
     const wallNoise = cityNoise(seed + 41.2);
-    const wallMega = rowIndex >= 2 && cityNoise(seed + 41.9) > 0.84;
-    if (rowIndex <= 8 && bodyHeight > 28 && depth > 15 && wallNoise > (wallMega ? 0.74 : 0.82)) {
+    const wallMega = rowIndex >= 2 && cityNoise(seed + 41.9) > 0.76;
+    if (rowIndex <= 10 && bodyHeight > 24 && depth > 13 && wallNoise > (wallMega ? 0.58 : 0.66)) {
       const boardWidth = wallMega
         ? clamp(depth * cityRange(seed + 42.1, 1.05, 1.55), 18.0, 42.0)
         : clamp(depth * cityRange(seed + 42.1, 0.68, 1.14), 9.5, 24.0);
@@ -2941,8 +3010,8 @@ export class HighwayWorld {
     }
 
     const roofNoise = cityNoise(seed + 50.8);
-    const roofMega = rowIndex >= 1 && cityNoise(seed + 50.1) > 0.78;
-    if (rowIndex <= 8 && bodyHeight > 34 && width > 14 && roofNoise > (roofMega ? 0.76 : 0.84)) {
+    const roofMega = rowIndex >= 1 && cityNoise(seed + 50.1) > 0.7;
+    if (rowIndex <= 10 && bodyHeight > 30 && width > 12 && roofNoise > (roofMega ? 0.62 : 0.72)) {
       const boardWidth = roofMega
         ? clamp(width * cityRange(seed + 51.2, 0.9, 1.35), 20.0, 46.0)
         : clamp(width * cityRange(seed + 51.2, 0.64, 1.04), 12.0, 27.0);
@@ -2976,8 +3045,8 @@ export class HighwayWorld {
     }
 
     const groundNoise = cityNoise(seed + 60.9);
-    const groundMega = rowIndex >= 1 && cityNoise(seed + 60.2) > 0.8;
-    if (rowIndex <= 5 && width > 18 && groundNoise > (groundMega ? 0.78 : 0.86)) {
+    const groundMega = rowIndex >= 1 && cityNoise(seed + 60.2) > 0.72;
+    if (rowIndex <= 7 && width > 15 && groundNoise > (groundMega ? 0.64 : 0.74)) {
       const boardWidth = groundMega ? cityRange(seed + 61.7, 16.0, 30.0) : cityRange(seed + 61.7, 8.5, 16.5);
       const boardHeight = groundMega ? cityRange(seed + 62.1, 6.2, 10.4) : cityRange(seed + 62.1, 3.8, 5.9);
       const postHeight = groundMega ? cityRange(seed + 63.4, 5.2, 8.4) : cityRange(seed + 63.4, 3.1, 5.0);
@@ -3050,7 +3119,7 @@ export class HighwayWorld {
     }
 
     const ad = JAPANESE_BILLBOARD_ADS[index];
-    const variant = index % 7;
+    const variant = index % 12;
     const texture = makeCanvasTexture((ctx, canvas) => {
       ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = ad.bg;
@@ -3131,6 +3200,59 @@ export class HighwayWorld {
         for (let x = 0; x < canvas.width; x += 38) {
           ctx.fillRect(x, 0, 18, canvas.height);
         }
+        ctx.restore();
+      } else if (variant === 7) {
+        ctx.save();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.18)";
+        for (let x = 18; x < canvas.width; x += 42) {
+          ctx.fillRect(x, 14, 18, canvas.height - 28);
+        }
+        ctx.fillStyle = ad.accent;
+        for (let x = 32; x < canvas.width; x += 84) {
+          ctx.beginPath();
+          ctx.arc(x, canvas.height * 0.5, 18, 0, TWO_PI);
+          ctx.fill();
+        }
+        ctx.restore();
+      } else if (variant === 8) {
+        ctx.save();
+        ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = ad.accent;
+        for (let y = 18; y < canvas.height; y += 34) {
+          ctx.fillRect(24, y, canvas.width - 48, 12);
+        }
+        ctx.restore();
+      } else if (variant === 9) {
+        ctx.save();
+        ctx.fillStyle = ad.accent;
+        ctx.globalAlpha = 0.88;
+        for (let x = 24; x < canvas.width; x += 58) {
+          ctx.beginPath();
+          ctx.arc(x, 28, 16, 0, TWO_PI);
+          ctx.arc(x, canvas.height - 28, 16, 0, TWO_PI);
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      } else if (variant === 10) {
+        ctx.save();
+        ctx.strokeStyle = ad.accent;
+        ctx.lineWidth = 9;
+        for (let x = -20; x < canvas.width + 20; x += 34) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x + 28, canvas.height);
+          ctx.stroke();
+        }
+        ctx.restore();
+      } else if (variant === 11) {
+        ctx.save();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.86)";
+        ctx.fillRect(canvas.width * 0.12, 22, canvas.width * 0.76, canvas.height - 44);
+        ctx.fillStyle = ad.accent;
+        ctx.fillRect(canvas.width * 0.14, 30, canvas.width * 0.72, 12);
+        ctx.fillRect(canvas.width * 0.14, canvas.height - 42, canvas.width * 0.72, 12);
         ctx.restore();
       }
 
