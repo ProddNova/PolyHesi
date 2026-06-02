@@ -152,6 +152,10 @@ canvas {
   pointer-events: none;
 }
 
+.hud-shell.is-fullscreen-hud > :not(.dev-panel) {
+  display: none !important;
+}
+
 .session-panel {
   position: absolute;
   top: 18px;
@@ -192,11 +196,11 @@ canvas {
   text-transform: uppercase;
 }
 
-.session-panel small[data-status="salvato"] {
+.session-panel small[data-status="saved"] {
   color: #78e0c1;
 }
 
-.session-panel small[data-status="errore"] {
+.session-panel small[data-status="error"] {
   color: #ff8fa0;
 }
 

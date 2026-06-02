@@ -8,13 +8,13 @@
   <body>
     <div id="game-root"></div>
 
-    <section id="loginOverlay" class="login-overlay" aria-label="Accesso PolyHesi">
+    <section id="loginOverlay" class="login-overlay" aria-label="PolyHesi login">
       <form id="loginForm" class="login-card">
         <div class="login-brand">
           <span class="brand-dot"></span>
           <span>PolyHesi</span>
         </div>
-        <h1>Accesso riservato</h1>
+        <h1>Restricted access</h1>
         <label>
           <span>Username</span>
           <input id="loginUsername" name="username" type="text" autocomplete="username" required />
@@ -23,16 +23,16 @@
           <span>Password</span>
           <input id="loginPassword" name="password" type="password" autocomplete="current-password" required />
         </label>
-        <button id="loginButton" type="submit">Entra</button>
+        <button id="loginButton" type="submit">Enter</button>
         <p id="loginError" class="login-error" role="alert"></p>
       </form>
     </section>
 
     <main class="hud-shell" aria-label="PolyHesi game HUD" hidden>
-      <section id="sessionPanel" class="session-panel" aria-label="Sessione" hidden>
+      <section id="sessionPanel" class="session-panel" aria-label="Session" hidden>
         <span id="sessionName">User</span>
         <small id="sessionRole">test</small>
-        <small id="saveStatus" data-status="pronto">pronto</small>
+        <small id="saveStatus" data-status="ready">ready</small>
         <button id="logoutButton" type="button">Logout</button>
       </section>
 
@@ -85,30 +85,30 @@
       <button id="restartButton" class="restart-button" type="button">Restart</button>
       <button id="playerSettingsButton" class="player-settings-button" type="button">Settings</button>
 
-      <section id="touchControls" class="touch-controls" aria-label="Comandi touch">
+      <section id="touchControls" class="touch-controls" aria-label="Touch controls">
         <div class="touch-actions">
-          <button data-touch-action="interact" type="button" aria-label="Interagisci">USE</button>
+          <button data-touch-action="interact" type="button" aria-label="Interact">USE</button>
           <button data-touch-action="garage" type="button" aria-label="Garage">GAR</button>
-          <button data-touch-action="camera" type="button" aria-label="Cambia camera">CAM</button>
-          <button data-touch-action="map" type="button" aria-label="Mappa">MAP</button>
+          <button data-touch-action="camera" type="button" aria-label="Change camera">CAM</button>
+          <button data-touch-action="map" type="button" aria-label="Map">MAP</button>
           <button data-touch-action="restart" type="button" aria-label="Restart">RST</button>
         </div>
         <div class="touch-cluster touch-cluster--left">
-          <button data-touch-control="left" type="button" aria-label="Sinistra">&larr;</button>
-          <button data-touch-control="right" type="button" aria-label="Destra">&rarr;</button>
+          <button data-touch-control="left" type="button" aria-label="Left">&larr;</button>
+          <button data-touch-control="right" type="button" aria-label="Right">&rarr;</button>
         </div>
         <div class="touch-cluster touch-cluster--right">
-          <button data-touch-control="brake" type="button" aria-label="Frena">BRK</button>
-          <button data-touch-control="handbrake" type="button" aria-label="Freno a mano">HB</button>
-          <button data-touch-control="throttle" type="button" aria-label="Accelera">GAS</button>
+          <button data-touch-control="brake" type="button" aria-label="Brake">BRK</button>
+          <button data-touch-control="handbrake" type="button" aria-label="Handbrake">HB</button>
+          <button data-touch-control="throttle" type="button" aria-label="Throttle">GAS</button>
         </div>
       </section>
 
       <section id="playerSettingsOverlay" class="player-settings-overlay" aria-label="Game settings">
         <header>
           <div>
-            <span>Impostazioni</span>
-            <small>Audio, grafica e guida</small>
+            <span>Settings</span>
+            <small>Audio, graphics, and driving</small>
           </div>
           <button id="playerSettingsCloseButton" type="button">Close</button>
         </header>
@@ -119,7 +119,7 @@
             <input data-player-setting="masterVolume" type="range" min="0" max="1" step="0.01" />
           </label>
           <label>
-            <span>Qualita grafica</span>
+            <span>Graphics quality</span>
             <output data-player-setting-out="graphicsQuality">Med</output>
             <input data-player-setting="graphicsQuality" type="range" min="0" max="2" step="1" />
           </label>
@@ -129,22 +129,22 @@
             <input data-player-setting="cameraFov" type="range" min="48" max="82" step="1" />
           </label>
           <label>
-            <span>Distanza visuale</span>
+            <span>View distance</span>
             <output data-player-setting-out="viewDistance">900 m</output>
             <input data-player-setting="viewDistance" type="range" min="500" max="2000" step="50" />
           </label>
           <label class="player-settings-toggle">
-            <span>Traffico</span>
+            <span>Traffic</span>
             <output data-player-setting-out="trafficEnabled">On</output>
             <input data-player-setting="trafficEnabled" type="checkbox" checked />
           </label>
           <label class="player-settings-toggle">
-            <span>Ciclo giorno/notte</span>
+            <span>Day/night cycle</span>
             <output data-player-setting-out="dayNightCycle">On</output>
             <input data-player-setting="dayNightCycle" type="checkbox" checked />
           </label>
           <label>
-            <span>Ora</span>
+            <span>Time</span>
             <output data-player-setting-out="timeOfDay">18:15</output>
             <input data-player-setting="timeOfDay" type="range" min="0" max="24" step="0.05" />
           </label>
@@ -158,7 +158,7 @@
         </header>
         <nav class="dev-tabs" aria-label="Dev panel tabs">
           <button class="is-active" data-dev-tab="gameplay" type="button">Game</button>
-          <button data-dev-tab="physics" type="button">Guida</button>
+          <button data-dev-tab="physics" type="button">Driving</button>
           <button data-dev-tab="debug" type="button">Debug</button>
         </nav>
 
@@ -289,6 +289,11 @@
             <output id="ultraGraphicsOut">Off</output>
             <input id="ultraGraphics" type="checkbox" />
           </label>
+          <label class="dev-toggle">
+            <span>Fullscreen HUD</span>
+            <output id="fullscreenHudOut">Off</output>
+            <input id="fullscreenHud" type="checkbox" />
+          </label>
         </div>
 
         <div class="dev-actions">
@@ -397,7 +402,7 @@
             <button class="browser-tab is-active" data-market-tab="cars" type="button">NightRunner Auctions</button>
             <button class="browser-tab" data-market-tab="parts" type="button">PartDock</button>
           </nav>
-          <button id="marketCloseButton" class="browser-close" type="button">Chiudi</button>
+          <button id="marketCloseButton" class="browser-close" type="button">Close</button>
         </header>
 
         <div class="browser-toolbar">
@@ -414,20 +419,20 @@
         <div class="browser-search-area">
           <div id="marketLogo" class="browser-logo">NightRunner</div>
           <div class="browser-search-box">
-            <span id="marketSearchQuery">aste auto usate import street</span>
+            <span id="marketSearchQuery">used import street car auctions</span>
           </div>
         </div>
 
         <div class="market-sections">
           <section class="browser-page is-active" data-market-page="cars">
             <div class="search-result-head">
-              <span>Aste live</span>
-              <strong id="marketCarCount">0 risultati</strong>
+              <span>Live auctions</span>
+              <strong id="marketCarCount">0 results</strong>
             </div>
             <div class="search-chips">
-              <span>km reali</span>
-              <span>manuale / automatico</span>
-              <span>colori diversi</span>
+              <span>verified mileage</span>
+              <span>manual / automatic</span>
+              <span>different colors</span>
               <span>escrow garage</span>
             </div>
             <div id="carShopList" class="car-shop-list"></div>
@@ -439,15 +444,15 @@
               <strong id="marketCoinValue">0</strong>
             </div>
             <div class="search-result-head">
-              <span>PartDock catalogo</span>
-              <strong>pezzi singoli</strong>
+              <span>PartDock catalog</span>
+              <strong>single parts</strong>
             </div>
             <div class="search-chips">
               <span>turbo</span>
-              <span>assetto</span>
-              <span>distanziali</span>
-              <span>freni</span>
-              <span>gomme</span>
+              <span>suspension</span>
+              <span>spacers</span>
+              <span>brakes</span>
+              <span>tires</span>
             </div>
             <div id="partsGrid" class="parts-grid"></div>
           </section>
@@ -457,15 +462,15 @@
       <section id="garageOverlay" class="garage-overlay" aria-label="Garage car manager">
         <header class="garage-manager-header">
           <span>Garage</span>
-          <button id="garageCloseButton" type="button">Chiudi</button>
+          <button id="garageCloseButton" type="button">Close</button>
         </header>
         <div class="garage-manager-grid">
           <section class="garage-manager-panel">
-            <h2>Le tue auto</h2>
+            <h2>Your cars</h2>
             <div id="ownedCarList" class="owned-car-list"></div>
           </section>
           <section class="garage-manager-panel">
-            <h2>Upgrades montati</h2>
+            <h2>Installed upgrades</h2>
             <div id="installedUpgradeList" class="installed-upgrade-list"></div>
           </section>
         </div>

@@ -22,7 +22,7 @@ let game = null;
 function setLoginBusy(busy) {
   if (loginButton) {
     loginButton.disabled = busy;
-    loginButton.textContent = busy ? "Accesso..." : "Entra";
+    loginButton.textContent = busy ? "Signing in..." : "Enter";
   }
 }
 
@@ -73,7 +73,7 @@ loginForm?.addEventListener("submit", async (event) => {
     passwordInput.value = "";
     startGame(session);
   } catch (error) {
-    showLogin(error.message || "Accesso non riuscito.");
+    showLogin(error.message || "Login failed.");
   }
 });
 

@@ -20,8 +20,8 @@ const PERFORMANCE_LABELS = {
   powerMultiplier: "Power",
   handling: "Handling",
   gripMultiplier: "Grip",
-  brakePower: "Freni",
-  weightMultiplier: "Peso",
+  brakePower: "Brakes",
+  weightMultiplier: "Weight",
 };
 
 function formatColorSwatch(color) {
@@ -145,6 +145,8 @@ export class HUD {
       remodelSnapToGridOut: document.querySelector("#remodelSnapToGridOut"),
       hitboxMode: document.querySelector("#hitboxMode"),
       hitboxModeOut: document.querySelector("#hitboxModeOut"),
+      fullscreenHud: document.querySelector("#fullscreenHud"),
+      fullscreenHudOut: document.querySelector("#fullscreenHudOut"),
       remodelToolbox: document.querySelector("#remodelToolbox"),
       remodelCreate: document.querySelector("#remodelCreateButton"),
       remodelDelete: document.querySelector("#remodelDeleteButton"),
@@ -331,7 +333,7 @@ export class HUD {
       for (const preset of CAR_PRESETS) {
         const option = document.createElement("option");
         option.value = preset.id;
-        option.textContent = preset.inGamePlayer ? preset.label : `${preset.label} [NON USATA IN GAME]`;
+        option.textContent = preset.inGamePlayer ? preset.label : `${preset.label} [NOT USED IN GAME]`;
         this.nodes.carPreset.appendChild(option);
       }
       this.nodes.carPreset.value = this.settings.carPreset;
@@ -367,6 +369,8 @@ export class HUD {
     this.bindBooleanSetting("remodelSnapToGrid");
     this.bindBooleanSetting("hitboxMode");
     this.bindBooleanSetting("ultraGraphics");
+    this.bindBooleanSetting("fullscreenHud");
+    this.setFullscreenHud(Boolean(this.settings.fullscreenHud));
     this.setRemodelAvailable(Boolean(this.settings.noClip));
   }
 
@@ -465,6 +469,8 @@ export class HUD {
       this.syncBooleanSetting("remodelSnapToGrid");
       this.syncBooleanSetting("hitboxMode");
       this.syncBooleanSetting("ultraGraphics");
+      this.syncBooleanSetting("fullscreenHud");
+      this.setFullscreenHud(Boolean(this.settings.fullscreenHud));
       this.setRemodelAvailable(Boolean(this.settings.noClip));
     }
     this.syncPlayerSettings();
@@ -701,21 +707,25 @@ export class HUD {
             <small>${listing.transmission}</small>
             <small>${listing.engine}</small>
           </span>
-          <small>${listing.condition} / ${listing.location} / chiude ${listing.endsIn}</small>
+          <small>${listing.condition} / ${listing.location} / closes ${listing.endsIn}</small>
         </span>
-        <span class="car-shop-action"><b>${listing.price} c</b><small>${listing.bids} offerte</small></span>
+        <span class="car-shop-action"><b>${listing.price} c</b><small>${listing.bids} bids</small></span>
       `;
       this.loadCarThumbnail(getVehiclePreset(listing), button.querySelector(".car-thumbnail"));
       button.addEventListener("click", () => this.onCarMarket?.(listing.id));
       this.nodes.carShopList.appendChild(button);
     }
     if (this.nodes.marketCarCount) {
-      this.nodes.marketCarCount.textContent = `${CAR_AUCTION_LISTINGS.length} aste`;
+      this.nodes.marketCarCount.textContent = `${CAR_AUCTION_LISTINGS.length} auctions`;
     }
   }
 
   setPlayerSettingsVisible(visible) {
     this.nodes.playerSettingsOverlay?.classList.toggle("is-active", Boolean(visible));
+  }
+
+  setFullscreenHud(visible) {
+    this.nodes.shell?.classList.toggle("is-fullscreen-hud", Boolean(visible));
   }
 
   setRemodelPsxCars(cars = [], selectedCarId = "") {
@@ -910,7 +920,9 @@ export class HUD {
           : "https://nightrunner.auctions/live-lots";
     }
     if (this.nodes.marketSearchQuery) {
-      this.nodes.marketSearchQuery.textContent = site === "parts" ? "turbo assetto distanziali freni" : "aste auto usate import street";
+      this.nodes.marketSearchQuery.textContent = site === "parts"
+        ? "turbo suspension spacers brakes"
+        : "used import street car auctions";
     }
     if (this.nodes.marketLogo) {
       this.nodes.marketLogo.textContent = site === "parts" ? "PartDock" : "NightRunner";
@@ -939,7 +951,7 @@ export class HUD {
       const node = this.nodes.upgradeInfo.get(part.id);
       if (node) {
         node.textContent = isInstalled
-          ? "Installato"
+          ? "Installed"
           : isOwned
             ? "In garage"
             : `${costs[part.id]} coins`;
@@ -979,10 +991,10 @@ export class HUD {
       button.disabled = !isOwned && coins < listing.price;
       if (action) {
         action.innerHTML = isActive
-          ? "<b>In uso</b><small>garage</small>"
+          ? "<b>In use</b><small>garage</small>"
           : isOwned
-            ? "<b>Usa</b><small>comprata</small>"
-            : `<b>${listing.price} c</b><small>${listing.bids} offerte</small>`;
+            ? "<b>Use</b><small>bought</small>"
+            : `<b>${listing.price} c</b><small>${listing.bids} bids</small>`;
       }
     }
 
@@ -1017,7 +1029,7 @@ export class HUD {
           <small>${vehicle.colorName} / ${vehicle.mileage} / ${vehicle.transmission}</small>
           <small>${vehicle.engine} / ${vehicle.condition}</small>
         </span>
-        <span class="car-shop-action">${activeVehicleId === vehicle.id ? "In uso" : "Usa"}</span>
+        <span class="car-shop-action">${activeVehicleId === vehicle.id ? "In use" : "Use"}</span>
       `;
       this.loadCarThumbnail(getVehiclePreset(vehicle), button.querySelector(".car-thumbnail"));
       button.addEventListener("click", () => this.onOwnedCarSelect?.(vehicle.id));
@@ -1047,8 +1059,8 @@ export class HUD {
       empty.className = "garage-upgrade-row garage-upgrade-row--empty";
       empty.innerHTML = `
         <span>
-          <strong>Nessun pezzo in garage</strong>
-          <small>Compra pezzi singoli su PartDock</small>
+          <strong>No parts in the garage</strong>
+          <small>Buy single parts on PartDock</small>
         </span>
       `;
       this.nodes.installedUpgradeList.appendChild(empty);
@@ -1062,11 +1074,11 @@ export class HUD {
       row.innerHTML = `
         <span>
           <strong>${part.brand} ${part.label}</strong>
-          <small>${installedLevel > 0 ? "Installato" : "In magazzino"} / ${formatPartEffects(part)}</small>
+          <small>${installedLevel > 0 ? "Installed" : "In storage"} / ${formatPartEffects(part)}</small>
         </span>
         <span class="garage-upgrade-actions">
-          <button data-upgrade-delta="-1" type="button">Smonta</button>
-          <button data-upgrade-delta="1" type="button">Monta</button>
+          <button data-upgrade-delta="-1" type="button">Remove</button>
+          <button data-upgrade-delta="1" type="button">Install</button>
         </span>
       `;
 

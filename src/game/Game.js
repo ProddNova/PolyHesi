@@ -267,7 +267,7 @@ export class Game {
     this.setRemodelMode(this.settings.remodelMode);
     this.buildRemodelPsxLineup();
     this.updateRemodelPsxLineupVisibility();
-    this.setSaveStatus(this.authClient ? "pronto" : "");
+    this.setSaveStatus(this.authClient ? "ready" : "");
 
     this.world.update();
     this.applyGraphicsQuality();
@@ -327,21 +327,21 @@ export class Game {
       if (this.isAdmin) {
         this.hud.toggleDevPanel();
       } else {
-        this.hud.flashNotice("Admin", "accesso riservato");
+        this.hud.flashNotice("Admin", "restricted access");
       }
     }
     if (this.input.consumeNoClipToggle()) {
       if (this.isAdmin) {
         this.setNoClipMode(!this.settings.noClip);
       } else {
-        this.hud.flashNotice("Admin", "accesso riservato");
+        this.hud.flashNotice("Admin", "restricted access");
       }
     }
     if (this.input.consumeRemodelToggle()) {
       if (this.isAdmin) {
         this.toggleRemodelShortcut();
       } else {
-        this.hud.flashNotice("Admin", "accesso riservato");
+        this.hud.flashNotice("Admin", "restricted access");
       }
     }
 
@@ -508,7 +508,7 @@ export class Game {
 
     const canExitToGarage =
       this.world.isInGarageInterior(this.player.position) && this.getPlayerSpeed() < 2.5;
-    this.hud.setInteraction(canExitToGarage ? "Entra nel garage" : null);
+    this.hud.setInteraction(canExitToGarage ? "Enter garage" : null);
     if (interact && canExitToGarage) {
       this.enterGarageMode(false);
     }
@@ -522,7 +522,7 @@ export class Game {
     }
 
     if (this.marketOpen) {
-      this.hud.setInteraction("Chiudi browser");
+      this.hud.setInteraction("Close browser");
       if (interact) {
         this.closeMarket();
       }
@@ -530,7 +530,7 @@ export class Game {
     }
 
     if (this.garageManagerOpen) {
-      this.hud.setInteraction("Chiudi gestione auto");
+      this.hud.setInteraction("Close car manager");
       if (interact || garageMenuToggle) {
         this.closeGarageManager();
       }
@@ -550,7 +550,7 @@ export class Game {
     }
 
     if (nearDesk) {
-      this.hud.setInteraction("Apri browser garage");
+      this.hud.setInteraction("Open garage browser");
       if (interact) {
         this.openMarket();
       }
@@ -558,7 +558,7 @@ export class Game {
     }
 
     if (nearCar) {
-      this.hud.setInteraction("Entra in auto / G garage");
+      this.hud.setInteraction("Enter car / G garage");
       if (interact) {
         this.enterDrivingMode();
       }
@@ -722,7 +722,7 @@ export class Game {
     this.score += points;
     this.coins += coins;
     this.markProgressDirty();
-    this.hud.flashNearMiss(points, "Sorpasso", coins);
+    this.hud.flashNearMiss(points, "Overtake", coins);
     this.audio.coin();
   }
 
@@ -890,7 +890,7 @@ export class Game {
 
   teleportFromMap(position) {
     if (!this.isAdmin || !position) {
-      this.hud.flashNotice("Admin", "accesso riservato");
+      this.hud.flashNotice("Admin", "restricted access");
       return;
     }
 
@@ -1943,13 +1943,13 @@ export class Game {
         sourceListingId: listing?.id ?? (typeof vehicle?.sourceListingId === "string" ? vehicle.sourceListingId : null),
         purchasePrice: clampSaveInteger(vehicle?.purchasePrice ?? listing?.price ?? preset.price, 0, Number.MAX_SAFE_INTEGER),
         seller: String(vehicle?.seller ?? listing?.seller ?? "Garage"),
-        condition: String(vehicle?.condition ?? listing?.condition ?? "usata"),
+        condition: String(vehicle?.condition ?? listing?.condition ?? "used"),
         mileageKm,
-        mileage: typeof vehicle?.mileage === "string" ? vehicle.mileage : `${mileageKm.toLocaleString("it-IT")} km`,
+        mileage: typeof vehicle?.mileage === "string" ? vehicle.mileage : `${mileageKm.toLocaleString("en-US")} km`,
         color,
         colorName: String(vehicle?.colorName ?? listing?.colorName ?? "Factory"),
         secondaryColor,
-        transmission: String(vehicle?.transmission ?? listing?.transmission ?? "Manuale"),
+        transmission: String(vehicle?.transmission ?? listing?.transmission ?? "Manual"),
         engine: String(vehicle?.engine ?? listing?.engine ?? "stock"),
       };
     };
@@ -1965,14 +1965,14 @@ export class Game {
         label: preset.label,
         sourceListingId: null,
         purchasePrice: preset.price ?? 0,
-        seller: "Garage salvato",
-        condition: "salvataggio precedente",
+        seller: "Saved garage",
+        condition: "previous save",
         mileageKm: 0,
-        mileage: "km non registrati",
+        mileage: "unrecorded km",
         color: preset.color,
         colorName: "Factory",
         secondaryColor: preset.secondaryColor,
-        transmission: "Manuale",
+        transmission: "Manual",
         engine: "stock",
       };
     };
@@ -2077,7 +2077,7 @@ export class Game {
     }
 
     this.progressDirty = true;
-    this.setSaveStatus("salvando");
+    this.setSaveStatus("saving");
     if (immediate) {
       this.flushProgressSave({ force: true });
       return;
@@ -2108,16 +2108,16 @@ export class Game {
 
     const snapshot = this.getProgressSnapshot();
     this.progressDirty = false;
-    this.setSaveStatus("salvando");
+    this.setSaveStatus("saving");
     this.progressSaveInFlight = this.authClient
       .saveGameState(snapshot, { keepalive })
       .then(() => {
-        this.setSaveStatus("salvato");
+        this.setSaveStatus("saved");
         return snapshot;
       })
       .catch((error) => {
         this.progressDirty = true;
-        this.setSaveStatus("errore");
+        this.setSaveStatus("error");
         if (!keepalive) {
           this.progressSaveTimer = window.setTimeout(() => this.flushProgressSave(), SAVE_RETRY_MS);
         }
@@ -2152,7 +2152,7 @@ export class Game {
         }
       }
 
-      for (const key of ["trafficEnabled", "dayNightCycle", "noClip", "hitboxMode", "remodelMode", "remodelSnapToGrid", "ultraGraphics"]) {
+      for (const key of ["trafficEnabled", "dayNightCycle", "noClip", "hitboxMode", "remodelMode", "remodelSnapToGrid", "ultraGraphics", "fullscreenHud"]) {
         if (typeof saved[key] === "boolean") {
           settings[key] = saved[key];
         }
@@ -2174,7 +2174,7 @@ export class Game {
 
   saveDevSettings() {
     if (!this.isAdmin) {
-      this.hud.flashNotice("Admin", "accesso riservato");
+      this.hud.flashNotice("Admin", "restricted access");
       return;
     }
 
@@ -2187,6 +2187,7 @@ export class Game {
       remodelMode: this.settings.remodelMode,
       remodelSnapToGrid: this.settings.remodelSnapToGrid,
       ultraGraphics: this.settings.ultraGraphics,
+      fullscreenHud: this.settings.fullscreenHud,
     };
     for (const def of SETTING_DEFS) {
       payload[def.key] = this.settings[def.key];
@@ -2202,7 +2203,7 @@ export class Game {
 
   resetDevSettings() {
     if (!this.isAdmin) {
-      this.hud.flashNotice("Admin", "accesso riservato");
+      this.hud.flashNotice("Admin", "restricted access");
       return;
     }
 
@@ -2302,6 +2303,10 @@ export class Game {
     if (changedKey === "ultraGraphics") {
       this.applyGraphicsQuality();
       this.hud.flashNotice("Ultra graphics", this.settings.ultraGraphics ? "video mode on" : "video mode off");
+    }
+    if (changedKey === "fullscreenHud") {
+      this.hud.setFullscreenHud?.(this.settings.fullscreenHud);
+      this.hud.flashNotice("Fullscreen HUD", this.settings.fullscreenHud ? "HUD hidden" : "HUD visible");
     }
     if (changedKey === "cameraFov") {
       this.camera.fov = this.settings.cameraFov;
@@ -2554,7 +2559,7 @@ export class Game {
 
   resetRemodelRouteProfile() {
     if (!this.isAdmin) {
-      this.hud.flashNotice("Admin", "accesso riservato");
+      this.hud.flashNotice("Admin", "restricted access");
       return this.world.getRemodelRouteProfile();
     }
     const applied = this.world.applyRemodelRouteProfile(this.world.getDefaultRouteProfile(), { preserveSpawnSegment: false });
