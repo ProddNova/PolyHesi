@@ -36,6 +36,12 @@ const GUARDRAIL_MODEL = {
   post: { width: 0.22, height: 1.18, depth: 0.22, y: 0.56 },
   reflector: { width: 0.06, height: 0.18, depth: 0.5, y: 0.86, inset: 0.13 },
 };
+const SHUTOKU_BARRIER_MODEL = {
+  base: { width: 0.72, height: 0.38, y: 0.19 },
+  wall: { width: 0.46, height: 2.34, y: 1.55 },
+  divider: { width: 0.08, height: 2.42, depth: 0.07, y: 1.58 },
+  tileLength: 2.25,
+};
 const HITBOX_TEMPLATES = [];
 
 const BUILDING_TYPES = [
@@ -153,6 +159,16 @@ const CITY_BUILDING_HEIGHT_SCALE = 1.44;
 const CITY_STREETLIGHT_INTERVAL = 68;
 const CITY_STREETLIGHT_POLE_OFFSET = ROAD_HALF_WIDTH + 2.65;
 const ROADSIDE_SIGN_OFFSET = ROAD_HALF_WIDTH + 4.8;
+const JAPANESE_BILLBOARD_ADS = [
+  { title: "ラーメン", brand: "湾岸食堂", sub: "24時間営業", bg: "#c93a2e", fg: "#fff6dc", accent: "#ffd957" },
+  { title: "中古車", brand: "東京AUTO", sub: "高価買取", bg: "#f1c232", fg: "#1d2024", accent: "#e23b2f" },
+  { title: "カラオケ", brand: "NEON BOX", sub: "朝5時まで", bg: "#7b2bd1", fg: "#ffffff", accent: "#29d4ff" },
+  { title: "珈琲", brand: "喫茶ミナト", sub: "モーニング", bg: "#214d40", fg: "#fff3d2", accent: "#d8a64b" },
+  { title: "タイヤ館", brand: "首都高サービス", sub: "点検無料", bg: "#1e5f9b", fg: "#ffffff", accent: "#ffdd55" },
+  { title: "ホテル", brand: "銀座ステイ", sub: "空室あり", bg: "#202833", fg: "#f5e8c8", accent: "#ef476f" },
+  { title: "ゲーム", brand: "秋葉原電遊", sub: "新作入荷", bg: "#0b7a75", fg: "#ffffff", accent: "#ffba08" },
+  { title: "寿司", brand: "築地一番", sub: "本日特価", bg: "#eeeeee", fg: "#21252b", accent: "#d62828" },
+];
 const DEFAULT_LANE_DASH_LENGTH = 1.7;
 const DEFAULT_LANE_DASH_SPACING = 5.4;
 const ROAD_SIGN_PLACEMENTS = [
@@ -386,6 +402,20 @@ export class HighwayWorld {
         metalness: 0.1,
         flatShading: true,
       }),
+      shutokuBarrier: new THREE.MeshStandardMaterial({
+        color: 0xe2ddca,
+        map: this.createShutokuBarrierTexture(),
+        roughness: 0.88,
+        metalness: 0.01,
+        flatShading: true,
+      }),
+      shutokuBarrierBase: new THREE.MeshStandardMaterial({
+        color: 0x72706b,
+        map: concreteTexture,
+        roughness: 0.9,
+        metalness: 0.02,
+        flatShading: true,
+      }),
       concrete: new THREE.MeshStandardMaterial({
         color: 0x3a424a,
         map: concreteTexture,
@@ -490,6 +520,38 @@ export class HighwayWorld {
     });
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+  }
+
+  createShutokuBarrierTexture() {
+    const texture = makeCanvasTexture((ctx, canvas) => {
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = "#e2ddca";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (let band = 1; band < 5; band += 1) {
+        const y = Math.round((canvas.height * band) / 5);
+        ctx.fillStyle = "rgba(126, 120, 104, 0.34)";
+        ctx.fillRect(0, y - 1, canvas.width, 2);
+        ctx.fillStyle = "rgba(255, 250, 230, 0.16)";
+        ctx.fillRect(0, y + 2, canvas.width, 1);
+      }
+
+      for (let i = 0; i < 44; i += 1) {
+        const n = cityNoise(i * 15.7 + 3.4);
+        ctx.globalAlpha = 0.08 + n * 0.13;
+        ctx.fillStyle = n > 0.62 ? "#6f695e" : "#f2ecd7";
+        const x = Math.floor(cityNoise(i * 4.2 + 8.1) * canvas.width);
+        const y = Math.floor(cityNoise(i * 6.6 + 1.7) * canvas.height);
+        const w = 4 + Math.floor(cityNoise(i * 2.1 + 9.4) * 18);
+        const h = 2 + Math.floor(cityNoise(i * 3.3 + 5.2) * 7);
+        ctx.fillRect(x, y, w, h);
+      }
+      ctx.globalAlpha = 1;
+    });
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(2.5, 1);
     return texture;
   }
 
@@ -1440,6 +1502,11 @@ export class HighwayWorld {
   }
 
   addGuardrailSegment(parent, frame, side, length = 14.8, batch = null) {
+    if (this.shouldUseShutokuBarrier(frame.s, side)) {
+      this.addShutokuBarrierSegment(parent, frame, side, length, batch);
+      return;
+    }
+
     const upper = this.offsetPoint(frame, RAIL_OFFSET * side, GUARDRAIL_MODEL.upper.y);
     const lower = this.offsetPoint(frame, RAIL_OFFSET * side, GUARDRAIL_MODEL.lower.y);
     const post = this.offsetPoint(frame, RAIL_OFFSET * side, GUARDRAIL_MODEL.post.y);
@@ -1481,6 +1548,76 @@ export class HighwayWorld {
         side < 0 ? this.materials.reflectorAmber : this.materials.reflectorRed,
         reflector,
         frame.yaw,
+      );
+    }
+  }
+
+  shouldUseShutokuBarrier(s, side) {
+    const section = Math.floor(s / 360);
+    const local = ((s % 360) + 360) % 360;
+    const sectionNoise = cityNoise(section * 12.73 + side * 4.91);
+    const pattern = section % 7;
+    const selected = pattern === 1 || pattern === 4 || sectionNoise > 0.72;
+    return selected && local > 32 && local < 306;
+  }
+
+  addShutokuBarrierSegment(parent, frame, side, length, batch = null) {
+    const lateral = RAIL_OFFSET * side;
+    const wall = {
+      position: this.offsetPoint(frame, lateral, SHUTOKU_BARRIER_MODEL.wall.y),
+      yaw: frame.yaw,
+      s: frame.s,
+      scale: {
+        x: SHUTOKU_BARRIER_MODEL.wall.width,
+        y: SHUTOKU_BARRIER_MODEL.wall.height,
+        z: length,
+      },
+    };
+    const base = {
+      position: this.offsetPoint(frame, lateral, SHUTOKU_BARRIER_MODEL.base.y),
+      yaw: frame.yaw,
+      s: frame.s,
+      scale: {
+        x: SHUTOKU_BARRIER_MODEL.base.width,
+        y: SHUTOKU_BARRIER_MODEL.base.height,
+        z: length,
+      },
+    };
+    const dividerLateral = side * (RAIL_OFFSET - 0.26);
+    const dividerCount = Math.max(2, Math.ceil(length / SHUTOKU_BARRIER_MODEL.tileLength));
+    const dividers = [];
+    for (let i = 0; i <= dividerCount; i += 1) {
+      const forward = -length * 0.5 + (length * i) / dividerCount;
+      dividers.push({
+        position: this.offsetAlong(frame, dividerLateral, forward, SHUTOKU_BARRIER_MODEL.divider.y),
+        yaw: frame.yaw,
+        s: frame.s,
+        scale: {
+          x: SHUTOKU_BARRIER_MODEL.divider.width,
+          y: SHUTOKU_BARRIER_MODEL.divider.height,
+          z: SHUTOKU_BARRIER_MODEL.divider.depth,
+        },
+      });
+    }
+
+    if (batch) {
+      batch.shutokuWalls.push(wall);
+      batch.shutokuBases.push(base);
+      batch.shutokuDividers.push(...dividers);
+      return;
+    }
+
+    this.addOrientedBox(parent, wall.scale.x, wall.scale.y, wall.scale.z, this.materials.shutokuBarrier, wall.position, wall.yaw);
+    this.addOrientedBox(parent, base.scale.x, base.scale.y, base.scale.z, this.materials.shutokuBarrierBase, base.position, base.yaw);
+    for (const divider of dividers) {
+      this.addOrientedBox(
+        parent,
+        divider.scale.x,
+        divider.scale.y,
+        divider.scale.z,
+        this.materials.railDark,
+        divider.position,
+        divider.yaw,
       );
     }
   }
@@ -1953,29 +2090,93 @@ export class HighwayWorld {
   }
 
   addSignBoard(parent, x, y, z, width, height, placement, rotationY = 0) {
-    const backing = this.addLocalBox(
-      parent,
-      width + 0.26,
-      height + 0.22,
-      0.14,
-      new THREE.MeshStandardMaterial({ color: 0x1f2b28, roughness: 0.62, metalness: 0.05, flatShading: true }),
-      x,
-      y,
-      z + 0.03,
-    );
-    backing.name = "expresswaySignBacking";
+    const panels = this.getExpresswaySignPanels(placement, width);
+    let firstBoard = null;
 
-    const board = new THREE.Mesh(
-      new THREE.PlaneGeometry(width, height),
-      this.createExpresswaySignMaterial(placement),
-    );
-    board.name = "expresswaySignFace";
-    board.position.set(x, y, z - 0.06);
-    board.rotation.y = rotationY;
-    board.castShadow = false;
-    board.receiveShadow = false;
-    parent.add(board);
-    return board;
+    for (const panel of panels) {
+      const panelX = x + panel.x;
+      const backing = this.addLocalBox(
+        parent,
+        panel.width + 0.26,
+        height + 0.22,
+        0.14,
+        new THREE.MeshStandardMaterial({ color: 0x1f2b28, roughness: 0.62, metalness: 0.05, flatShading: true }),
+        panelX,
+        y,
+        z + 0.03,
+      );
+      backing.name = "expresswaySignBacking";
+
+      const board = new THREE.Mesh(
+        new THREE.PlaneGeometry(panel.width, height),
+        this.createExpresswaySignMaterial(panel.placement),
+      );
+      board.name = "expresswaySignFace";
+      board.position.set(panelX, y, z - 0.06);
+      board.rotation.y = rotationY;
+      board.castShadow = false;
+      board.receiveShadow = false;
+      parent.add(board);
+      firstBoard = firstBoard ?? board;
+    }
+
+    return firstBoard;
+  }
+
+  getExpresswaySignPanels(placement, width) {
+    if (placement.type !== "gantry" || width < 8) {
+      return [{ x: 0, width, placement }];
+    }
+
+    const variant = Math.floor(cityNoise(placement.s * 0.021 + 7.2) * 5);
+    const lineGroups = this.splitSignLines(placement.lines ?? [], variant);
+    if (variant === 0) {
+      return [{ x: 0, width, placement }];
+    }
+    if (variant === 1) {
+      return [
+        { x: -2.75, width: 4.65, placement: this.makePanelPlacement(placement, lineGroups[0], "左") },
+        { x: 2.8, width: 4.45, placement: this.makePanelPlacement(placement, lineGroups[1], "右") },
+      ];
+    }
+    if (variant === 2) {
+      return [
+        { x: -3.55, width: 3.0, placement: this.makePanelPlacement(placement, lineGroups[0], "A") },
+        { x: 0, width: 3.0, placement: this.makePanelPlacement(placement, lineGroups[1], "B") },
+        { x: 3.55, width: 3.0, placement: this.makePanelPlacement(placement, lineGroups[2], "C") },
+      ];
+    }
+    if (variant === 3) {
+      return [{ x: -2.65, width: 4.6, placement: this.makePanelPlacement(placement, lineGroups[0], "左") }];
+    }
+    return [{ x: 2.65, width: 4.6, placement: this.makePanelPlacement(placement, lineGroups[0], "右") }];
+  }
+
+  splitSignLines(lines, variant) {
+    if (variant === 2) {
+      return [
+        [lines[0] ?? "都心"],
+        [lines[1] ?? "出口"],
+        [lines[2] ?? "方面"],
+      ];
+    }
+    if (variant === 3 || variant === 4) {
+      return [[lines[variant === 3 ? 0 : lines.length - 1] ?? lines[0] ?? "出口"]];
+    }
+    const middle = Math.max(1, Math.ceil(lines.length / 2));
+    return [
+      lines.slice(0, middle),
+      lines.slice(middle).length ? lines.slice(middle) : [lines[0] ?? "方面"],
+    ];
+  }
+
+  makePanelPlacement(placement, lines, suffix) {
+    return {
+      ...placement,
+      title: placement.title,
+      route: suffix ? `${placement.route} ${suffix}` : placement.route,
+      lines,
+    };
   }
 
   createExpresswaySignMaterial(placement) {
@@ -2136,6 +2337,10 @@ export class HighwayWorld {
     const trim = [];
     const signs = [];
     const roofBeacons = [];
+    const billboardPosts = [];
+    const billboardPads = [];
+    const billboardGroup = new THREE.Group();
+    billboardGroup.name = "JapaneseCityBillboards";
 
     for (let rowIndex = 0; rowIndex < CITY_BLOCK_ROWS.length; rowIndex += 1) {
       const row = CITY_BLOCK_ROWS[rowIndex];
@@ -2156,6 +2361,9 @@ export class HighwayWorld {
             trim,
             signs,
             roofBeacons,
+            billboardPosts,
+            billboardPads,
+            billboardGroup,
             row,
             rowIndex,
             side,
@@ -2175,11 +2383,30 @@ export class HighwayWorld {
     district.add(this.createChunkedScaledInstancedBoxes(trim, this.materials.buildingGlassDark, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
     district.add(this.createChunkedScaledInstancedBoxes(signs, this.materials.tunnelSign, false, false));
     district.add(this.createChunkedScaledInstancedBoxes(roofBeacons, this.materials.aviationBeacon, false, false));
+    district.add(this.createChunkedScaledInstancedBoxes(billboardPads, this.materials.shutokuBarrierBase, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
+    district.add(this.createChunkedScaledInstancedBoxes(billboardPosts, this.materials.railDark, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
+    district.add(billboardGroup);
     parent.add(district);
   }
 
   addProceduralCityBlock(batches) {
-    const { bodyBatches, roofs, glass, warmWindows, trim, signs, roofBeacons, row, rowIndex, side, s, seed } = batches;
+    const {
+      bodyBatches,
+      roofs,
+      glass,
+      warmWindows,
+      trim,
+      signs,
+      roofBeacons,
+      billboardPosts,
+      billboardPads,
+      billboardGroup,
+      row,
+      rowIndex,
+      side,
+      s,
+      seed,
+    } = batches;
     const frame = this.getFrameAtDistance(s);
     let width = cityRange(seed + 1.7, row.width[0], row.width[1]);
     let depth = cityRange(seed + 2.9, row.depth[0], row.depth[1]);
@@ -2289,6 +2516,224 @@ export class HighwayWorld {
         });
       }
     }
+
+    this.addProceduralCityBillboards({
+      billboardGroup,
+      billboardPads,
+      billboardPosts,
+      base,
+      yaw,
+      width,
+      depth,
+      bodyHeight,
+      lateral,
+      forward,
+      side,
+      rowIndex,
+      seed,
+      s,
+      buildingId,
+      buildingLabel,
+    });
+  }
+
+  addProceduralCityBillboards({
+    billboardGroup,
+    billboardPads,
+    billboardPosts,
+    base,
+    yaw,
+    width,
+    depth,
+    bodyHeight,
+    lateral,
+    forward,
+    side,
+    rowIndex,
+    seed,
+    s,
+    buildingId,
+    buildingLabel,
+  }) {
+    if (!billboardGroup) {
+      return;
+    }
+
+    const wallNoise = cityNoise(seed + 41.2);
+    if (rowIndex <= 5 && bodyHeight > 22 && depth > 15 && wallNoise > 0.994) {
+      const boardWidth = clamp(depth * cityRange(seed + 42.1, 0.38, 0.68), 5.4, 12.5);
+      const boardHeight = clamp(bodyHeight * cityRange(seed + 43.3, 0.08, 0.14), 2.3, 5.8);
+      const y = clamp(
+        cityRange(seed + 44.4, 6.5, bodyHeight - 4.2),
+        boardHeight * 0.5 + 3.2,
+        bodyHeight - boardHeight * 0.5 - 1.2,
+      );
+      const z = cityRange(seed + 45.5, -depth * 0.28, depth * 0.28);
+      const x = -side * (width * 0.5 + 0.13);
+      const position = this.offsetLocalPoint(base, yaw, x, z, y);
+      this.addJapaneseBillboardPlane(
+        billboardGroup,
+        position,
+        yaw - side * Math.PI * 0.5,
+        boardWidth,
+        boardHeight,
+        seed + 46.6,
+        `${buildingId}:wall-ad`,
+        `${buildingLabel} wall billboard`,
+      );
+    }
+
+    const roofNoise = cityNoise(seed + 50.8);
+    if (rowIndex <= 6 && bodyHeight > 36 && width > 14 && roofNoise > 0.996) {
+      const boardWidth = clamp(width * cityRange(seed + 51.2, 0.34, 0.58), 5.8, 11.2);
+      const boardHeight = cityRange(seed + 52.4, 2.1, 3.4);
+      const postHeight = cityRange(seed + 53.6, 2.1, 3.4);
+      const localX = cityRange(seed + 54.1, -width * 0.18, width * 0.18);
+      const localZ = cityRange(seed + 55.3, -depth * 0.22, depth * 0.22);
+      const boardY = bodyHeight + postHeight + boardHeight * 0.52;
+      const position = this.offsetLocalPoint(base, yaw, localX, localZ, boardY);
+      const signYaw = yaw + cityRange(seed + 56.8, -0.34, 0.34);
+      this.addJapaneseBillboardPlane(
+        billboardGroup,
+        position,
+        signYaw,
+        boardWidth,
+        boardHeight,
+        seed + 57.5,
+        `${buildingId}:roof-ad`,
+        `${buildingLabel} roof billboard`,
+      );
+
+      for (const postZ of [-boardWidth * 0.36, boardWidth * 0.36]) {
+        billboardPosts.push({
+          position: this.offsetLocalPoint(base, yaw, localX, localZ + postZ, bodyHeight + postHeight * 0.5),
+          yaw,
+          s,
+          scale: { x: 0.16, y: postHeight, z: 0.16 },
+          remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "roof-billboard-pole"),
+        });
+      }
+    }
+
+    const groundNoise = cityNoise(seed + 60.9);
+    if (rowIndex <= 3 && width > 18 && groundNoise > 0.997) {
+      const boardWidth = cityRange(seed + 61.7, 5.4, 9.4);
+      const boardHeight = cityRange(seed + 62.1, 2.2, 3.2);
+      const postHeight = cityRange(seed + 63.4, 2.2, 3.1);
+      const localX = side * (width * 0.5 + cityRange(seed + 64.2, 8.0, 15.0));
+      const localZ = cityRange(seed + 65.6, -depth * 0.45, depth * 0.45);
+      const signS = (s + forward + localZ + this.trackLength) % this.trackLength;
+      const signLateral = Math.abs(lateral) + width * 0.5 + Math.abs(localX) - width * 0.5;
+      const reserved = this.reserveCityFootprint({
+        side,
+        s: signS,
+        lateral: signLateral,
+        halfForward: boardWidth * 0.5 + 3.2,
+        halfLateral: 5.8,
+      });
+      if (reserved) {
+        const padPosition = this.offsetLocalPoint(base, yaw, localX, localZ, 0.04);
+        billboardPads.push({
+          position: padPosition,
+          yaw,
+          s: signS,
+          scale: { x: 5.2, y: 0.08, z: boardWidth + 1.7 },
+        });
+        for (const postZ of [-boardWidth * 0.34, boardWidth * 0.34]) {
+          billboardPosts.push({
+            position: this.offsetLocalPoint(base, yaw, localX, localZ + postZ, postHeight * 0.5),
+            yaw,
+            s: signS,
+            scale: { x: 0.18, y: postHeight, z: 0.18 },
+          });
+        }
+        this.addJapaneseBillboardPlane(
+          billboardGroup,
+          this.offsetLocalPoint(base, yaw, localX, localZ, postHeight + boardHeight * 0.52),
+          yaw + cityRange(seed + 66.8, -0.26, 0.26),
+          boardWidth,
+          boardHeight,
+          seed + 67.3,
+          `${buildingId}:ground-ad`,
+          `${buildingLabel} ground billboard`,
+        );
+      }
+    }
+  }
+
+  addJapaneseBillboardPlane(parent, position, yaw, width, height, seed, fixedId, label) {
+    const board = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, height),
+      this.createJapaneseBillboardMaterial(seed),
+    );
+    board.name = "JapaneseBillboardFace";
+    board.position.copy(position);
+    board.rotation.y = yaw;
+    board.renderOrder = 2;
+    board.castShadow = false;
+    board.receiveShadow = false;
+    board.userData.remodelCategory = "sign";
+    board.userData.remodelFixedId = fixedId;
+    board.userData.remodelLabel = label;
+    parent.add(board);
+    return board;
+  }
+
+  createJapaneseBillboardMaterial(seed) {
+    if (!this.billboardMaterialCache) {
+      this.billboardMaterialCache = new Map();
+    }
+    const index = Math.floor(cityNoise(seed) * JAPANESE_BILLBOARD_ADS.length) % JAPANESE_BILLBOARD_ADS.length;
+    if (this.billboardMaterialCache.has(index)) {
+      return this.billboardMaterialCache.get(index);
+    }
+
+    const ad = JAPANESE_BILLBOARD_ADS[index];
+    const texture = makeCanvasTexture((ctx, canvas) => {
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = ad.bg;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+      ctx.fillRect(0, 0, canvas.width, 18);
+      ctx.fillRect(0, canvas.height - 18, canvas.width, 18);
+      ctx.strokeStyle = ad.accent;
+      ctx.lineWidth = 6;
+      ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+      ctx.fillStyle = ad.accent;
+      ctx.fillRect(16, 20, 46, 14);
+      ctx.fillRect(canvas.width - 66, canvas.height - 34, 48, 12);
+
+      ctx.fillStyle = ad.fg;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "900 44px 'Yu Gothic', 'Meiryo', system-ui, sans-serif";
+      ctx.fillText(ad.title, canvas.width * 0.5, 56);
+      ctx.font = "800 20px 'Yu Gothic', 'Meiryo', system-ui, sans-serif";
+      ctx.fillText(ad.brand, canvas.width * 0.5, 92);
+      ctx.font = "700 14px 'Yu Gothic', 'Meiryo', system-ui, sans-serif";
+      ctx.fillText(ad.sub, canvas.width * 0.5, 112);
+
+      for (let i = 0; i < 18; i += 1) {
+        ctx.globalAlpha = 0.06 + cityNoise(index * 19.7 + i) * 0.1;
+        ctx.fillStyle = cityNoise(index * 23.3 + i) > 0.52 ? "#ffffff" : "#000000";
+        ctx.fillRect(
+          Math.floor(cityNoise(index * 5.1 + i) * canvas.width),
+          Math.floor(cityNoise(index * 8.7 + i) * canvas.height),
+          2 + Math.floor(cityNoise(index * 12.2 + i) * 8),
+          2 + Math.floor(cityNoise(index * 14.6 + i) * 5),
+        );
+      }
+      ctx.globalAlpha = 1;
+    });
+    texture.anisotropy = this.ultraGraphics ? 8 : 2;
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      color: 0xffffff,
+      side: THREE.DoubleSide,
+    });
+    material.name = `japaneseBillboard_${index}`;
+    this.billboardMaterialCache.set(index, material);
+    return material;
   }
 
   makeBuildingRemodelMeta(groupId, label, part, selectable = false) {
@@ -3542,6 +3987,9 @@ export class HighwayWorld {
       posts: [],
       amber: [],
       red: [],
+      shutokuWalls: [],
+      shutokuBases: [],
+      shutokuDividers: [],
     };
   }
 
@@ -3551,6 +3999,9 @@ export class HighwayWorld {
     parent.add(this.createChunkedInstancedBoxes(batch.posts, GUARDRAIL_MODEL.post.width, GUARDRAIL_MODEL.post.height, GUARDRAIL_MODEL.post.depth, this.materials.railDark, false, routeLength));
     parent.add(this.createChunkedInstancedBoxes(batch.amber, GUARDRAIL_MODEL.reflector.width, GUARDRAIL_MODEL.reflector.height, GUARDRAIL_MODEL.reflector.depth, this.materials.reflectorAmber, false, routeLength));
     parent.add(this.createChunkedInstancedBoxes(batch.red, GUARDRAIL_MODEL.reflector.width, GUARDRAIL_MODEL.reflector.height, GUARDRAIL_MODEL.reflector.depth, this.materials.reflectorRed, false, routeLength));
+    parent.add(this.createChunkedScaledInstancedBoxes(batch.shutokuBases, this.materials.shutokuBarrierBase, false, false, routeLength, ROAD_DETAIL_CHUNK_LENGTH));
+    parent.add(this.createChunkedScaledInstancedBoxes(batch.shutokuWalls, this.materials.shutokuBarrier, false, false, routeLength, ROAD_DETAIL_CHUNK_LENGTH));
+    parent.add(this.createChunkedScaledInstancedBoxes(batch.shutokuDividers, this.materials.railDark, false, false, routeLength, ROAD_DETAIL_CHUNK_LENGTH));
   }
 
   addCollider(x, z, width, depth) {
