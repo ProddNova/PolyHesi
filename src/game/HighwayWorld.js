@@ -46,7 +46,7 @@ const SIDEWALK_EDGE_WALL_MODEL = {
   height: 0.78,
   y: 0.39,
   length: 15.6,
-  lateralOffset: ROAD_HALF_WIDTH + 6.35,
+  lateralOffset: ROAD_HALF_WIDTH + 5.49,
 };
 const HITBOX_TEMPLATES = [];
 
@@ -2716,6 +2716,7 @@ export class HighwayWorld {
     const billboardPads = [];
     const billboardGroup = new THREE.Group();
     billboardGroup.name = "JapaneseCityBillboards";
+    const billboardPlacements = [];
 
     for (let rowIndex = 0; rowIndex < CITY_BLOCK_ROWS.length; rowIndex += 1) {
       const row = CITY_BLOCK_ROWS[rowIndex];
@@ -2748,7 +2749,7 @@ export class HighwayWorld {
         }
       }
     }
-    this.addDedicatedHighwayBillboards(billboardGroup, billboardPads, billboardPosts);
+    this.addDedicatedHighwayBillboards(billboardGroup, billboardPads, billboardPosts, billboardPlacements);
 
     for (let i = 0; i < bodyBatches.length; i += 1) {
       district.add(this.createChunkedScaledInstancedBoxes(bodyBatches[i], this.makeFacadeMaterial(CITY_FACADE_PALETTE[i], 0.82, 0.04), false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
@@ -2777,6 +2778,7 @@ export class HighwayWorld {
       billboardPosts,
       billboardPads,
       billboardGroup,
+      billboardPlacements,
       row,
       rowIndex,
       side,
@@ -2913,11 +2915,11 @@ export class HighwayWorld {
     });
   }
 
-  addDedicatedHighwayBillboards(billboardGroup, billboardPads, billboardPosts) {
-    for (let s = 120; s < this.trackLength; s += 155) {
+  addDedicatedHighwayBillboards(billboardGroup, billboardPads, billboardPosts, billboardPlacements = []) {
+    for (let s = 120; s < this.trackLength; s += 230) {
       for (const side of [-1, 1]) {
         const seed = s * 0.41 + (side > 0 ? 19.7 : 53.2);
-        if (this.isCityServiceClearance(s, side) || this.isJunctionOpening(s, side) || cityNoise(seed + 0.8) < 0.05) {
+        if (this.isCityServiceClearance(s, side) || this.isJunctionOpening(s, side) || cityNoise(seed + 0.8) < 0.18) {
           continue;
         }
         const frame = this.getFrameAtDistance(s + cityRange(seed + 1.2, -34, 34));
@@ -2929,6 +2931,9 @@ export class HighwayWorld {
         const yaw = frame.yaw - side * Math.PI * 0.5 + cityRange(seed + 7.8, -0.16, 0.16);
         const base = this.offsetAlong(frame, lateral, forward, 0);
         const padS = (frame.s + forward + this.trackLength) % this.trackLength;
+        if (!this.reserveBillboardPlacement(billboardPlacements, padS, side, Math.abs(lateral), 210)) {
+          continue;
+        }
 
         billboardPads.push({
           position: this.offsetLocalPoint(base, yaw, 0, 0, 0.04),
@@ -2962,6 +2967,7 @@ export class HighwayWorld {
     billboardGroup,
     billboardPads,
     billboardPosts,
+    billboardPlacements,
     base,
     yaw,
     width,
@@ -2982,7 +2988,8 @@ export class HighwayWorld {
 
     const wallNoise = cityNoise(seed + 41.2);
     const wallMega = rowIndex >= 2 && cityNoise(seed + 41.9) > 0.76;
-    if (rowIndex <= 10 && bodyHeight > 24 && depth > 13 && wallNoise > (wallMega ? 0.58 : 0.66)) {
+    let placedBuildingAd = false;
+    if (rowIndex <= 6 && bodyHeight > 24 && depth > 13 && wallNoise > (wallMega ? 0.72 : 0.8)) {
       const boardWidth = wallMega
         ? clamp(depth * cityRange(seed + 42.1, 1.05, 1.55), 18.0, 42.0)
         : clamp(depth * cityRange(seed + 42.1, 0.68, 1.14), 9.5, 24.0);
@@ -2997,21 +3004,25 @@ export class HighwayWorld {
       const z = cityRange(seed + 45.5, -depth * 0.18, depth * 0.18);
       const x = -side * (width * 0.5 + 0.13);
       const position = this.offsetLocalPoint(base, yaw, x, z, y);
-      this.addJapaneseBillboardPlane(
-        billboardGroup,
-        position,
-        yaw - side * Math.PI * 0.5,
-        boardWidth,
-        boardHeight,
-        seed + 46.6,
-        `${buildingId}:wall-ad`,
-        `${buildingLabel} wall billboard`,
-      );
+      const signS = (s + forward + z + this.trackLength) % this.trackLength;
+      if (this.reserveBillboardPlacement(billboardPlacements, signS, side, Math.abs(lateral), wallMega ? 150 : 118)) {
+        this.addJapaneseBillboardPlane(
+          billboardGroup,
+          position,
+          yaw - side * Math.PI * 0.5,
+          boardWidth,
+          boardHeight,
+          seed + 46.6,
+          `${buildingId}:wall-ad`,
+          `${buildingLabel} wall billboard`,
+        );
+        placedBuildingAd = true;
+      }
     }
 
     const roofNoise = cityNoise(seed + 50.8);
     const roofMega = rowIndex >= 1 && cityNoise(seed + 50.1) > 0.7;
-    if (rowIndex <= 10 && bodyHeight > 30 && width > 12 && roofNoise > (roofMega ? 0.62 : 0.72)) {
+    if (!placedBuildingAd && rowIndex <= 7 && bodyHeight > 30 && width > 12 && roofNoise > (roofMega ? 0.78 : 0.84)) {
       const boardWidth = roofMega
         ? clamp(width * cityRange(seed + 51.2, 0.9, 1.35), 20.0, 46.0)
         : clamp(width * cityRange(seed + 51.2, 0.64, 1.04), 12.0, 27.0);
@@ -3022,31 +3033,35 @@ export class HighwayWorld {
       const boardY = bodyHeight + postHeight + boardHeight * 0.52;
       const position = this.offsetLocalPoint(base, yaw, localX, localZ, boardY);
       const signYaw = yaw + cityRange(seed + 56.8, -0.34, 0.34);
-      this.addJapaneseBillboardPlane(
-        billboardGroup,
-        position,
-        signYaw,
-        boardWidth,
-        boardHeight,
-        seed + 57.5,
-        `${buildingId}:roof-ad`,
-        `${buildingLabel} roof billboard`,
-      );
+      const signS = (s + forward + localZ + this.trackLength) % this.trackLength;
+      if (this.reserveBillboardPlacement(billboardPlacements, signS, side, Math.abs(lateral), roofMega ? 180 : 135)) {
+        this.addJapaneseBillboardPlane(
+          billboardGroup,
+          position,
+          signYaw,
+          boardWidth,
+          boardHeight,
+          seed + 57.5,
+          `${buildingId}:roof-ad`,
+          `${buildingLabel} roof billboard`,
+        );
 
-      for (const postZ of [-boardWidth * 0.36, boardWidth * 0.36]) {
-        billboardPosts.push({
-          position: this.offsetLocalPoint(base, yaw, localX, localZ + postZ, bodyHeight + postHeight * 0.5),
-          yaw,
-          s,
-          scale: { x: roofMega ? 0.32 : 0.22, y: postHeight, z: roofMega ? 0.32 : 0.22 },
-          remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "roof-billboard-pole"),
-        });
+        for (const postZ of [-boardWidth * 0.36, boardWidth * 0.36]) {
+          billboardPosts.push({
+            position: this.offsetLocalPoint(base, yaw, localX, localZ + postZ, bodyHeight + postHeight * 0.5),
+            yaw,
+            s,
+            scale: { x: roofMega ? 0.32 : 0.22, y: postHeight, z: roofMega ? 0.32 : 0.22 },
+            remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "roof-billboard-pole"),
+          });
+        }
+        placedBuildingAd = true;
       }
     }
 
     const groundNoise = cityNoise(seed + 60.9);
     const groundMega = rowIndex >= 1 && cityNoise(seed + 60.2) > 0.72;
-    if (rowIndex <= 7 && width > 15 && groundNoise > (groundMega ? 0.64 : 0.74)) {
+    if (!placedBuildingAd && rowIndex <= 5 && width > 15 && groundNoise > (groundMega ? 0.8 : 0.86)) {
       const boardWidth = groundMega ? cityRange(seed + 61.7, 16.0, 30.0) : cityRange(seed + 61.7, 8.5, 16.5);
       const boardHeight = groundMega ? cityRange(seed + 62.1, 6.2, 10.4) : cityRange(seed + 62.1, 3.8, 5.9);
       const postHeight = groundMega ? cityRange(seed + 63.4, 5.2, 8.4) : cityRange(seed + 63.4, 3.1, 5.0);
@@ -3060,7 +3075,7 @@ export class HighwayWorld {
         lateral: signLateral,
         halfForward: boardWidth * 0.5 + 3.2,
         halfLateral: groundMega ? 8.2 : 5.8,
-      });
+      }) && this.reserveBillboardPlacement(billboardPlacements, signS, side, signLateral, groundMega ? 190 : 145);
       if (reserved) {
         const padPosition = this.offsetLocalPoint(base, yaw, localX, localZ, 0.04);
         billboardPads.push({
@@ -3089,6 +3104,28 @@ export class HighwayWorld {
         );
       }
     }
+  }
+
+  reserveBillboardPlacement(placements, s, side, lateral, minDistance) {
+    if (!Array.isArray(placements)) {
+      return true;
+    }
+    const normalizedS = ((s % this.trackLength) + this.trackLength) % this.trackLength;
+    const tooClose = placements.some((placement) => {
+      if (placement.side !== side) {
+        return false;
+      }
+      const direct = Math.abs(placement.s - normalizedS);
+      const wrapped = this.trackLength - direct;
+      const distance = Math.min(direct, wrapped);
+      const lateralOverlap = Math.abs((placement.lateral ?? lateral) - lateral) < 90;
+      return lateralOverlap && distance < minDistance;
+    });
+    if (tooClose) {
+      return false;
+    }
+    placements.push({ s: normalizedS, side, lateral });
+    return true;
   }
 
   addJapaneseBillboardPlane(parent, position, yaw, width, height, seed, fixedId, label) {
@@ -3765,28 +3802,26 @@ export class HighwayWorld {
       this.addLocalBox(section, 0.18, 0.1, length * 0.46, this.materials.tunnelLight, 3.8, wallHeight - 0.42, 0);
     }
 
-    for (const side of [-1, 1]) {
-      const innerX = side * (wallX - 0.43);
-      if (index % 5 === 1) {
-        this.addLocalBox(section, 0.08, 1.18, 1.45, this.materials.tunnelElectricalPanel, innerX, 2.35, -length * 0.22);
-      }
-      if (index % 9 === 4) {
-        this.addLocalBox(section, 0.08, 1.86, 1.2, this.materials.tunnelElectricalPanel, innerX, 3.0, length * 0.28);
-      }
-      if (index % 13 === 8) {
-        this.addLocalBox(section, 0.08, 2.36, 2.9, this.materials.tunnelElectricalPanel, innerX, 2.95, 0);
-      }
-      if (index % 7 === 3) {
-        this.addLocalBox(section, 0.08, 0.58, 1.16, this.materials.tunnelEmergencySign, innerX, 4.95, length * 0.18);
-      }
-      if (index % 6 === 0) {
-        this.addLocalBox(section, 0.08, 0.62, 1.38, this.materials.tunnelExitSign, innerX, 5.72, -length * 0.16);
-      }
-      if (index % 10 === 5) {
-        this.addLocalBox(section, 0.1, 2.35, 1.36, this.materials.tunnelEmergencyDoor, innerX, 1.18, length * 0.08);
-        this.addLocalBox(section, 0.11, 0.18, 0.18, this.materials.tunnelWarning, innerX - side * 0.01, 1.28, length * 0.08);
-        this.addLocalBox(section, 0.08, 0.44, 1.22, this.materials.tunnelExitSign, innerX, 2.72, length * 0.08);
-      }
+    const detailSide = index % 4 < 2 ? -1 : 1;
+    const alternateSide = -detailSide;
+    const innerX = detailSide * (wallX - 0.43);
+    const alternateX = alternateSide * (wallX - 0.43);
+    if (index % 11 === 2) {
+      this.addLocalBox(section, 0.08, 1.18, 1.45, this.materials.tunnelElectricalPanel, innerX, 2.35, -length * 0.26);
+    } else if (index % 17 === 7) {
+      this.addLocalBox(section, 0.08, 1.86, 1.2, this.materials.tunnelElectricalPanel, innerX, 3.0, length * 0.24);
+    } else if (index % 23 === 13) {
+      this.addLocalBox(section, 0.08, 2.36, 2.9, this.materials.tunnelElectricalPanel, innerX, 2.95, 0);
+    }
+    if (index % 13 === 5) {
+      this.addLocalBox(section, 0.08, 0.58, 1.16, this.materials.tunnelEmergencySign, alternateX, 4.95, length * 0.18);
+    } else if (index % 19 === 0) {
+      this.addLocalBox(section, 0.08, 0.62, 1.38, this.materials.tunnelExitSign, alternateX, 5.72, -length * 0.16);
+    }
+    if (index % 29 === 11) {
+      this.addLocalBox(section, 0.1, 2.35, 1.36, this.materials.tunnelEmergencyDoor, innerX, 1.18, length * 0.08);
+      this.addLocalBox(section, 0.11, 0.18, 0.18, this.materials.tunnelWarning, innerX - detailSide * 0.01, 1.28, length * 0.08);
+      this.addLocalBox(section, 0.08, 0.44, 1.22, this.materials.tunnelExitSign, innerX, 2.72, length * 0.08);
     }
 
     parent.add(section);
