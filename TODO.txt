@@ -35,6 +35,10 @@ map tks-s
 
 - Fai le pareti interne delle gallerie con 3/4 dell parete partendo dal basso giallino consumato sporco a mattoni e gli altri 1/4 sopra grigio cemento scuro, inoltre aggiungi come dettaglio dentro le gallerie i classici pannelli grigi dell'eletrricità posizionati sulla parete appesi, poi qualche segnale rosso di emergenza e infine anche i classici piccoli cartelli verdi con l'omino che segnano l'uscita
 
+- Aumentare decisamente numero di carterlli pubblicitari
+
+- Rimuovere i lampioni dentro l'autostrada
+
 later-tk's
 
 - Rifinire sistema di commercio, rivedere prezzi auto, rivedere guadagni e costo parti 
