@@ -1136,6 +1136,7 @@ export class HUD {
       segments: controlPoints.map((_point, index) => ({
         index,
         laneCount: sourceSegments[index]?.laneCount === 2 ? 2 : 3,
+        closedSide: sourceSegments[index]?.closedSide === -1 ? -1 : 1,
       })),
       branches: (profile.branches ?? []).map((branch) => ({
         id: branch.id,
@@ -1263,7 +1264,8 @@ export class HUD {
         const world = this.mapToWorld(pointer.x, pointer.y, pointer.width, pointer.height);
         this.remodelRouteProfile.controlPoints.splice(segment.index + 1, 0, world);
         const laneCount = this.remodelRouteProfile.segments?.[segment.index]?.laneCount === 2 ? 2 : 3;
-        this.remodelRouteProfile.segments?.splice(segment.index + 1, 0, { index: segment.index + 1, laneCount });
+        const closedSide = this.remodelRouteProfile.segments?.[segment.index]?.closedSide === -1 ? -1 : 1;
+        this.remodelRouteProfile.segments?.splice(segment.index + 1, 0, { index: segment.index + 1, laneCount, closedSide });
         this.remodelMapSelection = { type: "routePoint", index: segment.index + 1 };
         this.applyRemodelRouteProfile();
       }
@@ -1455,7 +1457,7 @@ export class HUD {
     } else {
       const world = this.mapToWorld(pointer.x, pointer.y, pointer.width, pointer.height);
       this.remodelRouteProfile.controlPoints.push(world);
-      this.remodelRouteProfile.segments?.push({ index: this.remodelRouteProfile.controlPoints.length - 1, laneCount: 3 });
+      this.remodelRouteProfile.segments?.push({ index: this.remodelRouteProfile.controlPoints.length - 1, laneCount: 3, closedSide: 1 });
       this.remodelMapSelection = { type: "routePoint", index: this.remodelRouteProfile.controlPoints.length - 1 };
       this.applyRemodelRouteProfile();
     }
@@ -1472,9 +1474,22 @@ export class HUD {
     if (!segment) {
       return;
     }
-    segment.laneCount = segment.laneCount === 2 ? 3 : 2;
+    if (segment.laneCount !== 2) {
+      segment.laneCount = 2;
+      segment.closedSide = 1;
+    } else if (segment.closedSide === 1) {
+      segment.closedSide = -1;
+    } else {
+      segment.laneCount = 3;
+      segment.closedSide = 1;
+    }
     this.applyRemodelRouteProfile(undefined, { flash: false });
-    this.flashNotice?.("Lane segment", segment.laneCount === 2 ? "2 lanes" : "3 lanes");
+    this.flashNotice?.(
+      "Lane segment",
+      segment.laneCount === 2
+        ? `2 lanes, closed ${segment.closedSide === -1 ? "left" : "right"}`
+        : "3 lanes",
+    );
   }
 
   addTunnelAtPointer(pointer) {

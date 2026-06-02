@@ -76,11 +76,12 @@ export class TrafficSystem {
       this.scene.remove(car.group);
     }
 
-    const basePerLane = Math.floor(target / LANES.length);
-    let remainder = target % LANES.length;
+    const openLanes = this.getOpenLanesAtS(focusS);
+    const basePerLane = Math.floor(target / openLanes.length);
+    let remainder = target % openLanes.length;
     let carIndex = 0;
 
-    for (let lane = 0; lane < LANES.length; lane += 1) {
+    for (const lane of openLanes) {
       const laneTarget = basePerLane + (remainder > 0 ? 1 : 0);
       remainder = Math.max(0, remainder - 1);
       const spacing = (ACTIVE_AHEAD + ACTIVE_BEHIND) / Math.max(laneTarget, 1);
@@ -97,7 +98,7 @@ export class TrafficSystem {
         car.s = this.normalizeS(focusS + offset);
         car.route = { type: "main", s: car.s };
         car.lane = lane;
-        car.lateralOffset = LANES[lane];
+        car.lateralOffset = this.getLaneOffset(car.s, lane);
         car.targetLane = null;
         car.signalTimer = 0;
         car.signalHoldTimer = 0;
@@ -116,10 +117,10 @@ export class TrafficSystem {
     const target = this.getActiveTarget(settings);
     while (this.cars.length < target) {
       const car = this.createVehicle();
-      car.lane = Math.floor(rand(0, LANES.length));
+      car.lane = this.pickOpenLane(focusS);
       car.s = this.findOpenSpawnS(car.lane, focusS, "ahead");
       car.route = { type: "main", s: car.s };
-      car.lateralOffset = LANES[car.lane];
+      car.lateralOffset = this.getLaneOffset(car.s, car.lane);
       this.randomizeSpeed(car, settings);
       this.scene.add(car.group);
       this.cars.push(car);
@@ -185,6 +186,38 @@ export class TrafficSystem {
     return forward > this.world.trackLength * 0.5 ? forward - this.world.trackLength : forward;
   }
 
+  getOpenLanesAtS(s) {
+    const lanes = this.world.getOpenLaneIndexesAtDistance?.(s);
+    return Array.isArray(lanes) && lanes.length ? lanes : LANES.map((_offset, lane) => lane);
+  }
+
+  pickOpenLane(s) {
+    return choice(this.getOpenLanesAtS(s));
+  }
+
+  isLaneOpen(s, lane) {
+    return this.world.isLaneOpenAtDistance?.(s, lane) ?? true;
+  }
+
+  getLaneOffset(s, lane) {
+    return this.world.getLaneOffsetAtDistance?.(s, lane) ?? LANES[clamp(lane, 0, LANES.length - 1)];
+  }
+
+  ensureOpenLane(car) {
+    if (this.isLaneOpen(car.s, car.lane)) {
+      return;
+    }
+
+    const previousOffset = this.getLaneOffset(car.s, car.lane);
+    const nextLane = this.world.getNearestOpenLaneIndex?.(car.s, car.lateralOffset ?? previousOffset) ?? this.pickOpenLane(car.s);
+    car.lane = nextLane;
+    if (car.targetLane !== null && !this.isLaneOpen(car.s, car.targetLane)) {
+      car.targetLane = null;
+      car.signalTimer = 0;
+    }
+    car.signalDirection = Math.sign(this.getLaneOffset(car.s, car.lane) - car.lateralOffset);
+  }
+
   isOutsideActiveWindow(s, focusS) {
     const delta = this.signedDistanceFromFocus(s, focusS);
     return delta < -RECYCLE_BEHIND || delta > RECYCLE_AHEAD;
@@ -193,10 +226,10 @@ export class TrafficSystem {
   recycleCar(car, settings, focusS) {
     const delta = this.signedDistanceFromFocus(car.s, focusS);
     const mode = delta < -RECYCLE_BEHIND ? "ahead" : "behind";
-    car.lane = Math.floor(rand(0, LANES.length));
+    car.lane = this.pickOpenLane(focusS);
     car.s = this.findOpenSpawnS(car.lane, focusS, mode);
     car.route = { type: "main", s: car.s };
-    car.lateralOffset = LANES[car.lane];
+    car.lateralOffset = this.getLaneOffset(car.s, car.lane);
     car.nearMissCooldown = 0.5;
     car.overtakeArmed = false;
     car.targetLane = null;
@@ -235,9 +268,9 @@ export class TrafficSystem {
       if (exit) {
         car.s = this.normalizeS(exit.s + rand(4, 18));
         car.route = { type: "main", s: car.s };
-        car.lane = this.pickLaneForJunctionSide(exit.side);
+        car.lane = this.pickLaneForJunctionSide(exit.side, exit.s);
         car.targetLane = null;
-        car.lateralOffset = LANES[car.lane];
+        car.lateralOffset = this.getLaneOffset(car.s, car.lane);
         car.junctionCooldown = rand(5, 10);
       } else {
         car.s = this.normalizeS(car.s + car.speed * dt);
@@ -247,7 +280,8 @@ export class TrafficSystem {
 
     car.s = this.normalizeS(car.s + car.speed * dt);
     car.route = { type: "main", s: car.s };
-    if (car.junctionCooldown > 0 || car.targetLane !== null || Math.abs(LANES[car.lane] - car.lateralOffset) > 0.34) {
+    this.ensureOpenLane(car);
+    if (car.junctionCooldown > 0 || car.targetLane !== null || Math.abs(this.getLaneOffset(car.s, car.lane) - car.lateralOffset) > 0.34) {
       return;
     }
 
@@ -258,29 +292,33 @@ export class TrafficSystem {
 
     car.route = { type: "branch", ...branchChoice };
     car.targetLane = null;
-    car.signalDirection = Math.sign(LANES[car.lane] || 0);
+    car.signalDirection = Math.sign(this.getLaneOffset(car.s, car.lane) || 0);
     car.signalHoldTimer = LANE_CHANGE_SIGNAL_HOLD;
     car.junctionCooldown = rand(6, 12);
   }
 
-  pickLaneForJunctionSide(side) {
+  pickLaneForJunctionSide(side, s = 0) {
     const sign = Math.sign(side || 1);
-    const lanes = LANES
-      .map((offset, lane) => ({ lane, score: Math.sign(offset || 0) === sign ? Math.abs(offset) : -1 }))
+    const lanes = this.getOpenLanesAtS(s)
+      .map((lane) => {
+        const offset = this.getLaneOffset(s, lane);
+        return { lane, score: Math.sign(offset || 0) === sign ? Math.abs(offset) : -1 };
+      })
       .filter((item) => item.score >= 0)
       .sort((a, b) => b.score - a.score);
     return lanes[0]?.lane ?? Math.floor(LANES.length * 0.5);
   }
 
   tryLaneChange(car) {
+    const openLanes = this.getOpenLanesAtS(car.s);
     const candidates = [car.lane - 1, car.lane + 1]
-      .filter((lane) => lane >= 0 && lane < LANES.length)
+      .filter((lane) => openLanes.includes(lane))
       .sort(() => Math.random() - 0.5);
 
     for (const lane of candidates) {
       if (this.hasLaneOpening(car, lane)) {
         car.targetLane = lane;
-        car.signalDirection = Math.sign(LANES[lane] - LANES[car.lane]);
+        car.signalDirection = Math.sign(this.getLaneOffset(car.s, lane) - this.getLaneOffset(car.s, car.lane));
         car.signalTimer = LANE_CHANGE_SIGNAL_LEAD;
         car.laneChangeCooldown = rand(4.2, 8.2);
         return true;
@@ -296,7 +334,7 @@ export class TrafficSystem {
       car.signalTimer = Math.max(0, car.signalTimer - dt);
       if (car.signalTimer <= 0) {
         if (this.hasLaneOpening(car, car.targetLane)) {
-          car.signalDirection = Math.sign(LANES[car.targetLane] - LANES[car.lane]);
+          car.signalDirection = Math.sign(this.getLaneOffset(car.s, car.targetLane) - this.getLaneOffset(car.s, car.lane));
           car.lane = car.targetLane;
           car.signalHoldTimer = LANE_CHANGE_SIGNAL_HOLD;
         } else {
@@ -306,7 +344,7 @@ export class TrafficSystem {
         car.targetLane = null;
       }
     } else {
-      const laneTargetOffset = LANES[clamp(car.lane, 0, LANES.length - 1)];
+      const laneTargetOffset = this.getLaneOffset(car.s, car.lane);
       const laneChangeStillMoving = Math.abs(laneTargetOffset - car.lateralOffset) > LANE_CHANGE_FINISH_EPSILON;
       if (car.signalDirection !== 0 && (laneChangeStillMoving || car.signalHoldTimer > 0)) {
         car.signalHoldTimer = Math.max(0, car.signalHoldTimer - dt);
@@ -319,6 +357,10 @@ export class TrafficSystem {
   }
 
   hasLaneOpening(car, lane) {
+    if (!this.isLaneOpen(car.s, lane)) {
+      return false;
+    }
+
     for (const other of this.cars) {
       if (other === car || other.lane !== lane || this.getRouteKey(other) !== this.getRouteKey(car)) {
         continue;
@@ -439,6 +481,9 @@ export class TrafficSystem {
   }
 
   applyFrame(car, dt = 1 / 60, snap = false) {
+    if (car.route?.type !== "branch") {
+      this.ensureOpenLane(car);
+    }
     const frame = car.route?.type === "branch"
       ? this.world.getBranchFrame?.(car.route.id, car.route.s) ?? this.world.getFrameAtDistance(car.s)
       : this.world.getFrameAtDistance(car.s);
@@ -447,7 +492,9 @@ export class TrafficSystem {
       frame.normal.multiplyScalar(-1);
       frame.yaw = Math.atan2(frame.tangent.x, frame.tangent.z);
     }
-    const targetOffset = LANES[clamp(car.lane, 0, LANES.length - 1)];
+    const targetOffset = car.route?.type === "branch"
+      ? LANES[clamp(car.lane, 0, LANES.length - 1)]
+      : this.getLaneOffset(car.s, car.lane);
     const laneChangeResponse = car.kind === "truck" ? LANE_CHANGE_RESPONSE_TRUCK : LANE_CHANGE_RESPONSE_CAR;
     car.lateralOffset = snap ? targetOffset : damp(car.lateralOffset, targetOffset, laneChangeResponse, dt);
     const position = this.world.offsetPoint(frame, car.lateralOffset, 0);
@@ -468,14 +515,14 @@ export class TrafficSystem {
     }
 
     const activeTargetLane = car.targetLane ?? car.lane;
-    const targetOffset = LANES[clamp(activeTargetLane, 0, LANES.length - 1)];
+    const targetOffset = this.getLaneOffset(car.s, activeTargetLane);
     const offsetDelta = targetOffset - car.lateralOffset;
     const signalDirection = car.targetLane !== null
-      ? Math.sign(LANES[car.targetLane] - LANES[car.lane])
+      ? Math.sign(this.getLaneOffset(car.s, car.targetLane) - this.getLaneOffset(car.s, car.lane))
       : car.signalDirection !== 0
         ? car.signalDirection
         : Math.abs(offsetDelta) > 0.22 || car.signalHoldTimer > 0
-          ? Math.sign(offsetDelta || (targetOffset - LANES[car.lane]))
+          ? Math.sign(offsetDelta || (targetOffset - this.getLaneOffset(car.s, car.lane)))
         : 0;
     const blinkOn = signalDirection !== 0 && Math.sin(car.signalClock * Math.PI * 4.2) > -0.1;
     car.indicators.left.forEach((mesh) => {
