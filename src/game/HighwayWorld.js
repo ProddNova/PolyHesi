@@ -3,8 +3,9 @@ import { LANES, REMODEL_STORAGE_KEY, ROAD_WIDTH } from "./config.js";
 import { clamp, makeBox, makeCanvasTexture } from "./utils.js";
 
 const ROAD_HALF_WIDTH = ROAD_WIDTH * 0.5;
+const TWO_LANE_ROAD_HALF_WIDTH = 5.15;
+const LANE_TRANSITION_LENGTH = 150;
 const RAIL_OFFSET = ROAD_HALF_WIDTH + 1.15;
-const DRIVE_LIMIT = RAIL_OFFSET - 1.1;
 const TWO_PI = Math.PI * 2;
 const ROAD_SAMPLE_COUNT = 560;
 const ROAD_RIBBON_SEGMENTS = 960;
@@ -845,6 +846,7 @@ export class HighwayWorld {
   getDefaultRouteProfile() {
     return {
       controlPoints: DEFAULT_ROUTE_CONTROL_POINTS.map((point) => ({ ...point })),
+      segments: DEFAULT_ROUTE_CONTROL_POINTS.map((_point, index) => ({ index, laneCount: 3 })),
       branches: [],
       tunnels: TUNNEL_RUNS.map((run) => ({ ...run })),
     };
@@ -873,6 +875,14 @@ export class HighwayWorld {
     };
   }
 
+  sanitizeRouteSegment(segment, index = 0) {
+    const laneCount = Number(segment?.laneCount) === 2 ? 2 : 3;
+    return {
+      index,
+      laneCount,
+    };
+  }
+
   sanitizeRouteProfile(profile = null) {
     const fallback = this.getDefaultRouteProfile();
     const sourcePoints = Array.isArray(profile?.controlPoints) ? profile.controlPoints : fallback.controlPoints;
@@ -882,6 +892,8 @@ export class HighwayWorld {
     const safePoints = controlPoints.length >= 6
       ? controlPoints.slice(0, 64)
       : fallback.controlPoints.map((point) => ({ ...point }));
+    const sourceSegments = Array.isArray(profile?.segments) ? profile.segments : fallback.segments;
+    const segments = safePoints.map((_point, index) => this.sanitizeRouteSegment(sourceSegments[index], index));
 
     const branches = Array.isArray(profile?.branches)
       ? profile.branches
@@ -910,6 +922,7 @@ export class HighwayWorld {
 
     return {
       controlPoints: safePoints,
+      segments,
       branches,
       tunnels,
     };
@@ -918,6 +931,10 @@ export class HighwayWorld {
   getRemodelRouteProfile() {
     return {
       controlPoints: this.routeProfile.controlPoints.map((point) => ({ ...point })),
+      segments: this.routeProfile.segments.map((segment, index) => ({
+        index,
+        laneCount: segment.laneCount === 2 ? 2 : 3,
+      })),
       branches: this.routeProfile.branches.map((branch) => ({
         id: branch.id,
         points: branch.points.map((point) => ({ ...point })),
@@ -1017,6 +1034,7 @@ export class HighwayWorld {
     this.curve.arcLengthDivisions = 4096;
     this.curve.updateArcLengths();
     this.trackLength = this.curve.getLength();
+    this.rebuildRouteSegmentLengths();
 
     const mainSamples = [];
     for (let i = 0; i < ROAD_SAMPLE_COUNT; i += 1) {
@@ -1028,6 +1046,34 @@ export class HighwayWorld {
     }
     this.mapRoutes.push({ samples: mainSamples, closed: true });
     this.createBranchRoutes();
+  }
+
+  rebuildRouteSegmentLengths() {
+    const points = this.routeProfile.controlPoints ?? [];
+    const lengths = [];
+    let total = 0;
+    for (let i = 0; i < points.length; i += 1) {
+      const a = points[i];
+      const b = points[(i + 1) % points.length];
+      const length = Math.max(1, Math.hypot((b?.x ?? 0) - (a?.x ?? 0), (b?.z ?? 0) - (a?.z ?? 0)));
+      lengths.push(length);
+      total += length;
+    }
+
+    const scale = total > 0 ? (this.trackLength || total) / total : 1;
+    let cursor = 0;
+    this.routeSegmentRanges = lengths.map((length, index) => {
+      const start = cursor;
+      const scaledLength = length * scale;
+      cursor += scaledLength;
+      return {
+        index,
+        start,
+        end: cursor,
+        length: scaledLength,
+        laneCount: this.routeProfile.segments?.[index]?.laneCount === 2 ? 2 : 3,
+      };
+    });
   }
 
   createBranchRoutes() {
@@ -1058,6 +1104,8 @@ export class HighwayWorld {
         sample.isBranch = true;
         sample.routeId = branch.id;
         sample.routeDistance = (i / sampleCount) * length;
+        sample.roadHalfWidth = ROAD_HALF_WIDTH;
+        sample.laneCount = 3;
         samples.push(sample);
         this.roadSamples.push(sample);
       }
@@ -1307,15 +1355,15 @@ export class HighwayWorld {
     const highway = new THREE.Group();
     highway.name = "StaticHighwayLoop";
     highway.add(this.createRibbonMesh(CITY_DISTRICT_HALF_WIDTH, CITY_GROUND_ELEVATION, this.materials.cityGround, ROAD_RIBBON_SEGMENTS));
-    highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 5.8, HIGHWAY_DECK_ELEVATION, this.materials.concrete, ROAD_RIBBON_SEGMENTS));
-    highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH + 5.2, ROAD_SHOULDER_ELEVATION, this.materials.shoulder, ROAD_RIBBON_SEGMENTS));
-    highway.add(this.createRibbonMesh(ROAD_HALF_WIDTH, ROAD_SURFACE_ELEVATION, this.materials.asphalt, ROAD_RIBBON_SEGMENTS));
+    highway.add(this.createRibbonMesh((s) => this.getRoadHalfWidthAtDistance(s) + 5.8, HIGHWAY_DECK_ELEVATION, this.materials.concrete, ROAD_RIBBON_SEGMENTS));
+    highway.add(this.createRibbonMesh((s) => this.getRoadHalfWidthAtDistance(s) + 5.2, ROAD_SHOULDER_ELEVATION, this.materials.shoulder, ROAD_RIBBON_SEGMENTS));
+    highway.add(this.createRibbonMesh((s) => this.getRoadHalfWidthAtDistance(s), ROAD_SURFACE_ELEVATION, this.materials.asphalt, ROAD_RIBBON_SEGMENTS));
     this.createElevatedHighwaySupports(highway);
     this.addBranchHighways(highway);
 
     const laneMarkers = [];
-    for (const laneOffset of [-2, 2]) {
-      for (let s = this.laneDashSpacing * 0.5; s < this.trackLength; s += this.laneDashSpacing) {
+    for (let s = this.laneDashSpacing * 0.5; s < this.trackLength; s += this.laneDashSpacing) {
+      for (const laneOffset of this.getLaneMarkerOffsetsAtDistance(s)) {
         if (this.isJunctionOpeningOnAnySide(s, JUNCTION_OPENING_HALF_LENGTH + 8)) {
           continue;
         }
@@ -1330,14 +1378,15 @@ export class HighwayWorld {
     highway.add(this.createChunkedInstancedBoxes(laneMarkers, 0.13, 0.038, this.laneDashLength, this.materials.lane));
 
     const edgeMarkers = [];
-    for (const edgeOffset of [-6.55, 6.55]) {
-      for (let s = 0; s < this.trackLength; s += 52) {
-        if (this.isJunctionOpeningForOffset(s, edgeOffset)) {
+    for (let s = 0; s < this.trackLength; s += 52) {
+      const edgeOffset = Math.max(1, this.getRoadHalfWidthAtDistance(s) - 0.45);
+      for (const side of [-1, 1]) {
+        if (this.isJunctionOpeningForOffset(s, side * edgeOffset)) {
           continue;
         }
         const frame = this.getFrameAtDistance(s);
         edgeMarkers.push({
-          position: this.offsetPoint(frame, edgeOffset, ROAD_MARKING_ELEVATION),
+          position: this.offsetPoint(frame, side * edgeOffset, ROAD_MARKING_ELEVATION),
           yaw: frame.yaw,
           s,
         });
@@ -1373,6 +1422,9 @@ export class HighwayWorld {
 
     for (const marking of ROAD_SURFACE_MARKINGS) {
       if (this.isJunctionOpeningOnAnySide(marking.s, JUNCTION_OPENING_HALF_LENGTH + 18)) {
+        continue;
+      }
+      if (this.getLaneCountAtDistance(marking.s, { smooth: true }) < 2.5 && marking.lane !== 1) {
         continue;
       }
       const frame = this.getFrameAtDistance(marking.s);
@@ -1693,9 +1745,11 @@ export class HighwayWorld {
     const indices = [];
 
     for (let i = 0; i <= segments; i += 1) {
-      const frame = this.getFrameOnCurve(curve, length, (i / segments) * length, closed);
-      const left = this.offsetPoint(frame, -halfWidth, y);
-      const right = this.offsetPoint(frame, halfWidth, y);
+      const s = (i / segments) * length;
+      const frame = this.getFrameOnCurve(curve, length, s, closed);
+      const width = typeof halfWidth === "function" ? halfWidth(frame.s, frame) : halfWidth;
+      const left = this.offsetPoint(frame, -width, y);
+      const right = this.offsetPoint(frame, width, y);
       vertices.push(left.x, left.y, left.z, right.x, right.y, right.z);
       uvs.push(0, i / segments, 1, i / segments);
 
@@ -1721,12 +1775,13 @@ export class HighwayWorld {
       return;
     }
 
-    const upper = this.offsetPoint(frame, RAIL_OFFSET * side, GUARDRAIL_MODEL.upper.y);
-    const lower = this.offsetPoint(frame, RAIL_OFFSET * side, GUARDRAIL_MODEL.lower.y);
-    const post = this.offsetPoint(frame, RAIL_OFFSET * side, GUARDRAIL_MODEL.post.y);
+    const railOffset = this.getRailOffsetForFrame(frame);
+    const upper = this.offsetPoint(frame, railOffset * side, GUARDRAIL_MODEL.upper.y);
+    const lower = this.offsetPoint(frame, railOffset * side, GUARDRAIL_MODEL.lower.y);
+    const post = this.offsetPoint(frame, railOffset * side, GUARDRAIL_MODEL.post.y);
     const reflector = this.offsetPoint(
       frame,
-      side * (RAIL_OFFSET - GUARDRAIL_MODEL.reflector.inset),
+      side * (railOffset - GUARDRAIL_MODEL.reflector.inset),
       GUARDRAIL_MODEL.reflector.y,
     );
 
@@ -1771,7 +1826,7 @@ export class HighwayWorld {
   }
 
   addShutokuBarrierSegment(parent, frame, side, length, batch = null) {
-    const lateral = RAIL_OFFSET * side;
+    const lateral = this.getRailOffsetForFrame(frame) * side;
     const wall = {
       position: this.offsetPoint(frame, lateral, SHUTOKU_BARRIER_MODEL.wall.y),
       yaw: frame.yaw,
@@ -4319,7 +4374,12 @@ export class HighwayWorld {
   }
 
   getFrameAtDistance(distance) {
-    return this.getFrameOnCurve(this.curve, this.trackLength, distance, true);
+    const frame = this.getFrameOnCurve(this.curve, this.trackLength, distance, true);
+    frame.routeId = "main";
+    frame.isBranch = false;
+    frame.roadHalfWidth = this.getRoadHalfWidthAtDistance(frame.s);
+    frame.laneCount = this.getLaneCountAtDistance(frame.s);
+    return frame;
   }
 
   getFrameOnCurve(curve, length, distance, closed) {
@@ -4361,6 +4421,58 @@ export class HighwayWorld {
       ...frame,
       position,
     };
+  }
+
+  getRoadHalfWidthAtDistance(distance) {
+    const laneCount = this.getLaneCountAtDistance(distance, { smooth: true });
+    return THREE.MathUtils.lerp(TWO_LANE_ROAD_HALF_WIDTH, ROAD_HALF_WIDTH, clamp(laneCount - 2, 0, 1));
+  }
+
+  getLaneCountAtDistance(distance, options = {}) {
+    const ranges = this.routeSegmentRanges ?? [];
+    if (!ranges.length || !Number.isFinite(this.trackLength) || this.trackLength <= 0) {
+      return 3;
+    }
+
+    const s = ((distance % this.trackLength) + this.trackLength) % this.trackLength;
+    const current = ranges.find((range) => s >= range.start && s < range.end) ?? ranges[ranges.length - 1];
+    const currentLaneCount = current?.laneCount === 2 ? 2 : 3;
+    if (!options.smooth) {
+      return currentLaneCount;
+    }
+
+    const index = current.index;
+    const previous = ranges[(index - 1 + ranges.length) % ranges.length];
+    const next = ranges[(index + 1) % ranges.length];
+    let laneCount = currentLaneCount;
+    const transition = Math.min(LANE_TRANSITION_LENGTH, Math.max(24, current.length * 0.45));
+    const local = s - current.start;
+
+    if (previous && local < transition && previous.laneCount !== currentLaneCount) {
+      laneCount = THREE.MathUtils.lerp(previous.laneCount, currentLaneCount, smoothstep(0, transition, local));
+    }
+
+    const toEnd = current.end - s;
+    if (next && toEnd < transition && next.laneCount !== currentLaneCount) {
+      laneCount = THREE.MathUtils.lerp(currentLaneCount, next.laneCount, smoothstep(0, transition, transition - toEnd));
+    }
+
+    return laneCount;
+  }
+
+  getLaneMarkerOffsetsAtDistance(distance) {
+    return this.getLaneCountAtDistance(distance, { smooth: true }) < 2.5 ? [0] : [-2, 2];
+  }
+
+  getRailOffsetForFrame(frame) {
+    const roadHalfWidth = Number.isFinite(frame?.roadHalfWidth)
+      ? frame.roadHalfWidth
+      : this.getRoadHalfWidthAtDistance(frame?.s ?? 0);
+    return roadHalfWidth + 1.15;
+  }
+
+  getDriveLimitForFrame(frame) {
+    return this.getRailOffsetForFrame(frame) - 1.1;
   }
 
   getNearestMainRoadInfo(position) {
@@ -4413,6 +4525,8 @@ export class HighwayWorld {
     frame.isBranch = true;
     frame.routeId = route.id;
     frame.routeDistance = clamp(distance, 0, route.length);
+    frame.roadHalfWidth = ROAD_HALF_WIDTH;
+    frame.laneCount = 3;
     return frame;
   }
 
@@ -4492,10 +4606,13 @@ export class HighwayWorld {
     const inDriveway = this.isInDriveway(p);
     const currentRoad = this.getNearestRoadInfo(p);
     let road = currentRoad;
+    let previousRoad = null;
+    let sweptFromRoad = false;
     if ((!road || road.distance >= 22) && player.previousPosition) {
-      const previousRoad = this.getNearestRoadInfo(player.previousPosition);
-      if (previousRoad && previousRoad.distance < DRIVE_LIMIT + 4) {
+      previousRoad = this.getNearestRoadInfo(player.previousPosition);
+      if (previousRoad && previousRoad.distance < this.getDriveLimitForFrame(previousRoad) + 4) {
         road = this.projectRoadInfo(previousRoad, p);
+        sweptFromRoad = true;
       }
     }
     const result = {
@@ -4504,17 +4621,31 @@ export class HighwayWorld {
       impactSpeed: player.speedMagnitude ?? Math.abs(player.speed),
     };
 
-    if (!inMeet && !inDriveway && road && road.distance < 34) {
-      const limit = DRIVE_LIMIT;
+    if (!previousRoad && player.previousPosition) {
+      previousRoad = this.getNearestRoadInfo(player.previousPosition);
+    }
+
+    if (!inMeet && !inDriveway && road && (road.distance < 42 || sweptFromRoad)) {
+      const limit = this.getDriveLimitForFrame(road);
       const over = Math.abs(road.lateral) - limit;
       const side = Math.sign(road.lateral || 1);
-      if (over > 0 && !this.isEntranceGap(road.s, side) && !this.isJunctionOpening(road.s, side)) {
+      const previousProjection = previousRoad && player.previousPosition
+        ? this.projectRoadInfo(previousRoad, player.previousPosition)
+        : null;
+      const previousLimit = previousProjection ? this.getDriveLimitForFrame(previousProjection) : limit;
+      const crossedRail = previousProjection
+        ? Math.abs(previousProjection.lateral) <= previousLimit + 0.35 &&
+          Math.sign(previousProjection.lateral || side) !== -side &&
+          Math.abs(road.lateral) > limit
+        : false;
+      if ((over > 0 || crossedRail) && !this.isEntranceGap(road.s, side) && !this.isJunctionOpening(road.s, side)) {
         const normal = {
           x: -road.normal.x * side,
           z: -road.normal.z * side,
         };
-        p.x += normal.x * (over + 0.18);
-        p.z += normal.z * (over + 0.18);
+        const correction = Math.max(over, 0) + 0.28;
+        p.x += normal.x * correction;
+        p.z += normal.z * correction;
         if (result.impactSpeed > 5.5) {
           result.hit = true;
           result.source = "Guard rail";
@@ -4531,6 +4662,13 @@ export class HighwayWorld {
         player.yawVelocity *= 0.62;
         player.slip = Math.max(player.slip ?? 0, result.impactSpeed > 12 ? 0.2 : 0.08);
         player.steerInput *= 0.72;
+
+        const resolvedRoad = this.projectRoadInfo(road, p);
+        const stillOver = Math.abs(resolvedRoad.lateral) - limit;
+        if (stillOver > 0) {
+          p.x -= road.normal.x * side * stillOver;
+          p.z -= road.normal.z * side * stillOver;
+        }
       }
     }
 

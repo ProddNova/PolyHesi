@@ -1347,7 +1347,7 @@ canvas {
   top: 24px;
   z-index: 2;
   display: none;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 6px;
   pointer-events: auto;
 }

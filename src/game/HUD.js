@@ -1129,8 +1129,14 @@ export class HUD {
     if (!profile) {
       return null;
     }
+    const controlPoints = (profile.controlPoints ?? []).map((point) => ({ x: point.x, z: point.z }));
+    const sourceSegments = profile.segments ?? [];
     return {
-      controlPoints: (profile.controlPoints ?? []).map((point) => ({ x: point.x, z: point.z })),
+      controlPoints,
+      segments: controlPoints.map((_point, index) => ({
+        index,
+        laneCount: sourceSegments[index]?.laneCount === 2 ? 2 : 3,
+      })),
       branches: (profile.branches ?? []).map((branch) => ({
         id: branch.id,
         points: (branch.points ?? []).map((point) => ({ x: point.x, z: point.z })),
@@ -1161,7 +1167,7 @@ export class HUD {
   }
 
   setRemodelMapTool(tool) {
-    if (!["route", "tunnel", "branch"].includes(tool)) {
+    if (!["route", "tunnel", "branch", "lanes"].includes(tool)) {
       return;
     }
     this.remodelMapTool = tool;
@@ -1175,13 +1181,15 @@ export class HUD {
     }
     if (this.nodes.remodelMapAdd) {
       this.nodes.remodelMapAdd.textContent = this.remodelMapTool === "tunnel"
-        ? "Add tunnel"
-        : this.remodelMapTool === "branch"
-          ? "Add branch"
-          : "Add point";
+          ? "Add tunnel"
+          : this.remodelMapTool === "branch"
+            ? "Add branch"
+            : this.remodelMapTool === "lanes"
+              ? "Toggle lanes"
+              : "Add point";
     }
     if (this.nodes.remodelMapDelete) {
-      this.nodes.remodelMapDelete.disabled = !this.remodelMapSelection;
+      this.nodes.remodelMapDelete.disabled = !this.remodelMapSelection || this.remodelMapSelection.type === "routeSegment";
     }
   }
 
@@ -1222,7 +1230,9 @@ export class HUD {
       return false;
     }
 
-    const hit = this.pickRemodelMapHandle(pointer.x, pointer.y, pointer.width, pointer.height);
+    const hit = this.remodelMapTool === "lanes"
+      ? null
+      : this.pickRemodelMapHandle(pointer.x, pointer.y, pointer.width, pointer.height);
     if (hit) {
       if (this.isRemodelRoutePointLocked(hit)) {
         this.remodelMapSelection = hit;
@@ -1241,11 +1251,19 @@ export class HUD {
       return true;
     }
 
-    if (this.remodelMapTool === "route") {
+    if (this.remodelMapTool === "lanes") {
+      const segment = this.pickRemodelMapSegment(pointer.x, pointer.y, pointer.width, pointer.height, "route");
+      if (segment) {
+        this.remodelMapSelection = { type: "routeSegment", index: segment.index };
+        this.toggleSelectedRemodelMapSegmentLaneCount();
+      }
+    } else if (this.remodelMapTool === "route") {
       const segment = this.pickRemodelMapSegment(pointer.x, pointer.y, pointer.width, pointer.height, "route");
       if (segment) {
         const world = this.mapToWorld(pointer.x, pointer.y, pointer.width, pointer.height);
         this.remodelRouteProfile.controlPoints.splice(segment.index + 1, 0, world);
+        const laneCount = this.remodelRouteProfile.segments?.[segment.index]?.laneCount === 2 ? 2 : 3;
+        this.remodelRouteProfile.segments?.splice(segment.index + 1, 0, { index: segment.index + 1, laneCount });
         this.remodelMapSelection = { type: "routePoint", index: segment.index + 1 };
         this.applyRemodelRouteProfile();
       }
@@ -1428,16 +1446,35 @@ export class HUD {
     }
     const canvas = this.nodes.miniMapCanvas;
     const pointer = { x: canvas.width * 0.5, y: canvas.height * 0.5, width: canvas.width, height: canvas.height };
-    if (this.remodelMapTool === "tunnel") {
+    if (this.remodelMapTool === "lanes") {
+      this.toggleSelectedRemodelMapSegmentLaneCount();
+    } else if (this.remodelMapTool === "tunnel") {
       this.addTunnelAtPointer(pointer);
     } else if (this.remodelMapTool === "branch") {
       this.addBranchAtPointer(pointer);
     } else {
       const world = this.mapToWorld(pointer.x, pointer.y, pointer.width, pointer.height);
       this.remodelRouteProfile.controlPoints.push(world);
+      this.remodelRouteProfile.segments?.push({ index: this.remodelRouteProfile.controlPoints.length - 1, laneCount: 3 });
       this.remodelMapSelection = { type: "routePoint", index: this.remodelRouteProfile.controlPoints.length - 1 };
       this.applyRemodelRouteProfile();
     }
+  }
+
+  toggleSelectedRemodelMapSegmentLaneCount() {
+    const selection = this.remodelMapSelection;
+    if (!this.remodelRouteProfile || selection?.type !== "routeSegment") {
+      this.flashNotice?.("Lane segment", "select a road segment");
+      return;
+    }
+
+    const segment = this.remodelRouteProfile.segments?.[selection.index];
+    if (!segment) {
+      return;
+    }
+    segment.laneCount = segment.laneCount === 2 ? 3 : 2;
+    this.applyRemodelRouteProfile(undefined, { flash: false });
+    this.flashNotice?.("Lane segment", segment.laneCount === 2 ? "2 lanes" : "3 lanes");
   }
 
   addTunnelAtPointer(pointer) {
@@ -1483,8 +1520,12 @@ export class HUD {
       this.flashNotice?.("Spawn locked", "spawn road points cannot be deleted");
       return;
     }
+    if (selection.type === "routeSegment") {
+      return;
+    }
     if (selection.type === "routePoint" && this.remodelRouteProfile.controlPoints.length > 6) {
       this.remodelRouteProfile.controlPoints.splice(selection.index, 1);
+      this.remodelRouteProfile.segments?.splice(selection.index, 1);
     } else if (selection.type === "branchPoint") {
       const branch = this.remodelRouteProfile.branches[selection.branchIndex];
       if (branch?.points?.length > 2) {
@@ -1829,6 +1870,7 @@ export class HUD {
       tunnelStroke: "rgba(116, 173, 255, 0.98)",
       width: 3,
       world,
+      segments: profile.segments,
     });
     for (let i = 0; i < profile.branches.length; i += 1) {
       this.drawRemodelProfilePath(ctx, profile.branches[i].points, false, width, height, {
@@ -1872,9 +1914,14 @@ export class HUD {
       const a = points[i];
       const b = points[(i + 1) % points.length];
       const midpoint = { x: (a.x + b.x) * 0.5, z: (a.z + b.z) * 0.5 };
-      ctx.strokeStyle = style.world && this.isWorldPointInTunnel(style.world, midpoint)
+      const segment = style.segments?.[i];
+      const selectedSegment = this.isRemodelMapSelection("routeSegment", { index: i });
+      ctx.strokeStyle = segment?.laneCount === 2
+        ? "rgba(255, 202, 96, 0.98)"
+        : style.world && this.isWorldPointInTunnel(style.world, midpoint)
         ? style.tunnelStroke ?? style.stroke
         : style.stroke;
+      ctx.lineWidth = selectedSegment ? style.width + 4 : style.width;
       const mappedA = this.worldToMap(a, width, height);
       const mappedB = this.worldToMap(b, width, height);
       ctx.beginPath();
@@ -1894,6 +1941,9 @@ export class HUD {
 
   drawRemodelMapHandles(ctx, profile, world, width, height) {
     const lockedRoutePoints = this.getSpawnLockedRoutePointIndices(profile);
+    const showRouteHandles = this.remodelMapTool === "route" || this.remodelMapSelection?.type === "routePoint";
+    const showBranchHandles = this.remodelMapTool === "branch" || this.remodelMapSelection?.type === "branchPoint";
+    const showTunnelHandles = this.remodelMapTool === "tunnel" || /^tunnel/.test(this.remodelMapSelection?.type ?? "");
     const drawHandle = (point, color, selected = false, radius = 6, locked = false) => {
       ctx.beginPath();
       ctx.arc(point.x, point.y, selected ? radius + 3 : radius, 0, Math.PI * 2);
@@ -1912,31 +1962,37 @@ export class HUD {
       }
     };
 
-    profile.controlPoints.forEach((point, index) => {
-      const mapped = this.worldToMap(point, width, height);
-      const inTunnel = this.isWorldPointInTunnel(world, point);
-      drawHandle(
-        mapped,
-        inTunnel ? "#74adff" : "#78e0c1",
-        this.isRemodelMapSelection("routePoint", { index }),
-        inTunnel ? 6.5 : 6,
-        lockedRoutePoints.has(index),
-      );
-    });
-
-    profile.branches.forEach((branch, branchIndex) => {
-      branch.points.forEach((point, index) => {
+    if (showRouteHandles) {
+      profile.controlPoints.forEach((point, index) => {
         const mapped = this.worldToMap(point, width, height);
-        drawHandle(mapped, "#ffbe5c", this.isRemodelMapSelection("branchPoint", { branchIndex, index }), index === 0 ? 7 : 5);
+        const inTunnel = this.isWorldPointInTunnel(world, point);
+        drawHandle(
+          mapped,
+          inTunnel ? "#74adff" : "#78e0c1",
+          this.isRemodelMapSelection("routePoint", { index }),
+          inTunnel ? 6.5 : 6,
+          lockedRoutePoints.has(index),
+        );
       });
-    });
+    }
 
-    profile.tunnels.forEach((tunnel, index) => {
-      const start = this.worldToMap(world.getFrameAtDistance(tunnel.start).center, width, height);
-      const end = this.worldToMap(world.getFrameAtDistance(tunnel.start + tunnel.length).center, width, height);
-      drawHandle(start, "#7ee0ff", this.isRemodelMapSelection("tunnelStart", { index }) || this.isRemodelMapSelection("tunnel", { index }), 5);
-      drawHandle(end, "#7ee0ff", this.isRemodelMapSelection("tunnelEnd", { index }), 5);
-    });
+    if (showBranchHandles) {
+      profile.branches.forEach((branch, branchIndex) => {
+        branch.points.forEach((point, index) => {
+          const mapped = this.worldToMap(point, width, height);
+          drawHandle(mapped, "#ffbe5c", this.isRemodelMapSelection("branchPoint", { branchIndex, index }), index === 0 ? 7 : 5);
+        });
+      });
+    }
+
+    if (showTunnelHandles) {
+      profile.tunnels.forEach((tunnel, index) => {
+        const start = this.worldToMap(world.getFrameAtDistance(tunnel.start).center, width, height);
+        const end = this.worldToMap(world.getFrameAtDistance(tunnel.start + tunnel.length).center, width, height);
+        drawHandle(start, "#7ee0ff", this.isRemodelMapSelection("tunnelStart", { index }) || this.isRemodelMapSelection("tunnel", { index }), 5);
+        drawHandle(end, "#7ee0ff", this.isRemodelMapSelection("tunnelEnd", { index }), 5);
+      });
+    }
   }
 
   isRemodelMapSelection(type, match = {}) {
@@ -1953,10 +2009,10 @@ export class HUD {
     ctx.fillRect(20, height - 76, Math.min(520, width - 40), 56);
     ctx.fillStyle = "rgba(242, 239, 228, 0.88)";
     ctx.font = "800 12px Inter, sans-serif";
-    ctx.fillText("Remodel map: drag handles. Spawn segment is locked. Wheel zooms, right/middle or Shift-drag pans.", 34, height - 48);
+    ctx.fillText("Remodel map: Route/Junction/Tunnel show only their handles. Lanes toggles selected road segments.", 34, height - 48);
     ctx.fillStyle = "rgba(226, 221, 206, 0.64)";
     ctx.font = "700 10px Inter, sans-serif";
-    ctx.fillText("Tunnel handles/segments are blue. Junction click creates/extends branches. Save persists to localStorage.", 34, height - 28);
+    ctx.fillText("Green = 3 lanes, amber = 2 lanes, blue = tunnel. Wheel zooms, right/middle or Shift-drag pans.", 34, height - 28);
     ctx.restore();
   }
 
