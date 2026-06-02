@@ -166,6 +166,14 @@ const JAPANESE_BILLBOARD_ADS = [
   { title: "ホテル", brand: "銀座ステイ", sub: "空室あり", bg: "#202833", fg: "#f5e8c8", accent: "#ef476f" },
   { title: "ゲーム", brand: "秋葉原電遊", sub: "新作入荷", bg: "#0b7a75", fg: "#ffffff", accent: "#ffba08" },
   { title: "寿司", brand: "築地一番", sub: "本日特価", bg: "#eeeeee", fg: "#21252b", accent: "#d62828" },
+  { title: "PIT", brand: "WANGAN SERVICE", sub: "OIL CHECK", bg: "#31363f", fg: "#f2f5f7", accent: "#ff8c2a" },
+  { title: "AKIBA", brand: "ELECTRO MART", sub: "MIDNIGHT SALE", bg: "#114b8b", fg: "#ffffff", accent: "#76f0ff" },
+  { title: "DRUG", brand: "SAKURA STORE", sub: "OPEN DAILY", bg: "#f6f0e6", fg: "#26302d", accent: "#2f9e44" },
+  { title: "GYUDON", brand: "EXPRESS BOWL", sub: "EXTRA RICE", bg: "#8f2b20", fg: "#fff4d8", accent: "#ffcc33" },
+  { title: "NIGHT", brand: "BAY LOUNGE", sub: "OPEN 20:00", bg: "#141824", fg: "#f8f4ff", accent: "#c35cff" },
+  { title: "PARK", brand: "CITY PARK", sub: "30 MIN FREE", bg: "#2e6f8e", fg: "#ffffff", accent: "#f7d046" },
+  { title: "VINYL", brand: "SHIBUYA RECORDS", sub: "NEW ARRIVALS", bg: "#111111", fg: "#f4f0df", accent: "#ff4057" },
+  { title: "24H", brand: "MIDNIGHT MART", sub: "HOT COFFEE", bg: "#ffffff", fg: "#1f252b", accent: "#1e88e5" },
 ];
 const DEFAULT_LANE_DASH_LENGTH = 1.7;
 const DEFAULT_LANE_DASH_SPACING = 5.4;
@@ -332,6 +340,8 @@ export class HighwayWorld {
     asphaltTexture.repeat.set(42, 42);
     const concreteTexture = this.createSurfaceTexture("#3a424b", "#48525d", "#252c34", 120);
     concreteTexture.repeat.set(18, 18);
+    const barrierBaseTexture = this.createSurfaceTexture("#aeb1ad", "#c9cbc6", "#777d78", 150);
+    barrierBaseTexture.repeat.set(4, 18);
     const cityGroundTexture = this.createSurfaceTexture("#333b42", "#46515b", "#242b31", 220);
     cityGroundTexture.repeat.set(190, 86);
     const shoulderTexture = this.createSurfaceTexture("#283038", "#353e46", "#171d23", 86);
@@ -402,16 +412,16 @@ export class HighwayWorld {
         flatShading: true,
       }),
       shutokuBarrier: new THREE.MeshStandardMaterial({
-        color: 0xe2ddca,
+        color: 0xb7b7b1,
         map: this.createShutokuBarrierTexture(),
         roughness: 0.88,
         metalness: 0.01,
         flatShading: true,
       }),
       shutokuBarrierBase: new THREE.MeshStandardMaterial({
-        color: 0x72706b,
-        map: concreteTexture,
-        roughness: 0.9,
+        color: 0xb2b4b0,
+        map: barrierBaseTexture,
+        roughness: 0.94,
         metalness: 0.02,
         flatShading: true,
       }),
@@ -525,21 +535,29 @@ export class HighwayWorld {
   createShutokuBarrierTexture() {
     const texture = makeCanvasTexture((ctx, canvas) => {
       ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = "#e2ddca";
+      ctx.fillStyle = "#b8b8b1";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       for (let band = 1; band < 5; band += 1) {
         const y = Math.round((canvas.height * band) / 5);
-        ctx.fillStyle = "rgba(126, 120, 104, 0.34)";
+        ctx.fillStyle = "rgba(84, 87, 82, 0.38)";
         ctx.fillRect(0, y - 1, canvas.width, 2);
-        ctx.fillStyle = "rgba(255, 250, 230, 0.16)";
+        ctx.fillStyle = "rgba(224, 224, 216, 0.18)";
         ctx.fillRect(0, y + 2, canvas.width, 1);
       }
 
-      for (let i = 0; i < 44; i += 1) {
+      for (let column = 1; column < 7; column += 1) {
+        const x = Math.round((canvas.width * column) / 7);
+        ctx.fillStyle = "rgba(78, 82, 78, 0.34)";
+        ctx.fillRect(x - 1, 0, 2, canvas.height);
+        ctx.fillStyle = "rgba(220, 221, 214, 0.14)";
+        ctx.fillRect(x + 2, 0, 1, canvas.height);
+      }
+
+      for (let i = 0; i < 64; i += 1) {
         const n = cityNoise(i * 15.7 + 3.4);
-        ctx.globalAlpha = 0.08 + n * 0.13;
-        ctx.fillStyle = n > 0.62 ? "#6f695e" : "#f2ecd7";
+        ctx.globalAlpha = 0.08 + n * 0.15;
+        ctx.fillStyle = n > 0.62 ? "#6f736d" : "#d5d5cc";
         const x = Math.floor(cityNoise(i * 4.2 + 8.1) * canvas.width);
         const y = Math.floor(cityNoise(i * 6.6 + 1.7) * canvas.height);
         const w = 4 + Math.floor(cityNoise(i * 2.1 + 9.4) * 18);
@@ -2542,9 +2560,14 @@ export class HighwayWorld {
     }
 
     const wallNoise = cityNoise(seed + 41.2);
-    if (rowIndex <= 7 && bodyHeight > 28 && depth > 15 && wallNoise > 0.965) {
-      const boardWidth = clamp(depth * cityRange(seed + 42.1, 0.62, 1.05), 9.0, 20.0);
-      const boardHeight = clamp(bodyHeight * cityRange(seed + 43.3, 0.14, 0.24), 4.6, 12.0);
+    const wallMega = rowIndex >= 2 && cityNoise(seed + 41.9) > 0.84;
+    if (rowIndex <= 8 && bodyHeight > 28 && depth > 15 && wallNoise > (wallMega ? 0.91 : 0.948)) {
+      const boardWidth = wallMega
+        ? clamp(depth * cityRange(seed + 42.1, 1.05, 1.55), 18.0, 42.0)
+        : clamp(depth * cityRange(seed + 42.1, 0.68, 1.14), 9.5, 24.0);
+      const boardHeight = wallMega
+        ? clamp(bodyHeight * cityRange(seed + 43.3, 0.22, 0.34), 10.0, 26.0)
+        : clamp(bodyHeight * cityRange(seed + 43.3, 0.15, 0.26), 4.8, 13.5);
       const y = clamp(
         cityRange(seed + 44.4, bodyHeight * 0.34, bodyHeight * 0.78),
         boardHeight * 0.5 + 7.0,
@@ -2566,10 +2589,13 @@ export class HighwayWorld {
     }
 
     const roofNoise = cityNoise(seed + 50.8);
-    if (rowIndex <= 7 && bodyHeight > 34 && width > 14 && roofNoise > 0.975) {
-      const boardWidth = clamp(width * cityRange(seed + 51.2, 0.62, 0.96), 11.5, 24.0);
-      const boardHeight = cityRange(seed + 52.4, 4.0, 7.0);
-      const postHeight = cityRange(seed + 53.6, 3.4, 6.2);
+    const roofMega = rowIndex >= 1 && cityNoise(seed + 50.1) > 0.78;
+    if (rowIndex <= 8 && bodyHeight > 34 && width > 14 && roofNoise > (roofMega ? 0.92 : 0.955)) {
+      const boardWidth = roofMega
+        ? clamp(width * cityRange(seed + 51.2, 0.9, 1.35), 20.0, 46.0)
+        : clamp(width * cityRange(seed + 51.2, 0.64, 1.04), 12.0, 27.0);
+      const boardHeight = roofMega ? cityRange(seed + 52.4, 7.5, 13.0) : cityRange(seed + 52.4, 4.2, 7.6);
+      const postHeight = roofMega ? cityRange(seed + 53.6, 6.0, 10.2) : cityRange(seed + 53.6, 3.4, 6.6);
       const localX = cityRange(seed + 54.1, -width * 0.18, width * 0.18);
       const localZ = cityRange(seed + 55.3, -depth * 0.22, depth * 0.22);
       const boardY = bodyHeight + postHeight + boardHeight * 0.52;
@@ -2591,17 +2617,18 @@ export class HighwayWorld {
           position: this.offsetLocalPoint(base, yaw, localX, localZ + postZ, bodyHeight + postHeight * 0.5),
           yaw,
           s,
-        scale: { x: 0.22, y: postHeight, z: 0.22 },
+          scale: { x: roofMega ? 0.32 : 0.22, y: postHeight, z: roofMega ? 0.32 : 0.22 },
           remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "roof-billboard-pole"),
         });
       }
     }
 
     const groundNoise = cityNoise(seed + 60.9);
-    if (rowIndex <= 4 && width > 18 && groundNoise > 0.985) {
-      const boardWidth = cityRange(seed + 61.7, 8.0, 14.5);
-      const boardHeight = cityRange(seed + 62.1, 3.6, 5.4);
-      const postHeight = cityRange(seed + 63.4, 3.0, 4.7);
+    const groundMega = rowIndex >= 1 && cityNoise(seed + 60.2) > 0.8;
+    if (rowIndex <= 5 && width > 18 && groundNoise > (groundMega ? 0.925 : 0.958)) {
+      const boardWidth = groundMega ? cityRange(seed + 61.7, 16.0, 30.0) : cityRange(seed + 61.7, 8.5, 16.5);
+      const boardHeight = groundMega ? cityRange(seed + 62.1, 6.2, 10.4) : cityRange(seed + 62.1, 3.8, 5.9);
+      const postHeight = groundMega ? cityRange(seed + 63.4, 5.2, 8.4) : cityRange(seed + 63.4, 3.1, 5.0);
       const localX = side * (width * 0.5 + cityRange(seed + 64.2, 8.0, 15.0));
       const localZ = cityRange(seed + 65.6, -depth * 0.45, depth * 0.45);
       const signS = (s + forward + localZ + this.trackLength) % this.trackLength;
@@ -2611,7 +2638,7 @@ export class HighwayWorld {
         s: signS,
         lateral: signLateral,
         halfForward: boardWidth * 0.5 + 3.2,
-        halfLateral: 5.8,
+        halfLateral: groundMega ? 8.2 : 5.8,
       });
       if (reserved) {
         const padPosition = this.offsetLocalPoint(base, yaw, localX, localZ, 0.04);
@@ -2619,14 +2646,14 @@ export class HighwayWorld {
           position: padPosition,
           yaw,
           s: signS,
-          scale: { x: 6.8, y: 0.1, z: boardWidth + 2.2 },
+          scale: { x: groundMega ? 9.2 : 6.8, y: 0.1, z: boardWidth + 2.2 },
         });
         for (const postZ of [-boardWidth * 0.34, boardWidth * 0.34]) {
           billboardPosts.push({
             position: this.offsetLocalPoint(base, yaw, localX, localZ + postZ, postHeight * 0.5),
             yaw,
             s: signS,
-            scale: { x: 0.24, y: postHeight, z: 0.24 },
+            scale: { x: groundMega ? 0.34 : 0.24, y: postHeight, z: groundMega ? 0.34 : 0.24 },
           });
         }
         this.addJapaneseBillboardPlane(
@@ -2671,6 +2698,7 @@ export class HighwayWorld {
     }
 
     const ad = JAPANESE_BILLBOARD_ADS[index];
+    const variant = index % 4;
     const texture = makeCanvasTexture((ctx, canvas) => {
       ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = ad.bg;
@@ -2695,6 +2723,32 @@ export class HighwayWorld {
       ctx.strokeStyle = "rgba(255, 255, 255, 0.48)";
       ctx.lineWidth = 2;
       ctx.strokeRect(18, 18, canvas.width - 36, canvas.height - 36);
+
+      if (variant === 1) {
+        ctx.save();
+        ctx.globalAlpha = 0.18;
+        ctx.strokeStyle = ad.accent;
+        ctx.lineWidth = 10;
+        for (let x = -canvas.width; x < canvas.width * 2; x += 42) {
+          ctx.beginPath();
+          ctx.moveTo(x, canvas.height);
+          ctx.lineTo(x + canvas.height, 0);
+          ctx.stroke();
+        }
+        ctx.restore();
+      } else if (variant === 2) {
+        ctx.fillStyle = ad.accent;
+        ctx.globalAlpha = 0.9;
+        ctx.fillRect(0, canvas.height - 44, canvas.width, 24);
+        ctx.globalAlpha = 1;
+      } else if (variant === 3) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+        ctx.fillRect(0, 0, 74, canvas.height);
+        ctx.fillStyle = ad.accent;
+        for (let y = 0; y < canvas.height; y += 22) {
+          ctx.fillRect(12, y + 6, 38, 10);
+        }
+      }
 
       ctx.fillStyle = ad.accent;
       ctx.beginPath();
