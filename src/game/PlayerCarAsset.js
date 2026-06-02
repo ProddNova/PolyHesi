@@ -418,7 +418,6 @@ function getTrafficTemplateKey(preset) {
   const rig = preset.vehicleRig ?? {};
   return [
     preset.psxModel ?? preset.carId ?? preset.id ?? "JapanSportCoupe",
-    preset.color,
     rig.rideHeight,
     rig.frontWheelOffsetX,
     rig.frontWheelOffsetY,
@@ -429,10 +428,32 @@ function getTrafficTemplateKey(preset) {
     rig.wheelScale,
     rig.wheelModel,
     rig.wheelColor,
-    rig.bodyColor,
     rig.bodyOffsetY,
     rig.bodyOffsetZ,
   ].join(":");
+}
+
+function cloneMaterialsForTraffic(object, bodyColor) {
+  object.traverse((child) => {
+    if (!child.isMesh || !child.material) {
+      return;
+    }
+
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    const cloned = materials.map((material) => {
+      if (!material) {
+        return material;
+      }
+      const next = material.clone();
+      if (next.name === "psxBodyPaint" && next.color) {
+        next.color.set(bodyColor);
+      }
+      next.flatShading = true;
+      next.needsUpdate = true;
+      return next;
+    });
+    child.material = Array.isArray(child.material) ? cloned : cloned[0];
+  });
 }
 
 export function createTrafficCarAsset(preset) {
@@ -453,5 +474,6 @@ export function createTrafficCarAsset(preset) {
 
   const clone = trafficCarTemplates.get(key).clone(true);
   clone.name = `TrafficPSX_${preset.psxModel ?? preset.carId ?? preset.id}`;
+  cloneMaterialsForTraffic(clone, preset.vehicleRig?.bodyColor ?? preset.color);
   return clone;
 }

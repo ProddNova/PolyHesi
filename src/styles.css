@@ -43,6 +43,7 @@ select {
 
 canvas {
   display: block;
+  image-rendering: pixelated;
 }
 
 [hidden] {

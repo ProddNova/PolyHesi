@@ -162,7 +162,7 @@ export class Game {
     );
     this.camera.position.set(0, 5.2, -12);
 
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(this.getRenderPixelRatio());
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -2673,11 +2673,11 @@ export class Game {
 
   getRenderPixelRatio() {
     if (this.settings.ultraGraphics) {
-      return Math.min(window.devicePixelRatio || 1, 2);
+      return Math.min(window.devicePixelRatio || 1, 1.35);
     }
     const rawQuality = Number(this.settings.graphicsQuality);
     const quality = Number.isFinite(rawQuality) ? Math.round(rawQuality) : 1;
-    const cap = quality <= 0 ? 0.7 : quality >= 2 ? 1.25 : 0.95;
+    const cap = quality <= 0 ? 0.65 : quality >= 2 ? 1.0 : 0.85;
     return Math.min(window.devicePixelRatio || 1, cap);
   }
 

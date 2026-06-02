@@ -406,16 +406,7 @@ export class TrafficSystem {
     }
 
     car.trafficColor = nextColor;
-    const previousGroup = car.group;
-    const visual = this.createTrafficVisual(car.trafficModel, car.trafficColor);
-    car.group = visual.group;
-    car.indicators = visual.indicators;
-    car.width = visual.width;
-    car.length = visual.length;
-    if (previousGroup?.parent) {
-      this.scene.remove(previousGroup);
-      this.scene.add(car.group);
-    }
+    this.recolorTrafficVisual(car.group, nextColor);
   }
 
   applyFrame(car, dt = 1 / 60, snap = false) {
@@ -522,6 +513,21 @@ export class TrafficSystem {
     }
   }
 
+  recolorTrafficVisual(group, color) {
+    group?.traverse((child) => {
+      if (!child.isMesh || !child.material) {
+        return;
+      }
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) {
+        if ((material?.name === "psxBodyPaint" || material?.name === "trafficBodyPaint") && material.color) {
+          material.color.set(color);
+          material.needsUpdate = true;
+        }
+      }
+    });
+  }
+
   getTrafficPreset(modelId, bodyColor = null) {
     const preset = getCarPreset(modelId);
     const rig = this.getVehicleRigForCar(modelId) ?? {};
@@ -563,6 +569,7 @@ export class TrafficSystem {
   createFallbackTrafficVisual(modelId, bodyColor = null) {
     const color = bodyColor ?? choice(TRAFFIC_COLORS);
     const bodyMaterial = new THREE.MeshStandardMaterial({
+      name: "trafficBodyPaint",
       color,
       roughness: 0.5,
       metalness: 0.12,

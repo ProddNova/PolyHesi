@@ -10,6 +10,7 @@ const ROAD_SAMPLE_COUNT = 560;
 const ROAD_RIBBON_SEGMENTS = 960;
 const ROAD_DETAIL_CHUNK_LENGTH = 1200;
 const CITY_DETAIL_CHUNK_LENGTH = 900;
+const CITY_NEAR_DETAIL_CHUNK_LENGTH = 650;
 const REMODEL_CREATED_GROUP = "RemodelCreatedPieces";
 const REMODEL_HITBOX_GROUP = "RemodelHitboxTemplates";
 const REMODEL_ROOT_NAMES = new Set([
@@ -231,8 +232,8 @@ const DEFAULT_ROUTE_CONTROL_POINTS = [
 ].map(([x, z]) => ({ x: x * DEFAULT_ROUTE_SCALE, z: z * DEFAULT_ROUTE_SCALE }));
 const GRAPHICS_PROFILES = [
   { shadowSize: 0, anisotropy: 1, roadLightStep: 4 },
+  { shadowSize: 768, anisotropy: 1, roadLightStep: 3 },
   { shadowSize: 1024, anisotropy: 2, roadLightStep: 2 },
-  { shadowSize: 2048, anisotropy: 8, roadLightStep: 1 },
 ];
 
 function seededRandom(seed) {
@@ -444,23 +445,25 @@ export class HighwayWorld {
 
   createSurfaceTexture(base, fleck, dark, count) {
     const texture = makeCanvasTexture((ctx, canvas) => {
+      ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = base;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      for (let i = 0; i < count; i += 1) {
+      const pixelCount = Math.max(18, Math.floor(count * 0.42));
+      for (let i = 0; i < pixelCount; i += 1) {
         ctx.fillStyle = i % 4 === 0 ? dark : fleck;
-        ctx.globalAlpha = 0.08 + this.random() * 0.15;
-        const x = this.random() * canvas.width;
-        const y = this.random() * canvas.height;
-        const w = 1 + this.random() * 7;
-        const h = 1 + this.random() * 3;
+        ctx.globalAlpha = 0.1 + this.random() * 0.18;
+        const x = Math.floor((this.random() * canvas.width) / 4) * 4;
+        const y = Math.floor((this.random() * canvas.height) / 4) * 4;
+        const w = 4 + Math.floor(this.random() * 5) * 4;
+        const h = 4 + Math.floor(this.random() * 2) * 4;
         ctx.fillRect(x, y, w, h);
       }
       ctx.globalAlpha = 0.12;
       ctx.strokeStyle = dark;
-      for (let i = 0; i < 16; i += 1) {
+      for (let i = 0; i < 8; i += 1) {
         ctx.beginPath();
-        ctx.moveTo(this.random() * canvas.width, this.random() * canvas.height);
-        ctx.lineTo(this.random() * canvas.width, this.random() * canvas.height);
+        ctx.moveTo(Math.floor(this.random() * canvas.width / 8) * 8, Math.floor(this.random() * canvas.height / 8) * 8);
+        ctx.lineTo(Math.floor(this.random() * canvas.width / 8) * 8, Math.floor(this.random() * canvas.height / 8) * 8);
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
@@ -884,14 +887,14 @@ export class HighwayWorld {
     this.ultraGraphics = Boolean(ultra);
     const profile = GRAPHICS_PROFILES[this.graphicsQuality] ?? GRAPHICS_PROFILES[1];
     if (this.environment?.keyLight) {
-      const shadowSize = this.ultraGraphics ? 4096 : profile.shadowSize;
+      const shadowSize = this.ultraGraphics ? 1536 : profile.shadowSize;
       this.environment.keyLight.castShadow = shadowSize > 0;
       if (shadowSize > 0) {
         this.environment.keyLight.shadow.mapSize.set(shadowSize, shadowSize);
         this.environment.keyLight.shadow.needsUpdate = true;
       }
     }
-    const roadLightStep = this.ultraGraphics ? 1 : profile.roadLightStep;
+    const roadLightStep = this.ultraGraphics ? 2 : profile.roadLightStep;
     this.roadLightStep = roadLightStep;
     for (const light of this.roadLights) {
       light.userData.qualityAllowed = true;
@@ -900,8 +903,8 @@ export class HighwayWorld {
         light.intensity = 0;
       }
     }
-    this.roadLightRange = this.ultraGraphics ? 1640 : this.graphicsQuality >= 2 ? 1240 : this.graphicsQuality >= 1 ? 940 : 620;
-    const garageShadowSize = this.ultraGraphics ? 1024 : this.graphicsQuality >= 2 ? 512 : 0;
+    this.roadLightRange = this.ultraGraphics ? 1080 : this.graphicsQuality >= 2 ? 920 : this.graphicsQuality >= 1 ? 720 : 520;
+    const garageShadowSize = this.ultraGraphics ? 512 : this.graphicsQuality >= 2 ? 384 : 0;
     for (const light of this.garageLights) {
       light.castShadow = garageShadowSize > 0;
       if (garageShadowSize > 0 && light.shadow?.mapSize) {
@@ -915,7 +918,7 @@ export class HighwayWorld {
       this.materials?.concrete?.map,
     ]) {
       if (texture) {
-        texture.anisotropy = this.ultraGraphics ? 16 : profile.anisotropy;
+        texture.anisotropy = this.ultraGraphics ? 2 : profile.anisotropy;
         texture.needsUpdate = true;
       }
     }
@@ -1413,15 +1416,23 @@ export class HighwayWorld {
   }
 
   addSpawnCityBuildings(parent) {
+    const urbanPadMaterial = this.materials.cityGround;
+    parent.add(makeBox(172, 0.1, 136, urbanPadMaterial, new THREE.Vector3(-90, -0.045, -102)));
+    parent.add(makeBox(126, 0.1, 82, urbanPadMaterial, new THREE.Vector3(-156, -0.045, -34)));
+    parent.add(makeBox(132, 0.1, 78, urbanPadMaterial, new THREE.Vector3(-84, -0.045, 42)));
     const placements = [
-      { x: -142, z: -44, type: "office", scale: 0.82, yaw: 0.04 },
-      { x: -130, z: -94, type: "parking", scale: 0.72, yaw: -0.08 },
-      { x: -72, z: -124, type: "corner", scale: 0.8, yaw: 0.02 },
-      { x: -16, z: -111, type: "thinTower", scale: 0.74, yaw: -0.05 },
-      { x: 16, z: -54, type: "slab", scale: 0.78, yaw: 0.07 },
-      { x: -28, z: 24, type: "mall", scale: 0.7, yaw: -0.03 },
-      { x: -96, z: 28, type: "stepped", scale: 0.74, yaw: 0.06 },
-      { x: -154, z: 8, type: "concreteTower", scale: 0.68, yaw: -0.02 },
+      { x: -151, z: -45, type: "office", scale: 0.82, yaw: 0.04 },
+      { x: -153, z: -94, type: "parking", scale: 0.72, yaw: -0.08 },
+      { x: -101, z: -129, type: "corner", scale: 0.8, yaw: 0.02 },
+      { x: -51, z: -132, type: "thinTower", scale: 0.74, yaw: -0.05 },
+      { x: -14, z: -102, type: "slab", scale: 0.78, yaw: 0.07 },
+      { x: -43, z: 40, type: "mall", scale: 0.7, yaw: -0.03 },
+      { x: -100, z: 42, type: "stepped", scale: 0.74, yaw: 0.06 },
+      { x: -163, z: 18, type: "concreteTower", scale: 0.68, yaw: -0.02 },
+      { x: -188, z: -65, type: "thinTower", scale: 0.62, yaw: 0.05 },
+      { x: -183, z: -116, type: "slab", scale: 0.66, yaw: -0.04 },
+      { x: -132, z: -142, type: "warehouse", scale: 0.64, yaw: 0.03 },
+      { x: -64, z: -166, type: "parking", scale: 0.62, yaw: -0.06 },
     ];
     const district = new THREE.Group();
     district.name = "SpawnCityBlocks";
@@ -1429,6 +1440,9 @@ export class HighwayWorld {
     for (const placement of placements) {
       const type = BUILDING_TYPES.find((item) => item.id === placement.type) ?? BUILDING_TYPES[0];
       const scale = placement.scale ?? 1;
+      if (this.isSpawnBuildingInRoad(placement, type, scale)) {
+        continue;
+      }
       const group = new THREE.Group();
       group.name = `SpawnBuilding_${type.id}_${Math.round(placement.x)}_${Math.round(placement.z)}`;
       group.position.set(placement.x, 0, placement.z);
@@ -1444,6 +1458,18 @@ export class HighwayWorld {
     }
 
     parent.add(district);
+  }
+
+  isSpawnBuildingInRoad(placement, type, scale) {
+    const road = this.getNearestRoadInfo(new THREE.Vector3(placement.x, 0, placement.z));
+    if (!road || road.distance > 72) {
+      return false;
+    }
+
+    const width = type.width * scale;
+    const depth = type.depth * scale;
+    const clearance = ROAD_HALF_WIDTH + Math.max(width, depth) * 0.5 + 4;
+    return Math.abs(road.lateral) < clearance && Math.abs(road.forward) < depth * 0.5 + 18;
   }
 
   addGarage(parent) {
@@ -2038,12 +2064,12 @@ export class HighwayWorld {
     }
 
     for (let i = 0; i < bodyBatches.length; i += 1) {
-      district.add(this.createChunkedScaledInstancedBoxes(bodyBatches[i], this.makeFacadeMaterial(CITY_FACADE_PALETTE[i], 0.82, 0.04), false, false));
+      district.add(this.createChunkedScaledInstancedBoxes(bodyBatches[i], this.makeFacadeMaterial(CITY_FACADE_PALETTE[i], 0.82, 0.04), false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
     }
-    district.add(this.createChunkedScaledInstancedBoxes(roofs, this.materials.buildingTrim, false, false));
-    district.add(this.createChunkedScaledInstancedBoxes(glass, this.materials.buildingWindow, false, false));
-    district.add(this.createChunkedScaledInstancedBoxes(warmWindows, this.materials.buildingWindowWarm, false, false));
-    district.add(this.createChunkedScaledInstancedBoxes(trim, this.materials.buildingGlassDark, false, false));
+    district.add(this.createChunkedScaledInstancedBoxes(roofs, this.materials.buildingTrim, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
+    district.add(this.createChunkedScaledInstancedBoxes(glass, this.materials.buildingWindow, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
+    district.add(this.createChunkedScaledInstancedBoxes(warmWindows, this.materials.buildingWindowWarm, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
+    district.add(this.createChunkedScaledInstancedBoxes(trim, this.materials.buildingGlassDark, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
     district.add(this.createChunkedScaledInstancedBoxes(signs, this.materials.tunnelSign, false, false));
     district.add(this.createChunkedScaledInstancedBoxes(roofBeacons, this.materials.aviationBeacon, false, false));
     parent.add(district);
@@ -2193,7 +2219,7 @@ export class HighwayWorld {
     const roofMargin = cityRange(seed + 12.7, 2.0, 4.8);
     const usableHeight = Math.max(4.8, bodyHeight - groundMargin - roofMargin);
     const floorHeight = cityRange(seed + 13.6, rowIndex >= 4 ? 3.15 : 3.55, rowIndex >= 4 ? 4.25 : 4.8);
-    const maxRows = rowIndex === 0 ? 11 : rowIndex >= 5 ? 28 : 20;
+    const maxRows = rowIndex === 0 ? 8 : rowIndex >= 5 ? 16 : 12;
     const rowCount = Math.floor(clamp(usableHeight / floorHeight, 3, maxRows));
     const facadeDepth = depth * cityRange(seed + 14.4, 0.78, 0.96);
     const facadeStartZ = -facadeDepth * 0.5;
@@ -2203,7 +2229,7 @@ export class HighwayWorld {
 
     if (style < 0.42) {
       const bandHeight = cityRange(seed + 16.8, 0.52, 0.92);
-      const segmentCount = Math.floor(clamp(facadeDepth / cityRange(seed + 17.2, 2.1, 3.45), 5, rowIndex === 0 ? 9 : 16));
+      const segmentCount = Math.floor(clamp(facadeDepth / cityRange(seed + 17.2, 3.2, 5.2), 3, rowIndex === 0 ? 6 : 9));
       const segmentDepth = Math.max(0.58, (facadeDepth / segmentCount) * cityRange(seed + 17.6, 0.48, 0.68));
       for (let row = 0; row < rowCount; row += 1) {
         const y = groundMargin + (usableHeight * (row + 0.5)) / rowCount;
@@ -2233,7 +2259,7 @@ export class HighwayWorld {
       return;
     }
 
-    const columnCount = Math.floor(clamp(facadeDepth / cityRange(seed + 20.9, 2.25, 3.75), 5, rowIndex === 0 ? 10 : 18));
+    const columnCount = Math.floor(clamp(facadeDepth / cityRange(seed + 20.9, 3.4, 5.6), 3, rowIndex === 0 ? 7 : 10));
     const windowDepth = Math.max(0.62, (facadeDepth / columnCount) * cityRange(seed + 21.8, 0.46, 0.64));
     const windowHeight = cityRange(seed + 22.5, 0.58, 0.98);
     for (let row = 0; row < rowCount; row += 1) {

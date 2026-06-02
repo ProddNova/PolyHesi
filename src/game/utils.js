@@ -45,9 +45,13 @@ export function makeCanvasTexture(draw) {
   canvas.width = 256;
   canvas.height = 128;
   const context = canvas.getContext("2d");
+  context.imageSmoothingEnabled = false;
   draw(context, canvas);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 1;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestMipmapNearestFilter;
+  texture.generateMipmaps = true;
   return texture;
 }
