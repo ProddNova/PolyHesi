@@ -41,6 +41,7 @@ const SHUTOKU_BARRIER_MODEL = {
   base: { width: 0.82, height: 0.55, y: 0.275 },
   wall: { width: 0.46, height: 2.34, y: 1.72 },
 };
+const ROAD_BARRIER_TYPES = new Set(["barrier", "guardrail"]);
 const HITBOX_TEMPLATES = [];
 
 const BUILDING_TYPES = [
@@ -175,6 +176,18 @@ const JAPANESE_BILLBOARD_ADS = [
   { title: "PARK", brand: "CITY PARK", sub: "30 MIN FREE", bg: "#2e6f8e", fg: "#ffffff", accent: "#f7d046" },
   { title: "VINYL", brand: "SHIBUYA RECORDS", sub: "NEW ARRIVALS", bg: "#111111", fg: "#f4f0df", accent: "#ff4057" },
   { title: "24H", brand: "MIDNIGHT MART", sub: "HOT COFFEE", bg: "#ffffff", fg: "#1f252b", accent: "#1e88e5" },
+  { title: "猫カフェ", brand: "NEKO LOUNGE", sub: "SOFT DRINKS", bg: "#ff8fb3", fg: "#24141c", accent: "#fff2a8" },
+  { title: "弁当", brand: "駅前BENTO", sub: "できたて", bg: "#f06445", fg: "#fff9e8", accent: "#2a9d8f" },
+  { title: "温泉", brand: "月見の湯", sub: "深夜2時まで", bg: "#235789", fg: "#f7f4ea", accent: "#f2bb05" },
+  { title: "ガチャ", brand: "CAPSULE ZONE", sub: "RARE TOYS", bg: "#7dd3fc", fg: "#152238", accent: "#f72585" },
+  { title: "焼肉", brand: "炭火横丁", sub: "食べ放題", bg: "#2b1712", fg: "#fff3d0", accent: "#ff6b35" },
+  { title: "花屋", brand: "SAKURA FLORIST", sub: "本日配達", bg: "#e9f5db", fg: "#223322", accent: "#d1495b" },
+  { title: "映画", brand: "TOKYO CINEMA", sub: "LATE SHOW", bg: "#0d1b2a", fg: "#f5f0e6", accent: "#e0a100" },
+  { title: "ゲーム", brand: "PIXEL ARCADE", sub: "NEW CABINETS", bg: "#3a0ca3", fg: "#ffffff", accent: "#4cc9f0" },
+  { title: "薬局", brand: "みどり薬局", sub: "24時間受付", bg: "#ffffff", fg: "#183b2d", accent: "#43aa8b" },
+  { title: "たい焼き", brand: "銀座甘味", sub: "焼きたて", bg: "#ffd166", fg: "#2b2520", accent: "#ef476f" },
+  { title: "ラジオ", brand: "BAY FM 88", sub: "CITY POP", bg: "#073b4c", fg: "#eefaff", accent: "#06d6a0" },
+  { title: "写真", brand: "PHOTO BOOTH", sub: "証明写真", bg: "#f8f9fa", fg: "#1f2d3d", accent: "#4361ee" },
 ];
 const DEFAULT_LANE_DASH_LENGTH = 1.7;
 const DEFAULT_LANE_DASH_SPACING = 5.4;
@@ -860,7 +873,13 @@ export class HighwayWorld {
   getDefaultRouteProfile() {
     return {
       controlPoints: DEFAULT_ROUTE_CONTROL_POINTS.map((point) => ({ ...point })),
-      segments: DEFAULT_ROUTE_CONTROL_POINTS.map((_point, index) => ({ index, laneCount: 3, closedSide: 1 })),
+      segments: DEFAULT_ROUTE_CONTROL_POINTS.map((_point, index) => ({
+        index,
+        laneCount: 3,
+        closedSide: 1,
+        leftBarrier: "barrier",
+        rightBarrier: "barrier",
+      })),
       branches: [],
       tunnels: TUNNEL_RUNS.map((run) => ({ ...run })),
     };
@@ -892,10 +911,14 @@ export class HighwayWorld {
   sanitizeRouteSegment(segment, index = 0) {
     const laneCount = Number(segment?.laneCount) === 2 ? 2 : 3;
     const closedSide = Number(segment?.closedSide) === -1 ? -1 : 1;
+    const leftBarrier = ROAD_BARRIER_TYPES.has(segment?.leftBarrier) ? segment.leftBarrier : "barrier";
+    const rightBarrier = ROAD_BARRIER_TYPES.has(segment?.rightBarrier) ? segment.rightBarrier : "barrier";
     return {
       index,
       laneCount,
       closedSide,
+      leftBarrier,
+      rightBarrier,
     };
   }
 
@@ -951,6 +974,8 @@ export class HighwayWorld {
         index,
         laneCount: segment.laneCount === 2 ? 2 : 3,
         closedSide: segment.closedSide === -1 ? -1 : 1,
+        leftBarrier: ROAD_BARRIER_TYPES.has(segment.leftBarrier) ? segment.leftBarrier : "barrier",
+        rightBarrier: ROAD_BARRIER_TYPES.has(segment.rightBarrier) ? segment.rightBarrier : "barrier",
       })),
       branches: this.routeProfile.branches.map((branch) => ({
         id: branch.id,
@@ -1090,6 +1115,12 @@ export class HighwayWorld {
         length: scaledLength,
         laneCount: this.routeProfile.segments?.[index]?.laneCount === 2 ? 2 : 3,
         closedSide: this.routeProfile.segments?.[index]?.closedSide === -1 ? -1 : 1,
+        leftBarrier: ROAD_BARRIER_TYPES.has(this.routeProfile.segments?.[index]?.leftBarrier)
+          ? this.routeProfile.segments[index].leftBarrier
+          : "barrier",
+        rightBarrier: ROAD_BARRIER_TYPES.has(this.routeProfile.segments?.[index]?.rightBarrier)
+          ? this.routeProfile.segments[index].rightBarrier
+          : "barrier",
       };
     });
   }
@@ -1845,6 +1876,14 @@ export class HighwayWorld {
   }
 
   shouldUseShutokuBarrier(s, side) {
+    const range = this.getRouteRangeAtDistance(s);
+    const type = side < 0 ? range?.leftBarrier : range?.rightBarrier;
+    if (type === "guardrail") {
+      return false;
+    }
+    if (type === "barrier") {
+      return true;
+    }
     return !this.isTunnelDistance(s, TUNNEL_MODULE_LENGTH * 0.75);
   }
 
@@ -2223,27 +2262,6 @@ export class HighwayWorld {
     const lightGroup = new THREE.Group();
     lightGroup.name = "RoadStreetLightEmitters";
     lightGroup.userData.remodelIgnore = true;
-
-    for (let s = 36; s < this.trackLength; s += CITY_STREETLIGHT_INTERVAL) {
-      const frame = this.getFrameAtDistance(s);
-      for (const side of [-1, 1]) {
-        if (this.isCityServiceClearance(frame.s, side)) {
-          continue;
-        }
-        const polePosition = this.offsetPoint(frame, side * CITY_STREETLIGHT_POLE_OFFSET, 3.05);
-        const lampPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 1.55, 0.02, 5.88);
-        const light = new THREE.PointLight(0xfff1d8, 0, 132, 1.02);
-        light.position.copy(lampPosition);
-        light.position.y -= 0.52;
-        light.visible = false;
-        light.userData.baseIntensity = 15.5;
-        light.userData.qualityIndex = this.roadLights.length;
-        light.userData.qualityAllowed = true;
-        light.userData.s = s;
-        this.roadLights.push(light);
-        lightGroup.add(light);
-      }
-    }
 
     details.add(lightGroup);
     parent.add(details);
@@ -2979,7 +2997,7 @@ export class HighwayWorld {
     }
 
     const ad = JAPANESE_BILLBOARD_ADS[index];
-    const variant = index % 4;
+    const variant = index % 7;
     const texture = makeCanvasTexture((ctx, canvas) => {
       ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = ad.bg;
@@ -3029,6 +3047,38 @@ export class HighwayWorld {
         for (let y = 0; y < canvas.height; y += 22) {
           ctx.fillRect(12, y + 6, 38, 10);
         }
+      } else if (variant === 4) {
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = ad.accent;
+        for (let y = 18; y < canvas.height; y += 26) {
+          for (let x = 20; x < canvas.width; x += 44) {
+            ctx.beginPath();
+            ctx.arc(x + (y % 52), y, 7, 0, TWO_PI);
+            ctx.fill();
+          }
+        }
+        ctx.restore();
+      } else if (variant === 5) {
+        ctx.save();
+        ctx.globalAlpha = 0.22;
+        ctx.strokeStyle = ad.fg;
+        ctx.lineWidth = 4;
+        for (let y = -20; y < canvas.height + 20; y += 24) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.bezierCurveTo(60, y + 18, 120, y - 18, canvas.width, y + 12);
+          ctx.stroke();
+        }
+        ctx.restore();
+      } else if (variant === 6) {
+        ctx.save();
+        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = ad.accent;
+        for (let x = 0; x < canvas.width; x += 38) {
+          ctx.fillRect(x, 0, 18, canvas.height);
+        }
+        ctx.restore();
       }
 
       ctx.fillStyle = ad.accent;

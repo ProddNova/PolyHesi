@@ -201,6 +201,11 @@ export class HUD {
       remodelMapDelete: document.querySelector("#remodelMapDeleteButton"),
       remodelMapSave: document.querySelector("#remodelMapSaveButton"),
       remodelMapReset: document.querySelector("#remodelMapResetButton"),
+      remodelMapSegmentPanel: document.querySelector("#remodelMapSegmentPanel"),
+      remodelMapSegmentIndex: document.querySelector("#remodelMapSegmentIndex"),
+      remodelMapLaneCount: document.querySelector("#remodelMapLaneCount"),
+      remodelMapLeftBarrier: document.querySelector("#remodelMapLeftBarrier"),
+      remodelMapRightBarrier: document.querySelector("#remodelMapRightBarrier"),
       remodelHoverLabel: document.querySelector("#remodelHoverLabel"),
       remodelReticle: document.querySelector("#remodelReticle"),
       interactionPrompt: document.querySelector("#interactionPrompt"),
@@ -284,6 +289,9 @@ export class HUD {
         this.setRemodelRouteProfile(profile);
       }
     });
+    this.nodes.remodelMapLaneCount?.addEventListener("change", () => this.applyRemodelMapSegmentPanel());
+    this.nodes.remodelMapLeftBarrier?.addEventListener("change", () => this.applyRemodelMapSegmentPanel());
+    this.nodes.remodelMapRightBarrier?.addEventListener("change", () => this.applyRemodelMapSegmentPanel());
     this.syncRemodelMapToolbar();
     this.populateRemodelWheelModels();
     for (const input of Object.values(this.nodes.remodelInputs)) {
@@ -1137,6 +1145,8 @@ export class HUD {
         index,
         laneCount: sourceSegments[index]?.laneCount === 2 ? 2 : 3,
         closedSide: sourceSegments[index]?.closedSide === -1 ? -1 : 1,
+        leftBarrier: sourceSegments[index]?.leftBarrier === "guardrail" ? "guardrail" : "barrier",
+        rightBarrier: sourceSegments[index]?.rightBarrier === "guardrail" ? "guardrail" : "barrier",
       })),
       branches: (profile.branches ?? []).map((branch) => ({
         id: branch.id,
@@ -1192,6 +1202,55 @@ export class HUD {
     if (this.nodes.remodelMapDelete) {
       this.nodes.remodelMapDelete.disabled = !this.remodelMapSelection || this.remodelMapSelection.type === "routeSegment";
     }
+    this.syncRemodelMapSegmentPanel();
+  }
+
+  getSelectedRemodelMapSegment() {
+    const selection = this.remodelMapSelection;
+    if (!this.remodelRouteProfile || selection?.type !== "routeSegment") {
+      return null;
+    }
+    return this.remodelRouteProfile.segments?.[selection.index] ?? null;
+  }
+
+  syncRemodelMapSegmentPanel() {
+    const segment = this.getSelectedRemodelMapSegment();
+    const active = Boolean(this.remodelMapMode && segment);
+    this.nodes.remodelMapSegmentPanel?.classList.toggle("is-active", active);
+    if (this.nodes.remodelMapSegmentPanel) {
+      this.nodes.remodelMapSegmentPanel.hidden = !active;
+    }
+    if (!active) {
+      return;
+    }
+    if (this.nodes.remodelMapSegmentIndex) {
+      this.nodes.remodelMapSegmentIndex.textContent = `#${(this.remodelMapSelection?.index ?? 0) + 1}`;
+    }
+    if (this.nodes.remodelMapLaneCount) {
+      this.nodes.remodelMapLaneCount.value = String(segment.laneCount === 2 ? 2 : 3);
+    }
+    if (this.nodes.remodelMapLeftBarrier) {
+      this.nodes.remodelMapLeftBarrier.value = segment.leftBarrier === "guardrail" ? "guardrail" : "barrier";
+    }
+    if (this.nodes.remodelMapRightBarrier) {
+      this.nodes.remodelMapRightBarrier.value = segment.rightBarrier === "guardrail" ? "guardrail" : "barrier";
+    }
+  }
+
+  applyRemodelMapSegmentPanel() {
+    const segment = this.getSelectedRemodelMapSegment();
+    if (!segment) {
+      return;
+    }
+    segment.laneCount = this.nodes.remodelMapLaneCount?.value === "2" ? 2 : 3;
+    if (segment.laneCount !== 2) {
+      segment.closedSide = 1;
+    }
+    segment.leftBarrier = this.nodes.remodelMapLeftBarrier?.value === "guardrail" ? "guardrail" : "barrier";
+    segment.rightBarrier = this.nodes.remodelMapRightBarrier?.value === "guardrail" ? "guardrail" : "barrier";
+    this.applyRemodelRouteProfile(undefined, { flash: false });
+    this.syncRemodelMapSegmentPanel();
+    this.flashNotice?.("Segment updated", `${segment.laneCount} lanes`);
   }
 
   getMapPointer(event) {
@@ -1256,7 +1315,8 @@ export class HUD {
       const segment = this.pickRemodelMapSegment(pointer.x, pointer.y, pointer.width, pointer.height, "route");
       if (segment) {
         this.remodelMapSelection = { type: "routeSegment", index: segment.index };
-        this.toggleSelectedRemodelMapSegmentLaneCount();
+        this.syncRemodelMapToolbar();
+        this.flashNotice?.("Lane segment", `segment #${segment.index + 1}`);
       }
     } else if (this.remodelMapTool === "route") {
       const segment = this.pickRemodelMapSegment(pointer.x, pointer.y, pointer.width, pointer.height, "route");
@@ -1265,7 +1325,15 @@ export class HUD {
         this.remodelRouteProfile.controlPoints.splice(segment.index + 1, 0, world);
         const laneCount = this.remodelRouteProfile.segments?.[segment.index]?.laneCount === 2 ? 2 : 3;
         const closedSide = this.remodelRouteProfile.segments?.[segment.index]?.closedSide === -1 ? -1 : 1;
-        this.remodelRouteProfile.segments?.splice(segment.index + 1, 0, { index: segment.index + 1, laneCount, closedSide });
+        const leftBarrier = this.remodelRouteProfile.segments?.[segment.index]?.leftBarrier === "guardrail" ? "guardrail" : "barrier";
+        const rightBarrier = this.remodelRouteProfile.segments?.[segment.index]?.rightBarrier === "guardrail" ? "guardrail" : "barrier";
+        this.remodelRouteProfile.segments?.splice(segment.index + 1, 0, {
+          index: segment.index + 1,
+          laneCount,
+          closedSide,
+          leftBarrier,
+          rightBarrier,
+        });
         this.remodelMapSelection = { type: "routePoint", index: segment.index + 1 };
         this.applyRemodelRouteProfile();
       }
@@ -1457,7 +1525,13 @@ export class HUD {
     } else {
       const world = this.mapToWorld(pointer.x, pointer.y, pointer.width, pointer.height);
       this.remodelRouteProfile.controlPoints.push(world);
-      this.remodelRouteProfile.segments?.push({ index: this.remodelRouteProfile.controlPoints.length - 1, laneCount: 3, closedSide: 1 });
+      this.remodelRouteProfile.segments?.push({
+        index: this.remodelRouteProfile.controlPoints.length - 1,
+        laneCount: 3,
+        closedSide: 1,
+        leftBarrier: "barrier",
+        rightBarrier: "barrier",
+      });
       this.remodelMapSelection = { type: "routePoint", index: this.remodelRouteProfile.controlPoints.length - 1 };
       this.applyRemodelRouteProfile();
     }
@@ -1484,6 +1558,7 @@ export class HUD {
       segment.closedSide = 1;
     }
     this.applyRemodelRouteProfile(undefined, { flash: false });
+    this.syncRemodelMapSegmentPanel();
     this.flashNotice?.(
       "Lane segment",
       segment.laneCount === 2
@@ -1943,6 +2018,17 @@ export class HUD {
       ctx.moveTo(mappedA.x, mappedA.y);
       ctx.lineTo(mappedB.x, mappedB.y);
       ctx.stroke();
+      if (segment?.leftBarrier === "guardrail" || segment?.rightBarrier === "guardrail") {
+        ctx.save();
+        ctx.strokeStyle = "rgba(245, 246, 238, 0.78)";
+        ctx.lineWidth = selectedSegment ? 2.4 : 1.4;
+        ctx.setLineDash([6, 5]);
+        ctx.beginPath();
+        ctx.moveTo(mappedA.x, mappedA.y);
+        ctx.lineTo(mappedB.x, mappedB.y);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
     if (points.length === 1) {
       const mapped = this.worldToMap(points[0], width, height);
@@ -2024,10 +2110,10 @@ export class HUD {
     ctx.fillRect(20, height - 76, Math.min(520, width - 40), 56);
     ctx.fillStyle = "rgba(242, 239, 228, 0.88)";
     ctx.font = "800 12px Inter, sans-serif";
-    ctx.fillText("Remodel map: Route/Junction/Tunnel show only their handles. Lanes toggles selected road segments.", 34, height - 48);
+    ctx.fillText("Remodel map: select Lanes and click a segment to edit road lanes and side barriers.", 34, height - 48);
     ctx.fillStyle = "rgba(226, 221, 206, 0.64)";
     ctx.font = "700 10px Inter, sans-serif";
-    ctx.fillText("Green = 3 lanes, amber = 2 lanes, blue = tunnel. Wheel zooms, right/middle or Shift-drag pans.", 34, height - 28);
+    ctx.fillText("Green = 3 lanes, amber = 2 lanes, dashed white = guard rail. Wheel zooms, right/middle or Shift-drag pans.", 34, height - 28);
     ctx.restore();
   }
 

@@ -313,6 +313,33 @@
           <button id="remodelMapSaveButton" type="button">Save</button>
           <button id="remodelMapResetButton" type="button">Reset</button>
         </div>
+        <aside id="remodelMapSegmentPanel" class="remodel-map-segment-panel" aria-label="Road segment settings" hidden>
+          <header>
+            <span>Segment</span>
+            <output id="remodelMapSegmentIndex">-</output>
+          </header>
+          <label>
+            <span>Road type</span>
+            <select id="remodelMapLaneCount">
+              <option value="3">3 lanes</option>
+              <option value="2">2 lanes</option>
+            </select>
+          </label>
+          <label>
+            <span>Left side</span>
+            <select id="remodelMapLeftBarrier">
+              <option value="barrier">Barrier</option>
+              <option value="guardrail">Guard rail</option>
+            </select>
+          </label>
+          <label>
+            <span>Right side</span>
+            <select id="remodelMapRightBarrier">
+              <option value="barrier">Barrier</option>
+              <option value="guardrail">Guard rail</option>
+            </select>
+          </label>
+        </aside>
         <canvas id="miniMapCanvas" width="960" height="960"></canvas>
       </section>
 
