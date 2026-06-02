@@ -38,6 +38,10 @@ const LANE_CHANGE_FINISH_EPSILON = 0.16;
 const LANE_CHANGE_RESPONSE_CAR = 0.58;
 const LANE_CHANGE_RESPONSE_TRUCK = 0.42;
 const JUNCTION_TAKE_CHANCE_PER_SECOND = 0.34;
+// How far ahead a car looks for its lane closing, so it merges early with a gap
+// instead of being snapped sideways into another car at the pinch point.
+const LANE_CLOSURE_LOOKAHEAD = 95;
+const MERGE_YIELD_FACTOR = 0.6;
 const TRAFFIC_INDICATOR_MATERIAL = new THREE.MeshBasicMaterial({ color: 0xffb21a });
 
 export class TrafficSystem {
@@ -104,6 +108,7 @@ export class TrafficSystem {
         car.signalHoldTimer = 0;
         car.signalDirection = 0;
         car.nearMissCooldown = 0;
+        car.mergeYield = false;
         car.laneChangeCooldown = rand(0, 3.5);
         car.junctionCooldown = rand(0.5, 5.5);
         car.overtakeArmed = false;
@@ -232,6 +237,7 @@ export class TrafficSystem {
     car.lateralOffset = this.getLaneOffset(car.s, car.lane);
     car.nearMissCooldown = 0.5;
     car.overtakeArmed = false;
+    car.mergeYield = false;
     car.targetLane = null;
     car.signalTimer = 0;
     car.signalHoldTimer = 0;
@@ -256,7 +262,13 @@ export class TrafficSystem {
       }
     }
 
-    car.speed = damp(car.speed, targetSpeed, blocker ? 4.2 : 0.9, dt);
+    // Yielding to slot into the open lane before a lane closure: ease off so a
+    // gap opens up instead of forcing a side-by-side merge into the pinch.
+    if (car.mergeYield) {
+      targetSpeed = Math.min(targetSpeed, car.cruiseSpeed * MERGE_YIELD_FACTOR);
+    }
+
+    car.speed = damp(car.speed, targetSpeed, blocker || car.mergeYield ? 4.2 : 0.9, dt);
   }
 
   updateRouteProgress(car, dt) {
@@ -281,6 +293,7 @@ export class TrafficSystem {
     car.s = this.normalizeS(car.s + car.speed * dt);
     car.route = { type: "main", s: car.s };
     this.ensureOpenLane(car);
+    this.handleUpcomingLaneClosure(car);
     if (car.junctionCooldown > 0 || car.targetLane !== null || Math.abs(this.getLaneOffset(car.s, car.lane) - car.lateralOffset) > 0.34) {
       return;
     }
@@ -307,6 +320,47 @@ export class TrafficSystem {
       .filter((item) => item.score >= 0)
       .sort((a, b) => b.score - a.score);
     return lanes[0]?.lane ?? Math.floor(LANES.length * 0.5);
+  }
+
+  // Anticipate a lane that closes ahead: start an early, gap-checked merge toward
+  // the nearest open lane. If no gap exists yet, flag the car to yield (slow down)
+  // so a gap opens, instead of waiting for ensureOpenLane to snap it across.
+  handleUpcomingLaneClosure(car) {
+    if (car.route?.type === "branch") {
+      car.mergeYield = false;
+      return;
+    }
+
+    const aheadS = this.normalizeS(car.s + LANE_CLOSURE_LOOKAHEAD);
+    if (this.isLaneOpen(aheadS, car.lane)) {
+      car.mergeYield = false;
+      return;
+    }
+
+    // Our lane disappears ahead. Pick the open lane nearest us and step toward it.
+    const openLanes = this.getOpenLanesAtS(aheadS);
+    if (!openLanes.length) {
+      return;
+    }
+    const target = openLanes
+      .slice()
+      .sort((a, b) => Math.abs(a - car.lane) - Math.abs(b - car.lane))[0];
+    if (target === car.lane) {
+      car.mergeYield = false;
+      return;
+    }
+
+    const nextLane = car.lane + Math.sign(target - car.lane);
+    if (car.targetLane === null && this.isLaneOpen(car.s, nextLane) && this.hasLaneOpening(car, nextLane)) {
+      car.targetLane = nextLane;
+      car.signalDirection = Math.sign(this.getLaneOffset(car.s, nextLane) - this.getLaneOffset(car.s, car.lane));
+      car.signalTimer = Math.min(LANE_CHANGE_SIGNAL_LEAD, 0.5);
+      car.laneChangeCooldown = rand(2.5, 4.5);
+      car.mergeYield = false;
+    } else if (car.targetLane === null) {
+      // No gap yet — ease off until one appears (zipper merge).
+      car.mergeYield = true;
+    }
   }
 
   tryLaneChange(car) {
@@ -567,6 +621,7 @@ export class TrafficSystem {
       junctionCooldown: rand(0.5, 5.5),
       indicators: visual.indicators,
       overtakeArmed: false,
+      mergeYield: false,
     };
   }
 

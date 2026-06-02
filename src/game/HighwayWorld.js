@@ -3,7 +3,7 @@ import { LANES, REMODEL_STORAGE_KEY, ROAD_WIDTH } from "./config.js";
 import { clamp, makeBox, makeCanvasTexture } from "./utils.js";
 
 const ROAD_HALF_WIDTH = ROAD_WIDTH * 0.5;
-const TWO_LANE_ROAD_HALF_WIDTH = 5.15;
+const TWO_LANE_LANE_WIDTH = 4.6;
 const LANE_TRANSITION_LENGTH = 150;
 const RAIL_OFFSET = ROAD_HALF_WIDTH + 1.15;
 const TWO_PI = Math.PI * 2;
@@ -402,6 +402,13 @@ export class HighwayWorld {
       }),
       roadEdge: new THREE.MeshBasicMaterial({ color: 0xc9a455 }),
       lane: new THREE.MeshBasicMaterial({ color: 0xd8d6c9 }),
+      roadblock: new THREE.MeshStandardMaterial({
+        color: 0xe8741e,
+        roughness: 0.72,
+        metalness: 0.04,
+        flatShading: true,
+      }),
+      roadblockStripe: new THREE.MeshBasicMaterial({ color: 0xf2efe6 }),
       rail: new THREE.MeshStandardMaterial({
         color: 0x8f9698,
         map: railTexture,
@@ -1411,6 +1418,7 @@ export class HighwayWorld {
       }
     }
     this.flushGuardrailBatch(highway, guardrails, GUARDRAIL_SEGMENT_LENGTH);
+    this.createLaneClosureRoadblocks(highway);
     this.createTunnelRuns(highway);
     this.createRoadsideInfrastructure(highway);
     this.createExpresswaySigns(highway);
@@ -4446,6 +4454,36 @@ export class HighwayWorld {
     return ranges.find((range) => s >= range.start && s < range.end) ?? ranges[ranges.length - 1];
   }
 
+  // Which lane indices stay open for a given segment.
+  // 3 lanes -> [0,1,2]. 2 lanes -> the closed extreme lane is dropped:
+  // closedSide > 0 closes the right lane (index 2), closedSide < 0 the left (index 0).
+  getOpenLaneIndexesForRange(range) {
+    if ((range?.laneCount === 2 ? 2 : 3) !== 2) {
+      return [0, 1, 2];
+    }
+    return (range.closedSide === -1 ? -1 : 1) > 0 ? [0, 1] : [1, 2];
+  }
+
+  // Centred lane offset for one lane index inside a segment. In a 2-lane segment
+  // the two surviving lanes are re-centred so each car sits in the middle of its
+  // half of the (narrower) carriageway; the dropped lane funnels onto the nearest
+  // open lane so a stray car heads there smoothly instead of into the barrier.
+  laneOffsetForRange(range, laneIndex) {
+    const idx = clamp(laneIndex, 0, LANES.length - 1);
+    if ((range?.laneCount === 2 ? 2 : 3) !== 2) {
+      return LANES[idx];
+    }
+    const openIdx = this.getOpenLaneIndexesForRange(range);
+    const divider = (LANES[openIdx[0]] + LANES[openIdx[1]]) * 0.5;
+    const half = TWO_LANE_LANE_WIDTH * 0.5;
+    const centred = {
+      [openIdx[0]]: divider - half,
+      [openIdx[1]]: divider + half,
+    };
+    // Open lane -> its centred offset; closed lane -> the adjacent open lane (idx 1).
+    return centred[idx] ?? centred[1];
+  }
+
   getLaneLayoutForRange(range) {
     const laneCount = range?.laneCount === 2 ? 2 : 3;
     if (laneCount !== 2) {
@@ -4460,14 +4498,16 @@ export class HighwayWorld {
     }
 
     const closedSide = range?.closedSide === -1 ? -1 : 1;
-    const center = closedSide > 0 ? -LANES[2] * 0.5 : LANES[2] * 0.5;
+    const openIdx = this.getOpenLaneIndexesForRange(range);
+    const divider = (LANES[openIdx[0]] + LANES[openIdx[1]]) * 0.5;
+    // Carriageway hugs the two centred lanes: half-width == one lane width.
     return {
       laneCount: 2,
       closedSide,
-      laneOffsets: closedSide > 0 ? [LANES[0], LANES[1]] : [LANES[1], LANES[2]],
-      markerOffsets: [center],
-      left: center - TWO_LANE_ROAD_HALF_WIDTH,
-      right: center + TWO_LANE_ROAD_HALF_WIDTH,
+      laneOffsets: openIdx.map((idx) => this.laneOffsetForRange(range, idx)),
+      markerOffsets: [divider],
+      left: divider - TWO_LANE_LANE_WIDTH,
+      right: divider + TWO_LANE_LANE_WIDTH,
     };
   }
 
@@ -4475,95 +4515,96 @@ export class HighwayWorld {
     return this.getLaneLayoutForRange(this.getRouteRangeAtDistance(distance));
   }
 
-  // Single source of truth for the carriageway shape AND which lanes are usable.
-  // The lane-count change at a segment seam is blended with a half-window on each
-  // side so the two segments meet at the exact midpoint: the road narrows once,
-  // monotonically, on one side only (no symmetric "funnel", no bulge at the seam).
-  getBlendedRoadLayout(distance) {
+  // Blend a per-segment scalar across lane-count seams. u = 0.5 exactly at the seam,
+  // decaying to 0 inside the segment, so adjacent segments meet at the midpoint and
+  // the value changes monotonically on one side only (no symmetric "funnel").
+  blendAcrossSeams(distance, valueForRange) {
     const ranges = this.routeSegmentRanges ?? [];
     const current = this.getRouteRangeAtDistance(distance);
     if (!current || !ranges.length || !Number.isFinite(this.trackLength) || this.trackLength <= 0) {
-      return { left: -ROAD_HALF_WIDTH, right: ROAD_HALF_WIDTH, openOffsets: LANES.slice() };
+      return valueForRange(null);
     }
-
     const count = ranges.length;
     const s = ((distance % this.trackLength) + this.trackLength) % this.trackLength;
-    const layout = this.getLaneLayoutForRange(current);
-    let left = layout.left;
-    let right = layout.right;
-
+    let value = valueForRange(current);
     const previous = ranges[(current.index - 1 + count) % count];
     const next = ranges[(current.index + 1) % count];
     const local = s - current.start;
     const toEnd = current.end - s;
 
-    // Entry seam (shared with the previous segment).
     if (previous && previous.laneCount !== current.laneCount) {
       const win = Math.min(LANE_TRANSITION_LENGTH, current.length * 0.5, previous.length * 0.5);
       if (win > 0 && local < win) {
-        const previousLayout = this.getLaneLayoutForRange(previous);
-        // u = 0.5 at the seam (local = 0) -> 0 once fully inside this segment.
         const u = 0.5 * (1 - smoothstep(0, win, local));
-        left = THREE.MathUtils.lerp(layout.left, previousLayout.left, u);
-        right = THREE.MathUtils.lerp(layout.right, previousLayout.right, u);
+        value = THREE.MathUtils.lerp(value, valueForRange(previous), u);
       }
     }
-
-    // Exit seam (shared with the next segment).
     if (next && next.laneCount !== current.laneCount) {
       const win = Math.min(LANE_TRANSITION_LENGTH, current.length * 0.5, next.length * 0.5);
       if (win > 0 && toEnd < win) {
-        const nextLayout = this.getLaneLayoutForRange(next);
         const u = 0.5 * (1 - smoothstep(0, win, toEnd));
-        left = THREE.MathUtils.lerp(layout.left, nextLayout.left, u);
-        right = THREE.MathUtils.lerp(layout.right, nextLayout.right, u);
+        value = THREE.MathUtils.lerp(value, valueForRange(next), u);
       }
     }
+    return value;
+  }
 
-    // A lane is usable only while the (blended) carriageway still has room for it.
-    // This ties traffic merging to the visible asphalt, so cars vacate the closing
-    // lane exactly as the road pinches in instead of running 3-wide on a 2-lane road.
-    const laneHalf = (LANES[LANES.length - 1] - LANES[Math.floor(LANES.length * 0.5)]) * 0.5;
-    const margin = laneHalf + 0.55;
-    let openOffsets = LANES.filter((offset) => offset - margin >= left - 0.01 && offset + margin <= right + 0.01);
-    if (!openOffsets.length) {
-      openOffsets = layout.laneOffsets.slice();
+  // Single source of truth for the carriageway shape. The lane-count change at a
+  // segment seam is blended with a half-window on each side: the road narrows once,
+  // monotonically, on one side only (no symmetric "funnel", no bulge at the seam).
+  getBlendedRoadLayout(distance) {
+    const current = this.getRouteRangeAtDistance(distance);
+    if (!current) {
+      return { left: -ROAD_HALF_WIDTH, right: ROAD_HALF_WIDTH };
     }
+    const left = this.blendAcrossSeams(distance, (range) =>
+      range ? this.getLaneLayoutForRange(range).left : -ROAD_HALF_WIDTH);
+    const right = this.blendAcrossSeams(distance, (range) =>
+      range ? this.getLaneLayoutForRange(range).right : ROAD_HALF_WIDTH);
+    return { left, right };
+  }
 
-    return { left, right, openOffsets };
+  // Blended, centred lateral offset for a lane index, smooth across transitions.
+  getLaneCenterOffset(distance, laneIndex) {
+    return this.blendAcrossSeams(distance, (range) =>
+      range
+        ? this.laneOffsetForRange(range, laneIndex)
+        : LANES[clamp(laneIndex, 0, LANES.length - 1)]);
   }
 
   getLaneOffsetAtDistance(distance, laneIndex) {
-    const openOffsets = this.getBlendedRoadLayout(distance).openOffsets;
-    const fallback = LANES[clamp(laneIndex, 0, LANES.length - 1)];
-    return openOffsets.includes(fallback)
-      ? fallback
-      : this.getNearestOpenLaneOffset(distance, fallback);
+    if (this.isLaneOpenAtDistance(distance, laneIndex)) {
+      return this.getLaneCenterOffset(distance, laneIndex);
+    }
+    return this.getNearestOpenLaneOffset(distance, this.getLaneCenterOffset(distance, laneIndex));
   }
 
   getNearestOpenLaneIndex(distance, lateralOffset = 0) {
-    const nearestOffset = this.getNearestOpenLaneOffset(distance, lateralOffset);
-    return LANES.findIndex((offset) => offset === nearestOffset);
+    const openLanes = this.getOpenLaneIndexesAtDistance(distance);
+    return (
+      openLanes
+        .slice()
+        .sort(
+          (a, b) =>
+            Math.abs(this.getLaneCenterOffset(distance, a) - lateralOffset) -
+            Math.abs(this.getLaneCenterOffset(distance, b) - lateralOffset),
+        )[0] ?? 1
+    );
   }
 
   getNearestOpenLaneOffset(distance, lateralOffset = 0) {
-    const openOffsets = this.getBlendedRoadLayout(distance).openOffsets;
-    return openOffsets
-      .slice()
-      .sort((a, b) => Math.abs(a - lateralOffset) - Math.abs(b - lateralOffset))[0] ?? LANES[1];
+    return this.getLaneCenterOffset(distance, this.getNearestOpenLaneIndex(distance, lateralOffset));
   }
 
   isLaneOpenAtDistance(distance, laneIndex) {
-    const openOffsets = this.getBlendedRoadLayout(distance).openOffsets;
-    return openOffsets.includes(LANES[clamp(laneIndex, 0, LANES.length - 1)]);
+    const range = this.getRouteRangeAtDistance(distance);
+    return this.getOpenLaneIndexesForRange(range).includes(
+      clamp(laneIndex, 0, LANES.length - 1),
+    );
   }
 
   getOpenLaneIndexesAtDistance(distance) {
-    const openOffsets = this.getBlendedRoadLayout(distance).openOffsets;
-    return LANES
-      .map((offset, lane) => ({ offset, lane }))
-      .filter((item) => openOffsets.includes(item.offset))
-      .map((item) => item.lane);
+    return this.getOpenLaneIndexesForRange(this.getRouteRangeAtDistance(distance));
   }
 
   getRoadLateralBoundsAtDistance(distance, extra = 0) {
@@ -4572,6 +4613,65 @@ export class HighwayWorld {
       left: layout.left - extra,
       right: layout.right + extra,
     };
+  }
+
+  // Orange striped barriers that physically seal the closing lane at every
+  // 3<->2 lane-count change. They sit just inside the (blended) carriageway edge
+  // on the side that closes, so they trace the diagonal taper and guide traffic
+  // out of the lane that disappears (entry) or appears (exit).
+  createLaneClosureRoadblocks(parent) {
+    const ranges = this.routeSegmentRanges ?? [];
+    if (ranges.length < 2 || !Number.isFinite(this.trackLength) || this.trackLength <= 0) {
+      return;
+    }
+
+    const STEP = 4.2;
+    const BLOCK_W = 0.72;
+    const BLOCK_H = 0.66;
+    const BLOCK_D = 1.0;
+    const baseY = ROAD_SURFACE_ELEVATION;
+    const blocks = [];
+    const stripes = [];
+
+    for (let i = 0; i < ranges.length; i += 1) {
+      const cur = ranges[i];
+      const nxt = ranges[(i + 1) % ranges.length];
+      if (cur.laneCount === nxt.laneCount) {
+        continue;
+      }
+
+      const seam = cur.end;
+      const twoLane = cur.laneCount === 2 ? cur : nxt;
+      const closedSide = twoLane.closedSide === -1 ? -1 : 1; // +1 -> right lane closes
+      const win = Math.min(LANE_TRANSITION_LENGTH, cur.length * 0.5, nxt.length * 0.5);
+      if (win <= 0) {
+        continue;
+      }
+
+      for (let offsetS = -win; offsetS <= win + 0.001; offsetS += STEP) {
+        const s = (((seam + offsetS) % this.trackLength) + this.trackLength) % this.trackLength;
+        const bounds = this.getRoadLateralBoundsAtDistance(s);
+        const edge = closedSide > 0 ? bounds.right : bounds.left;
+        // Only barrier the pinching part: skip the full-width 3-lane edge so we
+        // don't line the whole carriageway, just the diagonal taper + a short seal.
+        if (Math.abs(edge) > ROAD_HALF_WIDTH - 0.4) {
+          continue;
+        }
+        const lateral = edge - closedSide * (BLOCK_W * 0.5 + 0.12);
+        if (this.isJunctionOpeningForOffset?.(s, lateral)) {
+          continue;
+        }
+        const frame = this.getFrameAtDistance(s);
+        blocks.push({ position: this.offsetPoint(frame, lateral, baseY + BLOCK_H * 0.5), yaw: frame.yaw, s });
+        stripes.push({ position: this.offsetPoint(frame, lateral, baseY + BLOCK_H + 0.02), yaw: frame.yaw, s });
+      }
+    }
+
+    if (!blocks.length) {
+      return;
+    }
+    parent.add(this.createChunkedInstancedBoxes(blocks, BLOCK_W, BLOCK_H, BLOCK_D, this.materials.roadblock, true));
+    parent.add(this.createChunkedInstancedBoxes(stripes, BLOCK_W + 0.02, 0.12, BLOCK_D + 0.02, this.materials.roadblockStripe, false));
   }
 
   getLaneCountAtDistance(distance, options = {}) {
