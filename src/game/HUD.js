@@ -134,6 +134,8 @@ export class HUD {
       playerSettingsClose: document.querySelector("#playerSettingsCloseButton"),
       carPreset: document.querySelector("#carPreset"),
       carPresetOut: document.querySelector("#carPresetOut"),
+      porschePlayerModel: document.querySelector("#porschePlayerModel"),
+      porschePlayerModelOut: document.querySelector("#porschePlayerModelOut"),
       trafficEnabled: document.querySelector("#trafficEnabled"),
       trafficEnabledOut: document.querySelector("#trafficEnabledOut"),
       dayNightCycle: document.querySelector("#dayNightCycle"),
@@ -376,6 +378,7 @@ export class HUD {
     }
 
     this.bindBooleanSetting("trafficEnabled");
+    this.bindBooleanSetting("porschePlayerModel");
     this.bindBooleanSetting("dayNightCycle");
     this.bindBooleanSetting("noClip");
     this.bindBooleanSetting("remodelMode");
@@ -476,6 +479,7 @@ export class HUD {
 
     if (this.nodes.trafficEnabled) {
       this.syncBooleanSetting("trafficEnabled");
+      this.syncBooleanSetting("porschePlayerModel");
       this.syncBooleanSetting("dayNightCycle");
       this.syncBooleanSetting("noClip");
       this.syncBooleanSetting("remodelMode");

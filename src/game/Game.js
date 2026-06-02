@@ -88,6 +88,7 @@ export class Game {
       this.settings.noClip = false;
       this.settings.remodelMode = false;
       this.settings.hitboxMode = false;
+      this.settings.porschePlayerModel = false;
     }
     this.clock = new THREE.Clock();
     this.score = 0;
@@ -175,7 +176,7 @@ export class Game {
     this.input = new InputController(this.renderer.domElement);
     this.world = new HighwayWorld(this.scene, this.settings);
     this.player = new PlayerCar(this.scene, this.world.getStartPose());
-    this.player.setCarPreset(this.getActiveVehiclePreset());
+    this.applyActivePlayerCarPreset();
     this.garagePsxRemodelTarget = null;
     this.createGaragePsxRemodelTarget();
     this.createTrafficPsxRemodelTargets();
@@ -294,6 +295,16 @@ export class Game {
     this.renderer.compileAsync(this.scene, this.camera).catch((error) => {
       console.warn("Render warm-up failed.", error);
     });
+  }
+
+  getPlayerVisualOptions() {
+    return {
+      usePorscheTestModel: Boolean(this.settings.porschePlayerModel && this.isAdmin),
+    };
+  }
+
+  applyActivePlayerCarPreset() {
+    this.player?.setCarPreset(this.getActiveVehiclePreset(), this.getPlayerVisualOptions());
   }
 
   tick() {
@@ -518,7 +529,7 @@ export class Game {
     if (this.isGaragePsxCarEditorActive()) {
       this.applyRemodelPsxPreviewCar();
     } else {
-      this.player.setCarPreset(this.getActiveVehiclePreset());
+      this.applyActivePlayerCarPreset();
     }
 
     if (this.marketOpen) {
@@ -1118,7 +1129,7 @@ export class Game {
     this.vehicleRigOverrides[this.selectedRemodelPsxCarId] = sanitizeVehicleRigTune(state);
     if (this.getActiveVehicle()?.carId === this.selectedRemodelPsxCarId) {
       this.syncActiveVehicleToSettings();
-      this.player.setCarPreset(this.getActiveVehiclePreset());
+      this.applyActivePlayerCarPreset();
     } else if (this.isGaragePsxCarEditorActive()) {
       this.applyRemodelPsxPreviewCar();
     }
@@ -1472,7 +1483,7 @@ export class Game {
 
     this.activeVehicleId = vehicle.id;
     this.syncActiveVehicleToSettings();
-    this.player.setCarPreset(this.getActiveVehiclePreset());
+    this.applyActivePlayerCarPreset();
     this.syncRemodelPsxRigToActiveCar();
     this.hud.syncSettings?.();
     this.markProgressDirty({ immediate: true });
@@ -2152,7 +2163,7 @@ export class Game {
         }
       }
 
-      for (const key of ["trafficEnabled", "dayNightCycle", "noClip", "hitboxMode", "remodelMode", "remodelSnapToGrid", "ultraGraphics", "fullscreenHud"]) {
+      for (const key of ["trafficEnabled", "dayNightCycle", "noClip", "hitboxMode", "remodelMode", "remodelSnapToGrid", "ultraGraphics", "fullscreenHud", "porschePlayerModel"]) {
         if (typeof saved[key] === "boolean") {
           settings[key] = saved[key];
         }
@@ -2188,6 +2199,7 @@ export class Game {
       remodelSnapToGrid: this.settings.remodelSnapToGrid,
       ultraGraphics: this.settings.ultraGraphics,
       fullscreenHud: this.settings.fullscreenHud,
+      porschePlayerModel: this.settings.porschePlayerModel,
     };
     for (const def of SETTING_DEFS) {
       payload[def.key] = this.settings[def.key];
@@ -2221,7 +2233,7 @@ export class Game {
     }
     this.applyInstalledUpgrades();
     this.syncActiveVehicleToSettings();
-    this.player.setCarPreset(this.getActiveVehiclePreset());
+    this.applyActivePlayerCarPreset();
     this.hud.syncSettings?.();
     this.handleSettingsChanged();
     this.hud.flashNotice("Dev reset", "defaults restored");
@@ -2308,6 +2320,13 @@ export class Game {
       this.hud.setFullscreenHud?.(this.settings.fullscreenHud);
       this.hud.flashNotice("Fullscreen HUD", this.settings.fullscreenHud ? "HUD hidden" : "HUD visible");
     }
+    if (changedKey === "porschePlayerModel") {
+      if (!this.isAdmin) {
+        this.settings.porschePlayerModel = false;
+      }
+      this.applyActivePlayerCarPreset();
+      this.hud.flashNotice("Porsche test", this.settings.porschePlayerModel ? "model enabled" : "model disabled");
+    }
     if (changedKey === "cameraFov") {
       this.camera.fov = this.settings.cameraFov;
       this.camera.updateProjectionMatrix();
@@ -2343,7 +2362,7 @@ export class Game {
     } else {
       this.hud?.hideRemodelEditor();
       this.hud?.setRemodelPsxRigVisible(false);
-      this.player.setCarPreset(this.getActiveVehiclePreset());
+      this.applyActivePlayerCarPreset();
     }
     this.hud?.syncBooleanSetting?.("remodelMode");
   }
@@ -2362,7 +2381,7 @@ export class Game {
     if (!target || !state) {
       this.hud?.hideRemodelEditor();
       this.hud?.setRemodelPsxRigVisible(false);
-      this.player.setCarPreset(this.getActiveVehiclePreset());
+      this.applyActivePlayerCarPreset();
       return;
     }
     this.updateRemodelPsxRigVisibility(target);
@@ -2598,7 +2617,7 @@ export class Game {
     this.remodelOverlay.clearSelection();
     this.hud.hideRemodelEditor();
     this.hud.setRemodelPsxRigVisible(false);
-    this.player.setCarPreset(this.getActiveVehiclePreset());
+    this.applyActivePlayerCarPreset();
   }
 
   copyRemodelTarget() {

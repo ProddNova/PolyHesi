@@ -33,6 +33,7 @@ export const DEFAULT_SETTINGS = {
   graphicsQuality: 1,
   ultraGraphics: false,
   fullscreenHud: false,
+  porschePlayerModel: false,
   handling: 1.35,
   brakePower: 1.65,
   powerMultiplier: 0.8,

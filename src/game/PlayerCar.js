@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { getCarPreset, PLAYER_START } from "./config.js";
 import { angleDelta, clamp, damp, dampAngle, makeBox } from "./utils.js";
-import { createPlayerCarAsset } from "./PlayerCarAsset.js";
+import { createPlayerCarAsset, createPorscheTestPlayerCarAsset } from "./PlayerCarAsset.js";
 
 function shapeAxis(value, softness = 0.48) {
   const magnitude = Math.abs(value);
@@ -33,6 +33,7 @@ export class PlayerCar {
     this.activePresetId = null;
     this.activePresetKey = "";
     this.activePreset = getCarPreset();
+    this.usePorscheTestModel = false;
     this.graphicsQuality = 1;
     this.ultraGraphics = false;
     this.position = new THREE.Vector3(0, 0, 0);
@@ -45,10 +46,28 @@ export class PlayerCar {
     this.reset(startPose);
   }
 
-  buildMesh(preset = this.activePreset) {
+  buildMesh(preset = this.activePreset, options = {}) {
+    const usePorscheTestModel = Boolean(options.usePorscheTestModel);
     this.group.clear();
     this.activePreset = preset;
     this.activePresetId = preset.id;
+    this.usePorscheTestModel = usePorscheTestModel;
+
+    if (usePorscheTestModel) {
+      const testAsset = createPorscheTestPlayerCarAsset(preset, () => {
+        if (!this.usePorscheTestModel) {
+          return;
+        }
+        this.buildMesh(this.activePreset, { usePorscheTestModel: true });
+        this.applyTransform(this.steerInput, 1 / 60);
+      });
+      if (testAsset) {
+        this.group.add(testAsset);
+        this.addHeadLight(preset.bodyLength);
+        this.applyGraphicsQualityToLights();
+        return;
+      }
+    }
 
     try {
       this.group.add(createPlayerCarAsset(preset));
@@ -182,8 +201,9 @@ export class PlayerCar {
     });
   }
 
-  setCarPreset(car) {
+  setCarPreset(car, options = {}) {
     const preset = typeof car === "string" || !car ? getCarPreset(car) : car;
+    const usePorscheTestModel = Boolean(options.usePorscheTestModel);
     const rig = preset.vehicleRig ?? {};
     const rigKey = [
       rig.rideHeight,
@@ -200,13 +220,13 @@ export class PlayerCar {
       rig.bodyOffsetY,
       rig.bodyOffsetZ,
     ].join(":");
-    const key = `${preset.id}:${preset.color}:${preset.secondaryColor}:${rigKey}`;
+    const key = `${preset.id}:${preset.color}:${preset.secondaryColor}:${rigKey}:${usePorscheTestModel ? "porsche-test" : "psx"}`;
     if (key === this.activePresetKey) {
       return;
     }
 
     this.activePresetKey = key;
-    this.buildMesh(preset);
+    this.buildMesh(preset, { usePorscheTestModel });
   }
 
   reset(startPose = this.startPose) {
@@ -241,7 +261,9 @@ export class PlayerCar {
   }
 
   update(dt, input, settings, crashed) {
-    this.setCarPreset(settings.activeVehiclePreset ?? settings.carPreset);
+    this.setCarPreset(settings.activeVehiclePreset ?? settings.carPreset, {
+      usePorscheTestModel: settings.porschePlayerModel,
+    });
     const preset = this.activePreset;
     const maxSpeed = (settings.maxSpeedKmh * preset.maxSpeedScale) / 3.6;
     const maxReverseSpeed = maxSpeed * 0.18;

@@ -1,6 +1,8 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 
+import porscheTestModelUrl from "../../added/porsche_911_carrera_993_gt2psx_style.glb?url";
 import headlightTextureUrl from "../../PSXStyleCars-DevEdition/body/JapanSportCoupe/MaterialsAndTextures/texture1.png?url";
 import taillightTextureUrl from "../../PSXStyleCars-DevEdition/body/JapanSportCoupe/MaterialsAndTextures/texture2.png?url";
 
@@ -22,13 +24,17 @@ const GROUND_CLEARANCE = 0.045;
 const CHASSIS_DROP_RATIO = 0.48;
 const FRONT_WHEEL_FROM_FRONT = 0.19;
 const REAR_WHEEL_FROM_REAR = 0.23;
+const PORSCHE_TEST_VISUAL_SCALE = 1.06;
 
 const objLoader = new OBJLoader();
+const gltfLoader = new GLTFLoader();
 const textureLoader = new THREE.TextureLoader();
 const bodyTemplates = new Map();
 const wheelTemplates = new Map();
 const trafficCarTemplates = new Map();
 const textureCache = new Map();
+let porscheTestTemplate = null;
+let porscheTestLoadPromise = null;
 const tireGeometry = new THREE.CylinderGeometry(1, 1, 1, 14);
 tireGeometry.rotateZ(Math.PI / 2);
 const rimGeometry = new THREE.CylinderGeometry(1, 1, 1, 10);
@@ -106,6 +112,72 @@ function prepareTemplate(object) {
       }
     }
   });
+}
+
+function prepareGltfTemplate(object) {
+  object.traverse((child) => {
+    if (!child.isMesh) {
+      return;
+    }
+
+    child.geometry.computeVertexNormals();
+    child.geometry.normalizeNormals();
+    child.castShadow = true;
+    child.receiveShadow = true;
+
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) {
+      if (!material) {
+        continue;
+      }
+      material.side = THREE.DoubleSide;
+      material.flatShading = true;
+      material.needsUpdate = true;
+      for (const texture of [material.map, material.emissiveMap, material.roughnessMap, material.metalnessMap]) {
+        if (!texture) {
+          continue;
+        }
+        texture.colorSpace = texture === material.map || texture === material.emissiveMap
+          ? THREE.SRGBColorSpace
+          : texture.colorSpace;
+        texture.magFilter = THREE.NearestFilter;
+        texture.minFilter = THREE.NearestMipmapNearestFilter;
+        texture.anisotropy = 1;
+        texture.needsUpdate = true;
+      }
+    }
+  });
+}
+
+function loadPorscheTestTemplate(onReady) {
+  if (porscheTestTemplate) {
+    onReady?.();
+    return Promise.resolve(porscheTestTemplate);
+  }
+
+  if (!porscheTestLoadPromise) {
+    porscheTestLoadPromise = new Promise((resolve, reject) => {
+      gltfLoader.load(
+        porscheTestModelUrl,
+        (gltf) => {
+          porscheTestTemplate = gltf.scene;
+          porscheTestTemplate.name = "Porsche911Carrera993GT2TestTemplate";
+          prepareGltfTemplate(porscheTestTemplate);
+          porscheTestTemplate.userData.nativeBounds = measureObject(porscheTestTemplate);
+          resolve(porscheTestTemplate);
+        },
+        undefined,
+        reject,
+      );
+    }).catch((error) => {
+      porscheTestLoadPromise = null;
+      console.warn("Unable to load Porsche test player model.", error);
+      throw error;
+    });
+  }
+
+  porscheTestLoadPromise.then(() => onReady?.()).catch(() => {});
+  return porscheTestLoadPromise;
 }
 
 function getWheelTemplate(preset) {
@@ -411,6 +483,31 @@ export function createPlayerCarAsset(preset) {
 
   root.userData.assetSource = `PSXStyleCars-DevEdition/${modelId}`;
   root.userData.bodyGroundClearance = bodyGroundY;
+  return root;
+}
+
+export function createPorscheTestPlayerCarAsset(preset, onReady) {
+  if (!porscheTestTemplate) {
+    loadPorscheTestTemplate(onReady);
+    return null;
+  }
+
+  const bounds = porscheTestTemplate.userData.nativeBounds;
+  const scale = (preset.bodyLength * PORSCHE_TEST_VISUAL_SCALE) / bounds.length;
+  const root = new THREE.Group();
+  const car = porscheTestTemplate.clone(true);
+
+  car.scale.setScalar(scale);
+  car.position.set(
+    -bounds.center.x * scale,
+    GROUND_CLEARANCE - bounds.min.y * scale,
+    -bounds.center.z * scale,
+  );
+  root.rotation.y = Math.PI;
+  root.name = "Porsche911Carrera993GT2Test";
+  root.add(car);
+  root.userData.assetSource = "added/porsche_911_carrera_993_gt2psx_style.glb";
+  root.userData.bodyGroundClearance = GROUND_CLEARANCE;
   return root;
 }
 
