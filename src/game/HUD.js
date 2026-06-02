@@ -28,6 +28,11 @@ function formatColorSwatch(color) {
   return `#${Number(color ?? 0).toString(16).padStart(6, "0")}`;
 }
 
+function normalizeRemodelBarrierType(value) {
+  const key = String(value ?? "").toLowerCase().replace(/[\s_-]+/g, "");
+  return key === "guardrail" ? "guardrail" : "barrier";
+}
+
 function formatPartEffects(part) {
   return Object.entries(part.effects ?? {})
     .filter(([_key, value]) => Number(value) > 0)
@@ -1145,8 +1150,8 @@ export class HUD {
         index,
         laneCount: sourceSegments[index]?.laneCount === 2 ? 2 : 3,
         closedSide: sourceSegments[index]?.closedSide === -1 ? -1 : 1,
-        leftBarrier: sourceSegments[index]?.leftBarrier === "guardrail" ? "guardrail" : "barrier",
-        rightBarrier: sourceSegments[index]?.rightBarrier === "guardrail" ? "guardrail" : "barrier",
+        leftBarrier: normalizeRemodelBarrierType(sourceSegments[index]?.leftBarrier),
+        rightBarrier: normalizeRemodelBarrierType(sourceSegments[index]?.rightBarrier),
       })),
       branches: (profile.branches ?? []).map((branch) => ({
         id: branch.id,
@@ -1230,10 +1235,10 @@ export class HUD {
       this.nodes.remodelMapLaneCount.value = String(segment.laneCount === 2 ? 2 : 3);
     }
     if (this.nodes.remodelMapLeftBarrier) {
-      this.nodes.remodelMapLeftBarrier.value = segment.leftBarrier === "guardrail" ? "guardrail" : "barrier";
+      this.nodes.remodelMapLeftBarrier.value = normalizeRemodelBarrierType(segment.leftBarrier);
     }
     if (this.nodes.remodelMapRightBarrier) {
-      this.nodes.remodelMapRightBarrier.value = segment.rightBarrier === "guardrail" ? "guardrail" : "barrier";
+      this.nodes.remodelMapRightBarrier.value = normalizeRemodelBarrierType(segment.rightBarrier);
     }
   }
 
@@ -1246,8 +1251,8 @@ export class HUD {
     if (segment.laneCount !== 2) {
       segment.closedSide = 1;
     }
-    segment.leftBarrier = this.nodes.remodelMapLeftBarrier?.value === "guardrail" ? "guardrail" : "barrier";
-    segment.rightBarrier = this.nodes.remodelMapRightBarrier?.value === "guardrail" ? "guardrail" : "barrier";
+    segment.leftBarrier = normalizeRemodelBarrierType(this.nodes.remodelMapLeftBarrier?.value);
+    segment.rightBarrier = normalizeRemodelBarrierType(this.nodes.remodelMapRightBarrier?.value);
     this.applyRemodelRouteProfile(undefined, { flash: false });
     this.syncRemodelMapSegmentPanel();
     this.flashNotice?.("Segment updated", `${segment.laneCount} lanes`);
@@ -1325,8 +1330,8 @@ export class HUD {
         this.remodelRouteProfile.controlPoints.splice(segment.index + 1, 0, world);
         const laneCount = this.remodelRouteProfile.segments?.[segment.index]?.laneCount === 2 ? 2 : 3;
         const closedSide = this.remodelRouteProfile.segments?.[segment.index]?.closedSide === -1 ? -1 : 1;
-        const leftBarrier = this.remodelRouteProfile.segments?.[segment.index]?.leftBarrier === "guardrail" ? "guardrail" : "barrier";
-        const rightBarrier = this.remodelRouteProfile.segments?.[segment.index]?.rightBarrier === "guardrail" ? "guardrail" : "barrier";
+        const leftBarrier = normalizeRemodelBarrierType(this.remodelRouteProfile.segments?.[segment.index]?.leftBarrier);
+        const rightBarrier = normalizeRemodelBarrierType(this.remodelRouteProfile.segments?.[segment.index]?.rightBarrier);
         this.remodelRouteProfile.segments?.splice(segment.index + 1, 0, {
           index: segment.index + 1,
           laneCount,
@@ -2018,7 +2023,7 @@ export class HUD {
       ctx.moveTo(mappedA.x, mappedA.y);
       ctx.lineTo(mappedB.x, mappedB.y);
       ctx.stroke();
-      if (segment?.leftBarrier === "guardrail" || segment?.rightBarrier === "guardrail") {
+      if (normalizeRemodelBarrierType(segment?.leftBarrier) === "guardrail" || normalizeRemodelBarrierType(segment?.rightBarrier) === "guardrail") {
         ctx.save();
         ctx.strokeStyle = "rgba(245, 246, 238, 0.78)";
         ctx.lineWidth = selectedSegment ? 2.4 : 1.4;

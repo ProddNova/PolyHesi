@@ -41,8 +41,12 @@ const SHUTOKU_BARRIER_MODEL = {
   base: { width: 0.82, height: 0.55, y: 0.275 },
   wall: { width: 0.46, height: 2.34, y: 1.72 },
 };
-const ROAD_BARRIER_TYPES = new Set(["barrier", "guardrail"]);
 const HITBOX_TEMPLATES = [];
+
+function normalizeRoadBarrierType(value) {
+  const key = String(value ?? "").toLowerCase().replace(/[\s_-]+/g, "");
+  return key === "guardrail" ? "guardrail" : "barrier";
+}
 
 const BUILDING_TYPES = [
   { id: "slab", width: 24, depth: 16, height: 42, color: 0x89908b, roof: 0x30343a, floors: 10, columns: 5 },
@@ -911,8 +915,8 @@ export class HighwayWorld {
   sanitizeRouteSegment(segment, index = 0) {
     const laneCount = Number(segment?.laneCount) === 2 ? 2 : 3;
     const closedSide = Number(segment?.closedSide) === -1 ? -1 : 1;
-    const leftBarrier = ROAD_BARRIER_TYPES.has(segment?.leftBarrier) ? segment.leftBarrier : "barrier";
-    const rightBarrier = ROAD_BARRIER_TYPES.has(segment?.rightBarrier) ? segment.rightBarrier : "barrier";
+    const leftBarrier = normalizeRoadBarrierType(segment?.leftBarrier);
+    const rightBarrier = normalizeRoadBarrierType(segment?.rightBarrier);
     return {
       index,
       laneCount,
@@ -974,8 +978,8 @@ export class HighwayWorld {
         index,
         laneCount: segment.laneCount === 2 ? 2 : 3,
         closedSide: segment.closedSide === -1 ? -1 : 1,
-        leftBarrier: ROAD_BARRIER_TYPES.has(segment.leftBarrier) ? segment.leftBarrier : "barrier",
-        rightBarrier: ROAD_BARRIER_TYPES.has(segment.rightBarrier) ? segment.rightBarrier : "barrier",
+        leftBarrier: normalizeRoadBarrierType(segment.leftBarrier),
+        rightBarrier: normalizeRoadBarrierType(segment.rightBarrier),
       })),
       branches: this.routeProfile.branches.map((branch) => ({
         id: branch.id,
@@ -1115,12 +1119,8 @@ export class HighwayWorld {
         length: scaledLength,
         laneCount: this.routeProfile.segments?.[index]?.laneCount === 2 ? 2 : 3,
         closedSide: this.routeProfile.segments?.[index]?.closedSide === -1 ? -1 : 1,
-        leftBarrier: ROAD_BARRIER_TYPES.has(this.routeProfile.segments?.[index]?.leftBarrier)
-          ? this.routeProfile.segments[index].leftBarrier
-          : "barrier",
-        rightBarrier: ROAD_BARRIER_TYPES.has(this.routeProfile.segments?.[index]?.rightBarrier)
-          ? this.routeProfile.segments[index].rightBarrier
-          : "barrier",
+        leftBarrier: normalizeRoadBarrierType(this.routeProfile.segments?.[index]?.leftBarrier),
+        rightBarrier: normalizeRoadBarrierType(this.routeProfile.segments?.[index]?.rightBarrier),
       };
     });
   }
@@ -1876,15 +1876,14 @@ export class HighwayWorld {
   }
 
   shouldUseShutokuBarrier(s, side) {
+    return this.getRoadsideBarrierType(s, side) === "barrier";
+  }
+
+  getRoadsideBarrierType(s, side) {
     const range = this.getRouteRangeAtDistance(s);
-    const type = side < 0 ? range?.leftBarrier : range?.rightBarrier;
-    if (type === "guardrail") {
-      return false;
-    }
-    if (type === "barrier") {
-      return true;
-    }
-    return !this.isTunnelDistance(s, TUNNEL_MODULE_LENGTH * 0.75);
+    return side < 0
+      ? normalizeRoadBarrierType(range?.leftBarrier)
+      : normalizeRoadBarrierType(range?.rightBarrier);
   }
 
   addShutokuBarrierSegment(parent, frame, side, length, batch = null) {
@@ -2262,7 +2261,61 @@ export class HighwayWorld {
     const lightGroup = new THREE.Group();
     lightGroup.name = "RoadStreetLightEmitters";
     lightGroup.userData.remodelIgnore = true;
+    const poles = [];
+    const arms = [];
+    const heads = [];
+    const glowHeads = [];
 
+    for (let s = 36; s < this.trackLength; s += CITY_STREETLIGHT_INTERVAL) {
+      const frame = this.getFrameAtDistance(s);
+      for (const side of [-1, 1]) {
+        if (this.isCityServiceClearance(frame.s, side) || this.isJunctionOpening(frame.s, side)) {
+          continue;
+        }
+
+        const polePosition = this.offsetPoint(frame, side * CITY_STREETLIGHT_POLE_OFFSET, 3.05);
+        const armPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 0.78, 0, 5.92);
+        const headPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 1.55, 0, 5.88);
+        const glowPosition = this.offsetLocalPoint(polePosition, frame.yaw, -side * 1.58, 0, 5.72);
+        const remodel = this.makeInfrastructureRemodelMeta(s, side, "Road streetlight");
+        const base = { yaw: frame.yaw, s, remodel };
+        poles.push({
+          ...base,
+          position: polePosition,
+          scale: { x: 0.22, y: 6.1, z: 0.22 },
+        });
+        arms.push({
+          ...base,
+          position: armPosition,
+          scale: { x: 1.65, y: 0.16, z: 0.16 },
+        });
+        heads.push({
+          ...base,
+          position: headPosition,
+          scale: { x: 0.74, y: 0.24, z: 0.42 },
+        });
+        glowHeads.push({
+          ...base,
+          position: glowPosition,
+          scale: { x: 0.42, y: 0.08, z: 0.26 },
+        });
+
+        const light = new THREE.PointLight(0xfff1d8, 0, 132, 1.02);
+        light.position.copy(glowPosition);
+        light.visible = false;
+        light.userData.baseIntensity = 15.5;
+        light.userData.qualityIndex = this.roadLights.length;
+        light.userData.qualityAllowed = true;
+        light.userData.s = s;
+        this.roadLights.push(light);
+        lightGroup.add(light);
+      }
+    }
+
+    details.add(this.createChunkedScaledInstancedBoxes(poles, this.materials.streetlightPole, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
+    details.add(this.createChunkedScaledInstancedBoxes(arms, this.materials.streetlightPole, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
+    details.add(this.createChunkedScaledInstancedBoxes(heads, this.materials.railDark, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
+    details.add(this.createChunkedScaledInstancedBoxes(glowHeads, this.materials.streetlightGlow, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
     details.add(lightGroup);
     parent.add(details);
   }
