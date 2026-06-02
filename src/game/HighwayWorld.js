@@ -4475,10 +4475,68 @@ export class HighwayWorld {
     return this.getLaneLayoutForRange(this.getRouteRangeAtDistance(distance));
   }
 
+  // Single source of truth for the carriageway shape AND which lanes are usable.
+  // The lane-count change at a segment seam is blended with a half-window on each
+  // side so the two segments meet at the exact midpoint: the road narrows once,
+  // monotonically, on one side only (no symmetric "funnel", no bulge at the seam).
+  getBlendedRoadLayout(distance) {
+    const ranges = this.routeSegmentRanges ?? [];
+    const current = this.getRouteRangeAtDistance(distance);
+    if (!current || !ranges.length || !Number.isFinite(this.trackLength) || this.trackLength <= 0) {
+      return { left: -ROAD_HALF_WIDTH, right: ROAD_HALF_WIDTH, openOffsets: LANES.slice() };
+    }
+
+    const count = ranges.length;
+    const s = ((distance % this.trackLength) + this.trackLength) % this.trackLength;
+    const layout = this.getLaneLayoutForRange(current);
+    let left = layout.left;
+    let right = layout.right;
+
+    const previous = ranges[(current.index - 1 + count) % count];
+    const next = ranges[(current.index + 1) % count];
+    const local = s - current.start;
+    const toEnd = current.end - s;
+
+    // Entry seam (shared with the previous segment).
+    if (previous && previous.laneCount !== current.laneCount) {
+      const win = Math.min(LANE_TRANSITION_LENGTH, current.length * 0.5, previous.length * 0.5);
+      if (win > 0 && local < win) {
+        const previousLayout = this.getLaneLayoutForRange(previous);
+        // u = 0.5 at the seam (local = 0) -> 0 once fully inside this segment.
+        const u = 0.5 * (1 - smoothstep(0, win, local));
+        left = THREE.MathUtils.lerp(layout.left, previousLayout.left, u);
+        right = THREE.MathUtils.lerp(layout.right, previousLayout.right, u);
+      }
+    }
+
+    // Exit seam (shared with the next segment).
+    if (next && next.laneCount !== current.laneCount) {
+      const win = Math.min(LANE_TRANSITION_LENGTH, current.length * 0.5, next.length * 0.5);
+      if (win > 0 && toEnd < win) {
+        const nextLayout = this.getLaneLayoutForRange(next);
+        const u = 0.5 * (1 - smoothstep(0, win, toEnd));
+        left = THREE.MathUtils.lerp(layout.left, nextLayout.left, u);
+        right = THREE.MathUtils.lerp(layout.right, nextLayout.right, u);
+      }
+    }
+
+    // A lane is usable only while the (blended) carriageway still has room for it.
+    // This ties traffic merging to the visible asphalt, so cars vacate the closing
+    // lane exactly as the road pinches in instead of running 3-wide on a 2-lane road.
+    const laneHalf = (LANES[LANES.length - 1] - LANES[Math.floor(LANES.length * 0.5)]) * 0.5;
+    const margin = laneHalf + 0.55;
+    let openOffsets = LANES.filter((offset) => offset - margin >= left - 0.01 && offset + margin <= right + 0.01);
+    if (!openOffsets.length) {
+      openOffsets = layout.laneOffsets.slice();
+    }
+
+    return { left, right, openOffsets };
+  }
+
   getLaneOffsetAtDistance(distance, laneIndex) {
-    const layout = this.getLaneLayoutAtDistance(distance);
+    const openOffsets = this.getBlendedRoadLayout(distance).openOffsets;
     const fallback = LANES[clamp(laneIndex, 0, LANES.length - 1)];
-    return layout.laneOffsets.includes(fallback)
+    return openOffsets.includes(fallback)
       ? fallback
       : this.getNearestOpenLaneOffset(distance, fallback);
   }
@@ -4489,54 +4547,27 @@ export class HighwayWorld {
   }
 
   getNearestOpenLaneOffset(distance, lateralOffset = 0) {
-    const layout = this.getLaneLayoutAtDistance(distance);
-    return layout.laneOffsets
+    const openOffsets = this.getBlendedRoadLayout(distance).openOffsets;
+    return openOffsets
       .slice()
       .sort((a, b) => Math.abs(a - lateralOffset) - Math.abs(b - lateralOffset))[0] ?? LANES[1];
   }
 
   isLaneOpenAtDistance(distance, laneIndex) {
-    const layout = this.getLaneLayoutAtDistance(distance);
-    return layout.laneOffsets.includes(LANES[clamp(laneIndex, 0, LANES.length - 1)]);
+    const openOffsets = this.getBlendedRoadLayout(distance).openOffsets;
+    return openOffsets.includes(LANES[clamp(laneIndex, 0, LANES.length - 1)]);
   }
 
   getOpenLaneIndexesAtDistance(distance) {
-    const layout = this.getLaneLayoutAtDistance(distance);
+    const openOffsets = this.getBlendedRoadLayout(distance).openOffsets;
     return LANES
       .map((offset, lane) => ({ offset, lane }))
-      .filter((item) => layout.laneOffsets.includes(item.offset))
+      .filter((item) => openOffsets.includes(item.offset))
       .map((item) => item.lane);
   }
 
   getRoadLateralBoundsAtDistance(distance, extra = 0) {
-    const current = this.getRouteRangeAtDistance(distance);
-    if (!current) {
-      return { left: -ROAD_HALF_WIDTH - extra, right: ROAD_HALF_WIDTH + extra };
-    }
-
-    const s = ((distance % this.trackLength) + this.trackLength) % this.trackLength;
-    const index = current.index;
-    const previous = this.routeSegmentRanges[(index - 1 + this.routeSegmentRanges.length) % this.routeSegmentRanges.length];
-    const next = this.routeSegmentRanges[(index + 1) % this.routeSegmentRanges.length];
-    const transition = Math.min(LANE_TRANSITION_LENGTH, Math.max(24, current.length * 0.45));
-    const local = s - current.start;
-    const toEnd = current.end - s;
-    const layout = { ...this.getLaneLayoutForRange(current) };
-
-    if (previous && local < transition && previous.laneCount !== current.laneCount) {
-      const previousLayout = this.getLaneLayoutForRange(previous);
-      const t = smoothstep(0, transition, local);
-      layout.left = THREE.MathUtils.lerp(previousLayout.left, layout.left, t);
-      layout.right = THREE.MathUtils.lerp(previousLayout.right, layout.right, t);
-    }
-
-    if (next && toEnd < transition && next.laneCount !== current.laneCount) {
-      const nextLayout = this.getLaneLayoutForRange(next);
-      const t = smoothstep(0, transition, transition - toEnd);
-      layout.left = THREE.MathUtils.lerp(layout.left, nextLayout.left, t);
-      layout.right = THREE.MathUtils.lerp(layout.right, nextLayout.right, t);
-    }
-
+    const layout = this.getBlendedRoadLayout(distance);
     return {
       left: layout.left - extra,
       right: layout.right + extra,
