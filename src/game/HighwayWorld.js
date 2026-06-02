@@ -336,8 +336,8 @@ export class HighwayWorld {
   }
 
   createMaterials() {
-    const asphaltTexture = this.createSurfaceTexture("#2d353d", "#3d4650", "#1b2229", 180);
-    asphaltTexture.repeat.set(42, 42);
+    const asphaltTexture = this.createAsphaltTexture();
+    asphaltTexture.repeat.set(56, 56);
     const concreteTexture = this.createSurfaceTexture("#3a424b", "#48525d", "#252c34", 120);
     concreteTexture.repeat.set(18, 18);
     const barrierBaseTexture = this.createSurfaceTexture("#aeb1ad", "#c9cbc6", "#777d78", 150);
@@ -381,9 +381,9 @@ export class HighwayWorld {
         side: THREE.DoubleSide,
       }),
       asphalt: new THREE.MeshStandardMaterial({
-        color: 0x343c45,
+        color: 0x3b4248,
         map: asphaltTexture,
-        roughness: 0.86,
+        roughness: 0.92,
         metalness: 0.02,
         flatShading: true,
         side: THREE.DoubleSide,
@@ -525,6 +525,74 @@ export class HighwayWorld {
         ctx.lineTo(Math.floor(this.random() * canvas.width / 8) * 8, Math.floor(this.random() * canvas.height / 8) * 8);
         ctx.stroke();
       }
+      ctx.globalAlpha = 1;
+    });
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+  }
+
+  createAsphaltTexture() {
+    const texture = makeCanvasTexture((ctx, canvas) => {
+      ctx.imageSmoothingEnabled = false;
+      const palette = ["#2a3035", "#333b42", "#40484f", "#1c2126", "#515960"];
+      const stainPalette = ["#111519", "#20262b", "#586068", "#697078"];
+      const cell = 4;
+
+      ctx.fillStyle = "#2a3035";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      for (let y = 0; y < canvas.height; y += cell) {
+        for (let x = 0; x < canvas.width; x += cell) {
+          const n = cityNoise(x * 0.071 + y * 0.173 + 91.7);
+          const shade = palette[Math.floor(n * palette.length) % palette.length];
+          ctx.globalAlpha = 0.68 + cityNoise(x * 0.31 + y * 0.19 + 11.4) * 0.3;
+          ctx.fillStyle = shade;
+          ctx.fillRect(x, y, cell, cell);
+        }
+      }
+
+      for (let i = 0; i < 86; i += 1) {
+        const seed = i * 19.23;
+        const x = Math.floor((cityNoise(seed + 2.1) * canvas.width) / cell) * cell;
+        const y = Math.floor((cityNoise(seed + 4.8) * canvas.height) / cell) * cell;
+        const w = (1 + Math.floor(cityNoise(seed + 7.3) * 8)) * cell;
+        const h = (1 + Math.floor(cityNoise(seed + 9.6) * 3)) * cell;
+        ctx.globalAlpha = 0.24 + cityNoise(seed + 12.2) * 0.24;
+        ctx.fillStyle = stainPalette[Math.floor(cityNoise(seed + 14.9) * stainPalette.length) % stainPalette.length];
+        ctx.fillRect(x, y, w, h);
+      }
+
+      ctx.globalAlpha = 0.42;
+      ctx.fillStyle = "#15191d";
+      for (let i = 0; i < 18; i += 1) {
+        const seed = i * 33.7;
+        let x = Math.floor((cityNoise(seed + 1.2) * canvas.width) / 8) * 8;
+        let y = Math.floor((cityNoise(seed + 5.4) * canvas.height) / 8) * 8;
+        const steps = 2 + Math.floor(cityNoise(seed + 8.6) * 5);
+        for (let step = 0; step < steps; step += 1) {
+          const length = (1 + Math.floor(cityNoise(seed + step * 3.1 + 11.8) * 4)) * cell;
+          ctx.fillRect(x, y, length, cell);
+          x += length;
+          y += (cityNoise(seed + step * 7.4 + 2.6) > 0.5 ? 1 : -1) * cell;
+        }
+      }
+
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = "#a2a39a";
+      for (let i = 0; i < 72; i += 1) {
+        const seed = i * 12.91;
+        const x = Math.floor((cityNoise(seed + 3.3) * canvas.width) / cell) * cell;
+        const y = Math.floor((cityNoise(seed + 6.7) * canvas.height) / cell) * cell;
+        ctx.fillRect(x, y, cell, cell);
+      }
+
+      ctx.globalAlpha = 0.1;
+      ctx.fillStyle = "#050607";
+      for (let y = 0; y < canvas.height; y += 16) {
+        ctx.fillRect(0, y, canvas.width, cell);
+      }
+
       ctx.globalAlpha = 1;
     });
     texture.wrapS = THREE.RepeatWrapping;
