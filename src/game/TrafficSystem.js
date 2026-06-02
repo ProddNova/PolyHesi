@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { LANES, TRAFFIC_CAR_IDS, getCarPreset } from "./config.js";
-import { createTrafficCarAsset } from "./PlayerCarAsset.js";
+import { createTrafficCarAsset, warmTrafficCarAsset } from "./PlayerCarAsset.js";
 import { choice, clamp, damp, dampAngle, makeBox, rand } from "./utils.js";
 
 const TRAFFIC_COLORS = [
@@ -49,15 +49,36 @@ export class TrafficSystem {
     this.nextId = 1;
   }
 
+  prewarm(settings = {}) {
+    for (const modelId of TRAFFIC_CAR_IDS) {
+      warmTrafficCarAsset(this.getTrafficPreset(modelId, this.pickTrafficColor()));
+    }
+
+    const warmCount = Math.min(this.getActiveTarget(settings), TRAFFIC_CAR_IDS.length * 2);
+    for (let i = this.cars.length; i < warmCount; i += 1) {
+      const car = this.createVehicle();
+      car.group.visible = false;
+      this.scene.add(car.group);
+      this.cars.push(car);
+    }
+  }
+
   reset(settings, focusS = 0) {
-    for (const car of this.cars) {
+    const target = this.getActiveTarget(settings);
+    while (this.cars.length < target) {
+      const car = this.createVehicle();
+      car.group.visible = false;
+      this.scene.add(car.group);
+      this.cars.push(car);
+    }
+    while (this.cars.length > target) {
+      const car = this.cars.pop();
       this.scene.remove(car.group);
     }
 
-    this.cars = [];
-    const target = this.getActiveTarget(settings);
     const basePerLane = Math.floor(target / LANES.length);
     let remainder = target % LANES.length;
+    let carIndex = 0;
 
     for (let lane = 0; lane < LANES.length; lane += 1) {
       const laneTarget = basePerLane + (remainder > 0 ? 1 : 0);
@@ -66,18 +87,26 @@ export class TrafficSystem {
       const phase = rand(0, spacing);
 
       for (let i = 0; i < laneTarget; i += 1) {
-        const car = this.createVehicle();
+        const car = this.cars[carIndex];
+        carIndex += 1;
         let offset = -ACTIVE_BEHIND + phase + i * spacing + rand(-spacing * 0.28, spacing * 0.28);
         if (offset > -SAFE_BACK_SPAWN && offset < SAFE_FRONT_SPAWN) {
           offset = SAFE_FRONT_SPAWN + rand(20, 180);
         }
+        car.group.visible = true;
         car.s = this.normalizeS(focusS + offset);
         car.route = { type: "main", s: car.s };
         car.lane = lane;
         car.lateralOffset = LANES[lane];
+        car.targetLane = null;
+        car.signalTimer = 0;
+        car.signalHoldTimer = 0;
+        car.signalDirection = 0;
+        car.nearMissCooldown = 0;
+        car.laneChangeCooldown = rand(0, 3.5);
+        car.junctionCooldown = rand(0.5, 5.5);
+        car.overtakeArmed = false;
         this.randomizeSpeed(car, settings);
-        this.scene.add(car.group);
-        this.cars.push(car);
         this.applyFrame(car, 1, true);
       }
     }

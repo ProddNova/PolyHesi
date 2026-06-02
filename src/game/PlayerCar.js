@@ -237,12 +237,7 @@ export class PlayerCar {
   }
 
   setInvulnerable(active, time = 0) {
-    if (!active) {
-      this.group.visible = true;
-      return;
-    }
-
-    this.group.visible = Math.floor(time * 10) % 2 === 0;
+    this.group.visible = true;
   }
 
   update(dt, input, settings, crashed) {

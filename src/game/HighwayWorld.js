@@ -319,6 +319,18 @@ export class HighwayWorld {
     concreteTexture.repeat.set(18, 18);
     const cityGroundTexture = this.createSurfaceTexture("#333b42", "#46515b", "#242b31", 220);
     cityGroundTexture.repeat.set(190, 86);
+    const shoulderTexture = this.createSurfaceTexture("#283038", "#353e46", "#171d23", 86);
+    shoulderTexture.repeat.set(26, 26);
+    const curbTexture = this.createSurfaceTexture("#5c6877", "#707c8b", "#313945", 64);
+    curbTexture.repeat.set(10, 10);
+    const railTexture = this.createSurfaceTexture("#8f9698", "#adb3b4", "#555b5d", 42);
+    railTexture.repeat.set(3, 18);
+    const railDarkTexture = this.createSurfaceTexture("#3a3f42", "#4f5558", "#1d2225", 42);
+    railDarkTexture.repeat.set(3, 18);
+    const trimTexture = this.createSurfaceTexture("#303235", "#44474a", "#191b1e", 58);
+    trimTexture.repeat.set(5, 5);
+    const tunnelTexture = this.createSurfaceTexture("#62696d", "#787f82", "#363d41", 92);
+    tunnelTexture.repeat.set(12, 12);
 
     const materials = {
       cityGround: new THREE.MeshStandardMaterial({
@@ -353,6 +365,7 @@ export class HighwayWorld {
       }),
       shoulder: new THREE.MeshStandardMaterial({
         color: 0x293139,
+        map: shoulderTexture,
         roughness: 0.9,
         flatShading: true,
         side: THREE.DoubleSide,
@@ -361,14 +374,16 @@ export class HighwayWorld {
       lane: new THREE.MeshBasicMaterial({ color: 0xd8d6c9 }),
       rail: new THREE.MeshStandardMaterial({
         color: 0x8f9698,
+        map: railTexture,
         roughness: 0.5,
-        metalness: 0.32,
+        metalness: 0.18,
         flatShading: true,
       }),
       railDark: new THREE.MeshStandardMaterial({
         color: 0x3a3f42,
+        map: railDarkTexture,
         roughness: 0.68,
-        metalness: 0.2,
+        metalness: 0.1,
         flatShading: true,
       }),
       concrete: new THREE.MeshStandardMaterial({
@@ -379,6 +394,7 @@ export class HighwayWorld {
       }),
       curb: new THREE.MeshStandardMaterial({
         color: 0x5c6877,
+        map: curbTexture,
         roughness: 0.7,
         flatShading: true,
       }),
@@ -388,24 +404,28 @@ export class HighwayWorld {
       buildingWindowWarm: new THREE.MeshBasicMaterial({ color: 0xd7b45b }),
       buildingGlassDark: new THREE.MeshStandardMaterial({
         color: 0x3d474d,
+        map: this.createFacadeTexture(0x3d474d, { windows: false, panels: true }),
         roughness: 0.42,
         metalness: 0.16,
         flatShading: true,
       }),
       buildingTrim: new THREE.MeshStandardMaterial({
         color: 0x303235,
+        map: trimTexture,
         roughness: 0.76,
         metalness: 0.04,
         flatShading: true,
       }),
       tunnelConcrete: new THREE.MeshStandardMaterial({
         color: 0x62696d,
+        map: tunnelTexture,
         roughness: 0.86,
         metalness: 0.02,
         flatShading: true,
       }),
       tunnelDark: new THREE.MeshStandardMaterial({
         color: 0x1b2024,
+        map: this.createSurfaceTexture("#1b2024", "#242b30", "#080b0e", 48),
         roughness: 0.78,
         flatShading: true,
       }),
@@ -470,6 +490,81 @@ export class HighwayWorld {
     });
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+  }
+
+  colorToCss(color) {
+    return `#${new THREE.Color(color).getHexString()}`;
+  }
+
+  shiftedColorCss(color, lightnessDelta = 0) {
+    const next = new THREE.Color(color);
+    next.offsetHSL(0, 0, lightnessDelta);
+    return `#${next.getHexString()}`;
+  }
+
+  createFacadeTexture(color, options = {}) {
+    const key = `facade:${Number(color).toString(16)}:${options.windows !== false}:${options.panels !== false}`;
+    if (!this.facadeTextureCache) {
+      this.facadeTextureCache = new Map();
+    }
+    if (this.facadeTextureCache.has(key)) {
+      return this.facadeTextureCache.get(key);
+    }
+
+    const texture = makeCanvasTexture((ctx, canvas) => {
+      ctx.imageSmoothingEnabled = false;
+      ctx.fillStyle = this.colorToCss(color);
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const panelA = this.shiftedColorCss(color, 0.08);
+      const panelB = this.shiftedColorCss(color, -0.08);
+      const line = this.shiftedColorCss(color, -0.16);
+      const cell = 16;
+      for (let y = 0; y < canvas.height; y += cell) {
+        for (let x = 0; x < canvas.width; x += cell) {
+          const n = cityNoise(x * 0.37 + y * 0.91 + Number(color) * 0.0001);
+          ctx.globalAlpha = 0.24;
+          ctx.fillStyle = n > 0.55 ? panelA : panelB;
+          ctx.fillRect(x, y, cell, cell);
+        }
+      }
+
+      if (options.panels !== false) {
+        ctx.globalAlpha = 0.28;
+        ctx.strokeStyle = line;
+        ctx.lineWidth = 2;
+        for (let x = 0; x <= canvas.width; x += 32) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, canvas.height);
+          ctx.stroke();
+        }
+        for (let y = 0; y <= canvas.height; y += 24) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvas.width, y);
+          ctx.stroke();
+        }
+      }
+
+      if (options.windows !== false) {
+        for (let y = 10; y < canvas.height - 8; y += 22) {
+          for (let x = 9; x < canvas.width - 8; x += 26) {
+            const lit = cityNoise(x * 1.7 + y * 2.3 + Number(color) * 0.001) > 0.82;
+            ctx.globalAlpha = lit ? 0.34 : 0.16;
+            ctx.fillStyle = lit ? "#d7b45b" : "#53626a";
+            ctx.fillRect(x, y, 10, 6);
+          }
+        }
+      }
+
+      ctx.globalAlpha = 1;
+    });
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(1, 1);
+    this.facadeTextureCache.set(key, texture);
     return texture;
   }
 
@@ -915,7 +1010,15 @@ export class HighwayWorld {
     for (const texture of [
       this.materials?.cityGround?.map,
       this.materials?.asphalt?.map,
+      this.materials?.shoulder?.map,
       this.materials?.concrete?.map,
+      this.materials?.curb?.map,
+      this.materials?.rail?.map,
+      this.materials?.railDark?.map,
+      this.materials?.buildingGlassDark?.map,
+      this.materials?.buildingTrim?.map,
+      this.materials?.tunnelConcrete?.map,
+      this.materials?.tunnelDark?.map,
     ]) {
       if (texture) {
         texture.anisotropy = this.ultraGraphics ? 2 : profile.anisotropy;
@@ -2534,6 +2637,7 @@ export class HighwayWorld {
     if (!this.facadeMaterialCache.has(key)) {
       const material = new THREE.MeshStandardMaterial({
         color,
+        map: this.createFacadeTexture(color),
         roughness,
         metalness,
         flatShading: true,

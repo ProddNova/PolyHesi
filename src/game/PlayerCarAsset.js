@@ -433,6 +433,25 @@ function getTrafficTemplateKey(preset) {
   ].join(":");
 }
 
+function ensureTrafficTemplate(preset) {
+  const key = getTrafficTemplateKey(preset);
+  if (!trafficCarTemplates.has(key)) {
+    const template = createPlayerCarAsset(preset);
+    template.name = `TrafficPSXTemplate_${preset.psxModel ?? preset.carId ?? preset.id}`;
+    template.traverse((child) => {
+      if (!child.isMesh) {
+        return;
+      }
+      child.castShadow = false;
+      child.receiveShadow = false;
+      child.frustumCulled = true;
+    });
+    trafficCarTemplates.set(key, template);
+  }
+
+  return trafficCarTemplates.get(key);
+}
+
 function cloneMaterialsForTraffic(object, bodyColor) {
   object.traverse((child) => {
     if (!child.isMesh || !child.material) {
@@ -456,23 +475,12 @@ function cloneMaterialsForTraffic(object, bodyColor) {
   });
 }
 
-export function createTrafficCarAsset(preset) {
-  const key = getTrafficTemplateKey(preset);
-  if (!trafficCarTemplates.has(key)) {
-    const template = createPlayerCarAsset(preset);
-    template.name = `TrafficPSXTemplate_${preset.psxModel ?? preset.carId ?? preset.id}`;
-    template.traverse((child) => {
-      if (!child.isMesh) {
-        return;
-      }
-      child.castShadow = false;
-      child.receiveShadow = false;
-      child.frustumCulled = true;
-    });
-    trafficCarTemplates.set(key, template);
-  }
+export function warmTrafficCarAsset(preset) {
+  ensureTrafficTemplate(preset);
+}
 
-  const clone = trafficCarTemplates.get(key).clone(true);
+export function createTrafficCarAsset(preset) {
+  const clone = ensureTrafficTemplate(preset).clone(true);
   clone.name = `TrafficPSX_${preset.psxModel ?? preset.carId ?? preset.id}`;
   cloneMaterialsForTraffic(clone, preset.vehicleRig?.bodyColor ?? preset.color);
   return clone;

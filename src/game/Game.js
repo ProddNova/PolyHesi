@@ -182,6 +182,7 @@ export class Game {
     this.traffic = new TrafficSystem(this.scene, this.world, {
       getVehicleRigForCar: (carId) => this.getVehicleRigForCar(carId),
     });
+    this.traffic.prewarm(this.settings);
     this.debugOverlay = new DebugOverlay(this.scene, this.world);
     this.remodelOverlay = new RemodelOverlay(
       this.scene,
@@ -272,6 +273,7 @@ export class Game {
     this.applyGraphicsQuality();
     this.traffic.reset(this.settings);
     this.enterGarageMode(true);
+    this.warmRenderPipeline();
 
     window.addEventListener("resize", () => this.resize());
     window.addEventListener("beforeunload", () => {
@@ -282,6 +284,16 @@ export class Game {
   start() {
     this.clock.start();
     this.renderer.setAnimationLoop(() => this.tick());
+  }
+
+  warmRenderPipeline() {
+    if (typeof this.renderer.compileAsync !== "function") {
+      return;
+    }
+
+    this.renderer.compileAsync(this.scene, this.camera).catch((error) => {
+      console.warn("Render warm-up failed.", error);
+    });
   }
 
   tick() {
