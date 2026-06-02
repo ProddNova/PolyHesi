@@ -1342,9 +1342,13 @@ export class HighwayWorld {
         light.intensity = 0;
         continue;
       }
+      const baseIntensity = light.userData.baseIntensity ?? 1;
+      const targetIntensity = light.userData.alwaysOn
+        ? baseIntensity * (this.ultraGraphics ? 1.34 : 1.12)
+        : lampPower * baseIntensity * (this.ultraGraphics ? 3.1 : 2.45);
       light.intensity = THREE.MathUtils.lerp(
         light.intensity,
-        lampPower * (light.userData.baseIntensity ?? 1) * (this.ultraGraphics ? 3.1 : 2.45),
+        targetIntensity,
         smooth,
       );
     }
@@ -3834,6 +3838,8 @@ export class HighwayWorld {
     if (index % 2 === 0) {
       this.addLocalBox(section, 0.18, 0.1, length * 0.46, this.materials.tunnelLight, -3.8, wallHeight - 0.42, 0);
       this.addLocalBox(section, 0.18, 0.1, length * 0.46, this.materials.tunnelLight, 3.8, wallHeight - 0.42, 0);
+      this.addTunnelRoofLight(section, frame, -3.8, wallHeight - 0.58, -length * 0.2);
+      this.addTunnelRoofLight(section, frame, 3.8, wallHeight - 0.58, length * 0.2);
     }
 
     const detailSide = index % 4 < 2 ? -1 : 1;
@@ -3859,6 +3865,19 @@ export class HighwayWorld {
     }
 
     parent.add(section);
+  }
+
+  addTunnelRoofLight(parent, frame, x, y, z) {
+    const light = new THREE.PointLight(0xffdda0, 0, 42, 1.28);
+    light.position.set(x, y, z);
+    light.visible = false;
+    light.userData.baseIntensity = 9.5;
+    light.userData.qualityIndex = this.roadLights.length;
+    light.userData.qualityAllowed = true;
+    light.userData.alwaysOn = true;
+    light.userData.s = frame.s;
+    this.roadLights.push(light);
+    parent.add(light);
   }
 
   addTunnelPortal(parent, frame, label) {
