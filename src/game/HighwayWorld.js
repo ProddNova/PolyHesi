@@ -1945,6 +1945,9 @@ export class HighwayWorld {
   }
 
   shouldUseShutokuBarrier(s, side) {
+    if (this.isTunnelDistance(s)) {
+      return false;
+    }
     return this.getRoadsideBarrierType(s, side) === "barrier";
   }
 
@@ -1988,8 +1991,16 @@ export class HighwayWorld {
   }
 
   isTunnelDistance(s, margin = 0) {
-    const distance = ((s % this.trackLength) + this.trackLength) % this.trackLength;
-    return this.tunnelRuns.some((run) => distance >= run.start - margin && distance <= run.start + run.length + margin);
+    const trackLength = Math.max(1, this.trackLength || 1);
+    const distance = ((s % trackLength) + trackLength) % trackLength;
+    return this.tunnelRuns.some((run) => {
+      const start = (((Number(run.start) || 0) - margin) % trackLength + trackLength) % trackLength;
+      const length = Math.max(0, (Number(run.length) || 0) + margin * 2);
+      if (length >= trackLength) {
+        return true;
+      }
+      return (distance - start + trackLength) % trackLength <= length;
+    });
   }
 
   createParkingMeet() {
@@ -2337,6 +2348,9 @@ export class HighwayWorld {
 
     for (let s = 36; s < this.trackLength; s += CITY_STREETLIGHT_INTERVAL) {
       const frame = this.getFrameAtDistance(s);
+      if (this.isTunnelDistance(frame.s)) {
+        continue;
+      }
       for (const side of [-1, 1]) {
         if (this.isCityServiceClearance(frame.s, side) || this.isJunctionOpening(frame.s, side)) {
           continue;
@@ -2412,7 +2426,9 @@ export class HighwayWorld {
 
     for (const placement of [...ROAD_SIGN_PLACEMENTS, ...ADDITIONAL_ROAD_SIGN_PLACEMENTS]) {
       const frame = this.getFrameAtDistance(placement.s);
-      if (placement.type === "gantry") {
+      if (this.isTunnelDistance(frame.s)) {
+        this.addTunnelCeilingExpresswaySign(signs, frame, placement, poleMaterial, frameMaterial);
+      } else if (placement.type === "gantry") {
         this.addOverheadExpresswaySign(signs, frame, placement, poleMaterial, frameMaterial);
       } else {
         this.addRoadsideExpresswaySign(signs, frame, placement, poleMaterial, frameMaterial);
@@ -2442,6 +2458,24 @@ export class HighwayWorld {
       placement,
       Math.PI,
     );
+
+    parent.add(group);
+  }
+
+  addTunnelCeilingExpresswaySign(parent, frame, placement, poleMaterial, frameMaterial) {
+    const group = new THREE.Group();
+    group.name = `TunnelCeilingSign_${Math.round(frame.s)}`;
+    group.position.copy(this.offsetPoint(frame, 0, 0));
+    group.rotation.y = frame.yaw;
+
+    const ceilingY = 7.85;
+    const boardY = 6.62;
+    const width = placement.type === "gantry" ? 9.2 : 5.4;
+    this.addLocalBox(group, 0.16, ceilingY - boardY + 0.3, 0.16, poleMaterial, -width * 0.42, (ceilingY + boardY) * 0.5, -0.1);
+    this.addLocalBox(group, 0.16, ceilingY - boardY + 0.3, 0.16, poleMaterial, width * 0.42, (ceilingY + boardY) * 0.5, -0.1);
+    this.addLocalBox(group, width + 0.72, 0.18, 0.18, frameMaterial, 0, ceilingY, -0.1);
+    this.addLocalBox(group, width + 0.42, 0.18, 0.14, frameMaterial, 0, boardY + 1.36, -0.1);
+    this.addSignBoard(group, 0, boardY, -0.18, width, 2.28, placement, Math.PI);
 
     parent.add(group);
   }
