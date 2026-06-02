@@ -37,10 +37,8 @@ const GUARDRAIL_MODEL = {
   reflector: { width: 0.06, height: 0.18, depth: 0.5, y: 0.86, inset: 0.13 },
 };
 const SHUTOKU_BARRIER_MODEL = {
-  base: { width: 0.72, height: 0.38, y: 0.19 },
-  wall: { width: 0.46, height: 2.34, y: 1.55 },
-  divider: { width: 0.08, height: 2.42, depth: 0.07, y: 1.58 },
-  tileLength: 2.25,
+  base: { width: 0.82, height: 0.55, y: 0.275 },
+  wall: { width: 0.46, height: 2.34, y: 1.72 },
 };
 const HITBOX_TEMPLATES = [];
 
@@ -232,6 +230,7 @@ const TUNNEL_RUNS = [
   { start: 39920, length: 760, name: "West Gallery" },
   { start: 51080, length: 1120, name: "South Long Gallery" },
 ];
+const TUNNEL_BARRIER_MODES = ["both", "right", "left", "guardrail", "both", "left", "right"];
 const TUNNEL_MODULE_LENGTH = 18;
 const DEFAULT_ROUTE_SCALE = 6.5;
 const DEFAULT_ROUTE_CONTROL_POINTS = [
@@ -1553,12 +1552,24 @@ export class HighwayWorld {
   }
 
   shouldUseShutokuBarrier(s, side) {
-    const section = Math.floor(s / 360);
-    const local = ((s % 360) + 360) % 360;
-    const sectionNoise = cityNoise(section * 12.73 + side * 4.91);
-    const pattern = section % 7;
-    const selected = pattern === 1 || pattern === 4 || sectionNoise > 0.72;
-    return selected && local > 32 && local < 306;
+    const tunnelSwitches = TUNNEL_RUNS
+      .map((run) => ((run.start + run.length + this.trackLength) % this.trackLength))
+      .sort((a, b) => a - b);
+    let section = 0;
+    for (const switchS of tunnelSwitches) {
+      if (s >= switchS) {
+        section += 1;
+      }
+    }
+
+    const mode = TUNNEL_BARRIER_MODES[section % TUNNEL_BARRIER_MODES.length];
+    if (mode === "guardrail") {
+      return false;
+    }
+    if (mode === "both") {
+      return true;
+    }
+    return mode === "right" ? side > 0 : side < 0;
   }
 
   addShutokuBarrierSegment(parent, frame, side, length, batch = null) {
@@ -1583,43 +1594,14 @@ export class HighwayWorld {
         z: length,
       },
     };
-    const dividerLateral = side * (RAIL_OFFSET - 0.26);
-    const dividerCount = Math.max(2, Math.ceil(length / SHUTOKU_BARRIER_MODEL.tileLength));
-    const dividers = [];
-    for (let i = 0; i <= dividerCount; i += 1) {
-      const forward = -length * 0.5 + (length * i) / dividerCount;
-      dividers.push({
-        position: this.offsetAlong(frame, dividerLateral, forward, SHUTOKU_BARRIER_MODEL.divider.y),
-        yaw: frame.yaw,
-        s: frame.s,
-        scale: {
-          x: SHUTOKU_BARRIER_MODEL.divider.width,
-          y: SHUTOKU_BARRIER_MODEL.divider.height,
-          z: SHUTOKU_BARRIER_MODEL.divider.depth,
-        },
-      });
-    }
-
     if (batch) {
       batch.shutokuWalls.push(wall);
       batch.shutokuBases.push(base);
-      batch.shutokuDividers.push(...dividers);
       return;
     }
 
     this.addOrientedBox(parent, wall.scale.x, wall.scale.y, wall.scale.z, this.materials.shutokuBarrier, wall.position, wall.yaw);
     this.addOrientedBox(parent, base.scale.x, base.scale.y, base.scale.z, this.materials.shutokuBarrierBase, base.position, base.yaw);
-    for (const divider of dividers) {
-      this.addOrientedBox(
-        parent,
-        divider.scale.x,
-        divider.scale.y,
-        divider.scale.z,
-        this.materials.railDark,
-        divider.position,
-        divider.yaw,
-      );
-    }
   }
 
   createParkingMeet() {
@@ -2560,15 +2542,15 @@ export class HighwayWorld {
     }
 
     const wallNoise = cityNoise(seed + 41.2);
-    if (rowIndex <= 5 && bodyHeight > 22 && depth > 15 && wallNoise > 0.994) {
-      const boardWidth = clamp(depth * cityRange(seed + 42.1, 0.38, 0.68), 5.4, 12.5);
-      const boardHeight = clamp(bodyHeight * cityRange(seed + 43.3, 0.08, 0.14), 2.3, 5.8);
+    if (rowIndex <= 7 && bodyHeight > 28 && depth > 15 && wallNoise > 0.965) {
+      const boardWidth = clamp(depth * cityRange(seed + 42.1, 0.62, 1.05), 9.0, 20.0);
+      const boardHeight = clamp(bodyHeight * cityRange(seed + 43.3, 0.14, 0.24), 4.6, 12.0);
       const y = clamp(
-        cityRange(seed + 44.4, 6.5, bodyHeight - 4.2),
-        boardHeight * 0.5 + 3.2,
-        bodyHeight - boardHeight * 0.5 - 1.2,
+        cityRange(seed + 44.4, bodyHeight * 0.34, bodyHeight * 0.78),
+        boardHeight * 0.5 + 7.0,
+        bodyHeight - boardHeight * 0.5 - 2.0,
       );
-      const z = cityRange(seed + 45.5, -depth * 0.28, depth * 0.28);
+      const z = cityRange(seed + 45.5, -depth * 0.18, depth * 0.18);
       const x = -side * (width * 0.5 + 0.13);
       const position = this.offsetLocalPoint(base, yaw, x, z, y);
       this.addJapaneseBillboardPlane(
@@ -2584,10 +2566,10 @@ export class HighwayWorld {
     }
 
     const roofNoise = cityNoise(seed + 50.8);
-    if (rowIndex <= 6 && bodyHeight > 36 && width > 14 && roofNoise > 0.996) {
-      const boardWidth = clamp(width * cityRange(seed + 51.2, 0.34, 0.58), 5.8, 11.2);
-      const boardHeight = cityRange(seed + 52.4, 2.1, 3.4);
-      const postHeight = cityRange(seed + 53.6, 2.1, 3.4);
+    if (rowIndex <= 7 && bodyHeight > 34 && width > 14 && roofNoise > 0.975) {
+      const boardWidth = clamp(width * cityRange(seed + 51.2, 0.62, 0.96), 11.5, 24.0);
+      const boardHeight = cityRange(seed + 52.4, 4.0, 7.0);
+      const postHeight = cityRange(seed + 53.6, 3.4, 6.2);
       const localX = cityRange(seed + 54.1, -width * 0.18, width * 0.18);
       const localZ = cityRange(seed + 55.3, -depth * 0.22, depth * 0.22);
       const boardY = bodyHeight + postHeight + boardHeight * 0.52;
@@ -2609,17 +2591,17 @@ export class HighwayWorld {
           position: this.offsetLocalPoint(base, yaw, localX, localZ + postZ, bodyHeight + postHeight * 0.5),
           yaw,
           s,
-          scale: { x: 0.16, y: postHeight, z: 0.16 },
+        scale: { x: 0.22, y: postHeight, z: 0.22 },
           remodel: this.makeBuildingRemodelMeta(buildingId, buildingLabel, "roof-billboard-pole"),
         });
       }
     }
 
     const groundNoise = cityNoise(seed + 60.9);
-    if (rowIndex <= 3 && width > 18 && groundNoise > 0.997) {
-      const boardWidth = cityRange(seed + 61.7, 5.4, 9.4);
-      const boardHeight = cityRange(seed + 62.1, 2.2, 3.2);
-      const postHeight = cityRange(seed + 63.4, 2.2, 3.1);
+    if (rowIndex <= 4 && width > 18 && groundNoise > 0.985) {
+      const boardWidth = cityRange(seed + 61.7, 8.0, 14.5);
+      const boardHeight = cityRange(seed + 62.1, 3.6, 5.4);
+      const postHeight = cityRange(seed + 63.4, 3.0, 4.7);
       const localX = side * (width * 0.5 + cityRange(seed + 64.2, 8.0, 15.0));
       const localZ = cityRange(seed + 65.6, -depth * 0.45, depth * 0.45);
       const signS = (s + forward + localZ + this.trackLength) % this.trackLength;
@@ -2637,14 +2619,14 @@ export class HighwayWorld {
           position: padPosition,
           yaw,
           s: signS,
-          scale: { x: 5.2, y: 0.08, z: boardWidth + 1.7 },
+          scale: { x: 6.8, y: 0.1, z: boardWidth + 2.2 },
         });
         for (const postZ of [-boardWidth * 0.34, boardWidth * 0.34]) {
           billboardPosts.push({
             position: this.offsetLocalPoint(base, yaw, localX, localZ + postZ, postHeight * 0.5),
             yaw,
             s: signS,
-            scale: { x: 0.18, y: postHeight, z: 0.18 },
+            scale: { x: 0.24, y: postHeight, z: 0.24 },
           });
         }
         this.addJapaneseBillboardPlane(
@@ -2693,27 +2675,66 @@ export class HighwayWorld {
       ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = ad.bg;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
-      ctx.fillRect(0, 0, canvas.width, 18);
-      ctx.fillRect(0, canvas.height - 18, canvas.width, 18);
+
+      const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      gradient.addColorStop(0, "rgba(255, 255, 255, 0.2)");
+      gradient.addColorStop(0.46, "rgba(255, 255, 255, 0)");
+      gradient.addColorStop(1, "rgba(0, 0, 0, 0.2)");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "rgba(0, 0, 0, 0.26)";
+      ctx.fillRect(0, 0, canvas.width, 20);
+      ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+      ctx.fillStyle = ad.accent;
+      ctx.fillRect(0, 0, 12, canvas.height);
+      ctx.fillRect(canvas.width - 12, 0, 12, canvas.height);
       ctx.strokeStyle = ad.accent;
       ctx.lineWidth = 6;
-      ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+      ctx.strokeRect(9, 9, canvas.width - 18, canvas.height - 18);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.48)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(18, 18, canvas.width - 36, canvas.height - 36);
+
       ctx.fillStyle = ad.accent;
-      ctx.fillRect(16, 20, 46, 14);
-      ctx.fillRect(canvas.width - 66, canvas.height - 34, 48, 12);
+      ctx.beginPath();
+      ctx.arc(canvas.width - 46, 36, 22, 0, TWO_PI);
+      ctx.fill();
+      ctx.fillStyle = "rgba(0, 0, 0, 0.18)";
+      ctx.fillRect(24, 24, 52, 16);
+      ctx.fillRect(canvas.width - 82, canvas.height - 38, 60, 14);
 
       ctx.fillStyle = ad.fg;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = "900 44px 'Yu Gothic', 'Meiryo', system-ui, sans-serif";
-      ctx.fillText(ad.title, canvas.width * 0.5, 56);
-      ctx.font = "800 20px 'Yu Gothic', 'Meiryo', system-ui, sans-serif";
-      ctx.fillText(ad.brand, canvas.width * 0.5, 92);
-      ctx.font = "700 14px 'Yu Gothic', 'Meiryo', system-ui, sans-serif";
-      ctx.fillText(ad.sub, canvas.width * 0.5, 112);
+      ctx.font = "900 50px 'Yu Gothic', 'Meiryo', system-ui, sans-serif";
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.44)";
+      ctx.lineWidth = 5;
+      ctx.strokeText(ad.title, canvas.width * 0.5, 58);
+      ctx.fillText(ad.title, canvas.width * 0.5, 58);
 
-      for (let i = 0; i < 18; i += 1) {
+      ctx.font = "800 22px 'Yu Gothic', 'Meiryo', system-ui, sans-serif";
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.34)";
+      ctx.lineWidth = 3;
+      ctx.strokeText(ad.brand, canvas.width * 0.5, 94);
+      ctx.fillText(ad.brand, canvas.width * 0.5, 94);
+
+      ctx.fillStyle = index % 2 === 0 ? "#ffffff" : "#101419";
+      ctx.font = "900 16px 'Yu Gothic', 'Meiryo', system-ui, sans-serif";
+      ctx.fillText("広告", canvas.width - 46, 36);
+      ctx.fillStyle = ad.fg;
+      ctx.font = "700 15px 'Yu Gothic', 'Meiryo', system-ui, sans-serif";
+      ctx.fillText(ad.sub, canvas.width * 0.5, 115);
+
+      ctx.save();
+      ctx.translate(23, canvas.height * 0.5);
+      ctx.rotate(-Math.PI * 0.5);
+      ctx.font = "800 13px 'Yu Gothic', 'Meiryo', system-ui, sans-serif";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText("首都高", 0, 0);
+      ctx.restore();
+
+      for (let i = 0; i < 34; i += 1) {
         ctx.globalAlpha = 0.06 + cityNoise(index * 19.7 + i) * 0.1;
         ctx.fillStyle = cityNoise(index * 23.3 + i) > 0.52 ? "#ffffff" : "#000000";
         ctx.fillRect(
@@ -3989,7 +4010,6 @@ export class HighwayWorld {
       red: [],
       shutokuWalls: [],
       shutokuBases: [],
-      shutokuDividers: [],
     };
   }
 
@@ -4001,7 +4021,6 @@ export class HighwayWorld {
     parent.add(this.createChunkedInstancedBoxes(batch.red, GUARDRAIL_MODEL.reflector.width, GUARDRAIL_MODEL.reflector.height, GUARDRAIL_MODEL.reflector.depth, this.materials.reflectorRed, false, routeLength));
     parent.add(this.createChunkedScaledInstancedBoxes(batch.shutokuBases, this.materials.shutokuBarrierBase, false, false, routeLength, ROAD_DETAIL_CHUNK_LENGTH));
     parent.add(this.createChunkedScaledInstancedBoxes(batch.shutokuWalls, this.materials.shutokuBarrier, false, false, routeLength, ROAD_DETAIL_CHUNK_LENGTH));
-    parent.add(this.createChunkedScaledInstancedBoxes(batch.shutokuDividers, this.materials.railDark, false, false, routeLength, ROAD_DETAIL_CHUNK_LENGTH));
   }
 
   addCollider(x, z, width, depth) {
