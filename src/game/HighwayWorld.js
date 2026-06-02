@@ -241,6 +241,7 @@ const TUNNEL_RUNS = [
 ];
 const TUNNEL_BARRIER_MODES = ["both", "right", "left", "guardrail", "both", "left", "right"];
 const TUNNEL_MODULE_LENGTH = 18;
+const TUNNEL_WALL_TOP_STRIP_RATIO = 0.2;
 const DEFAULT_ROUTE_SCALE = 6.5;
 const DEFAULT_ROUTE_CONTROL_POINTS = [
   [0, 0],
@@ -359,7 +360,7 @@ export class HighwayWorld {
     tunnelTexture.repeat.set(12, 12);
     const tunnelBrickTexture = this.createTunnelBrickTexture();
     tunnelBrickTexture.repeat.set(1.8, 4.6);
-    const tunnelUpperTexture = this.createSurfaceTexture("#34383a", "#4b5052", "#1b1e20", 110);
+    const tunnelUpperTexture = this.createSurfaceTexture("#aeb2ad", "#c5c8c1", "#858b86", 110);
     tunnelUpperTexture.repeat.set(4, 8);
 
     const materials = {
@@ -400,7 +401,7 @@ export class HighwayWorld {
         flatShading: true,
         side: THREE.DoubleSide,
       }),
-      roadEdge: new THREE.MeshBasicMaterial({ color: 0xc9a455 }),
+      roadEdge: new THREE.MeshBasicMaterial({ color: 0xf2f3ed }),
       lane: new THREE.MeshBasicMaterial({ color: 0xd8d6c9 }),
       roadblock: new THREE.MeshStandardMaterial({
         color: 0xe8741e,
@@ -482,7 +483,7 @@ export class HighwayWorld {
         flatShading: true,
       }),
       tunnelCementUpper: new THREE.MeshStandardMaterial({
-        color: 0x34383a,
+        color: 0xb7bab3,
         map: tunnelUpperTexture,
         roughness: 0.9,
         metalness: 0.02,
@@ -501,6 +502,12 @@ export class HighwayWorld {
         color: 0x687076,
         roughness: 0.58,
         metalness: 0.18,
+        flatShading: true,
+      }),
+      tunnelEmergencyDoor: new THREE.MeshStandardMaterial({
+        color: 0x315f48,
+        roughness: 0.74,
+        metalness: 0.04,
         flatShading: true,
       }),
       tunnelEmergencySign: this.createTunnelEmergencyMaterial(),
@@ -1389,7 +1396,8 @@ export class HighwayWorld {
     highway.add(this.createChunkedInstancedBoxes(laneMarkers, 0.13, 0.038, this.laneDashLength, this.materials.lane));
 
     const edgeMarkers = [];
-    for (let s = 0; s < this.trackLength; s += 52) {
+    const edgeLineLength = 13.6;
+    for (let s = 0; s < this.trackLength; s += 12) {
       const bounds = this.getRoadLateralBoundsAtDistance(s);
       for (const edgeOffset of [bounds.left + 0.45, bounds.right - 0.45]) {
         if (this.isJunctionOpeningForOffset(s, edgeOffset)) {
@@ -1403,7 +1411,7 @@ export class HighwayWorld {
         });
       }
     }
-    highway.add(this.createChunkedInstancedBoxes(edgeMarkers, 0.14, 0.035, 27, this.materials.roadEdge));
+    highway.add(this.createChunkedInstancedBoxes(edgeMarkers, 0.14, 0.035, edgeLineLength, this.materials.roadEdge));
     this.createRoadSurfaceMarkings(highway);
 
     const guardrails = this.createGuardrailBatch();
@@ -1837,7 +1845,7 @@ export class HighwayWorld {
   }
 
   shouldUseShutokuBarrier(s, side) {
-    return false;
+    return !this.isTunnelDistance(s, TUNNEL_MODULE_LENGTH * 0.75);
   }
 
   addShutokuBarrierSegment(parent, frame, side, length, batch = null) {
@@ -1870,6 +1878,11 @@ export class HighwayWorld {
 
     this.addOrientedBox(parent, wall.scale.x, wall.scale.y, wall.scale.z, this.materials.shutokuBarrier, wall.position, wall.yaw);
     this.addOrientedBox(parent, base.scale.x, base.scale.y, base.scale.z, this.materials.shutokuBarrierBase, base.position, base.yaw);
+  }
+
+  isTunnelDistance(s, margin = 0) {
+    const distance = ((s % this.trackLength) + this.trackLength) % this.trackLength;
+    return this.tunnelRuns.some((run) => distance >= run.start - margin && distance <= run.start + run.length + margin);
   }
 
   createParkingMeet() {
@@ -3511,8 +3524,8 @@ export class HighwayWorld {
 
     const wallX = ROAD_HALF_WIDTH + 4.7;
     const wallHeight = 8.4;
-    const lowerWallHeight = wallHeight * 0.75;
-    const upperWallHeight = wallHeight - lowerWallHeight;
+    const upperWallHeight = wallHeight * TUNNEL_WALL_TOP_STRIP_RATIO;
+    const lowerWallHeight = wallHeight - upperWallHeight;
     const roofWidth = ROAD_WIDTH + 11.6;
     const wallDepth = length + 0.45;
     this.addLocalBox(section, 0.74, lowerWallHeight, wallDepth, this.materials.tunnelBrickLower, -wallX, lowerWallHeight * 0.5, 0);
@@ -3531,14 +3544,23 @@ export class HighwayWorld {
       const innerX = side * (wallX - 0.43);
       if (index % 5 === 1) {
         this.addLocalBox(section, 0.08, 1.18, 1.45, this.materials.tunnelElectricalPanel, innerX, 2.35, -length * 0.22);
-        this.addLocalBox(section, 0.09, 0.05, 1.16, this.materials.railDark, innerX - side * 0.01, 2.78, -length * 0.22);
-        this.addLocalBox(section, 0.09, 0.05, 1.16, this.materials.railDark, innerX - side * 0.01, 2.18, -length * 0.22);
+      }
+      if (index % 9 === 4) {
+        this.addLocalBox(section, 0.08, 1.86, 1.2, this.materials.tunnelElectricalPanel, innerX, 3.0, length * 0.28);
+      }
+      if (index % 13 === 8) {
+        this.addLocalBox(section, 0.08, 2.36, 2.9, this.materials.tunnelElectricalPanel, innerX, 2.95, 0);
       }
       if (index % 7 === 3) {
         this.addLocalBox(section, 0.08, 0.58, 1.16, this.materials.tunnelEmergencySign, innerX, 4.95, length * 0.18);
       }
       if (index % 6 === 0) {
         this.addLocalBox(section, 0.08, 0.62, 1.38, this.materials.tunnelExitSign, innerX, 5.72, -length * 0.16);
+      }
+      if (index % 10 === 5) {
+        this.addLocalBox(section, 0.1, 2.35, 1.36, this.materials.tunnelEmergencyDoor, innerX, 1.18, length * 0.08);
+        this.addLocalBox(section, 0.11, 0.18, 0.18, this.materials.tunnelWarning, innerX - side * 0.01, 1.28, length * 0.08);
+        this.addLocalBox(section, 0.08, 0.44, 1.22, this.materials.tunnelExitSign, innerX, 2.72, length * 0.08);
       }
     }
 
