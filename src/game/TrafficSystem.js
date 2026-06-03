@@ -28,8 +28,8 @@ const MIN_ACTIVE_CARS = 12;
 const MAX_ACTIVE_CARS = 72;
 const NIGHT_TRAFFIC_BOOST = 1.24;
 const GRAPHICS_TRAFFIC_LIMITS = [
-  { min: 8, max: 30 },
-  { min: 10, max: 48 },
+  { min: 5, max: 18 },
+  { min: 8, max: 34 },
   { min: MIN_ACTIVE_CARS, max: MAX_ACTIVE_CARS },
 ];
 const LANE_CHANGE_SIGNAL_LEAD = 1.15;

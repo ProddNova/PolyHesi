@@ -290,9 +290,9 @@ const DEFAULT_ROUTE_CONTROL_POINTS = [
   [0, -650],
 ].map(([x, z]) => ({ x: x * DEFAULT_ROUTE_SCALE, z: z * DEFAULT_ROUTE_SCALE }));
 const GRAPHICS_PROFILES = [
-  { shadowSize: 0, anisotropy: 1, roadLightStep: 4 },
-  { shadowSize: 768, anisotropy: 1, roadLightStep: 3 },
-  { shadowSize: 1024, anisotropy: 2, roadLightStep: 2 },
+  { shadowSize: 0, anisotropy: 1, roadLightStep: 6, chunkRange: 780 },
+  { shadowSize: 512, anisotropy: 1, roadLightStep: 4, chunkRange: 1180 },
+  { shadowSize: 1024, anisotropy: 2, roadLightStep: 2, chunkRange: 1800 },
 ];
 
 function seededRandom(seed) {
@@ -350,6 +350,8 @@ export class HighwayWorld {
     this.graphicsQuality = 1;
     this.roadLightStep = GRAPHICS_PROFILES[this.graphicsQuality]?.roadLightStep ?? 2;
     this.roadLightRange = 760;
+    this.chunkVisibilityRange = GRAPHICS_PROFILES[this.graphicsQuality]?.chunkRange ?? 1180;
+    this.cullableChunks = [];
     this.tunnelRuns = this.routeProfile.tunnels.map((run) => ({ ...run }));
     this.setLaneDashSettings(settings, { rebuild: false });
 
@@ -1398,6 +1400,10 @@ export class HighwayWorld {
       }
     }
     this.roadLightRange = this.ultraGraphics ? 1080 : this.graphicsQuality >= 2 ? 920 : this.graphicsQuality >= 1 ? 720 : 520;
+    this.chunkVisibilityRange = this.ultraGraphics ? 2600 : profile.chunkRange;
+    for (const chunk of this.cullableChunks) {
+      chunk.visible = true;
+    }
     const garageShadowSize = this.ultraGraphics ? 512 : this.graphicsQuality >= 2 ? 384 : 0;
     for (const light of this.garageLights) {
       light.castShadow = garageShadowSize > 0;
@@ -2273,7 +2279,12 @@ export class HighwayWorld {
 
     const group = new THREE.Group();
     for (const chunk of chunks) {
-      group.add(this.createInstancedBoxes(chunk, width, height, depth, material, castShadow));
+      group.add(this.registerCullableChunk(
+        this.createInstancedBoxes(chunk, width, height, depth, material, castShadow),
+        chunk,
+        routeLength,
+        chunkLength,
+      ));
     }
     return group;
   }
@@ -2315,9 +2326,48 @@ export class HighwayWorld {
 
     const group = new THREE.Group();
     for (const chunk of chunks) {
-      group.add(this.createScaledInstancedBoxes(chunk, material, castShadow, remodelIgnore));
+      group.add(this.registerCullableChunk(
+        this.createScaledInstancedBoxes(chunk, material, castShadow, remodelIgnore),
+        chunk,
+        routeLength,
+        chunkLength,
+      ));
     }
     return group;
+  }
+
+  registerCullableChunk(object, chunk, routeLength = this.trackLength, chunkLength = ROAD_DETAIL_CHUNK_LENGTH) {
+    if (!object || !chunk?.length) {
+      return object;
+    }
+
+    const safeRouteLength = Math.max(1, routeLength || this.trackLength || 1);
+    const isMainRouteChunk = Math.abs(safeRouteLength - this.trackLength) < 1;
+    if (!isMainRouteChunk) {
+      return object;
+    }
+
+    object.userData.chunkCenterS = chunk.centerS ?? 0;
+    object.userData.chunkRouteLength = safeRouteLength;
+    object.userData.chunkRadius = Math.max(160, chunkLength * 0.58);
+    object.userData.performanceCull = true;
+    this.cullableChunks.push(object);
+    return object;
+  }
+
+  updateChunkVisibility(focusS = 0, viewDistance = this.chunkVisibilityRange) {
+    if (!this.cullableChunks.length) {
+      return;
+    }
+
+    const baseRange = this.ultraGraphics
+      ? Math.max(this.chunkVisibilityRange, viewDistance * 1.35)
+      : Math.min(this.chunkVisibilityRange, Math.max(620, viewDistance * 0.95));
+    for (const chunk of this.cullableChunks) {
+      const routeLength = chunk.userData.chunkRouteLength ?? this.trackLength;
+      const distance = this.loopDistanceOnLength(focusS, chunk.userData.chunkCenterS ?? 0, routeLength);
+      chunk.visible = distance <= baseRange + (chunk.userData.chunkRadius ?? 0);
+    }
   }
 
   chunkInstancesByDistance(instances, routeLength = this.trackLength, chunkLength = ROAD_DETAIL_CHUNK_LENGTH) {
@@ -2335,7 +2385,18 @@ export class HighwayWorld {
       chunks[index].push(instance);
     }
 
-    return chunks.filter((chunk) => chunk.length);
+    return chunks
+      .map((chunk, index) => {
+        chunk.centerS = (index + 0.5) * chunkSize;
+        return chunk;
+      })
+      .filter((chunk) => chunk.length);
+  }
+
+  loopDistanceOnLength(a, b, length = this.trackLength) {
+    const safeLength = Math.max(1, length || this.trackLength || 1);
+    const distance = Math.abs((((a - b) % safeLength) + safeLength) % safeLength);
+    return Math.min(distance, safeLength - distance);
   }
 
   createRoadsideInfrastructure(parent) {

@@ -33,7 +33,7 @@ const IMPACT_RECOVERY_SECONDS = 0;
 const MAX_SIMULATION_DT = 1 / 30;
 const HUD_SLOW_UPDATE_INTERVAL = 0.25;
 const TIME_SETTING_UI_INTERVAL = 0.2;
-const ROAD_LIGHT_VISIBILITY_INTERVAL = 0.1;
+const WORLD_VISIBILITY_INTERVAL = 0.16;
 const CAMERA_MODES = ["hood", "roof", "chaseClose", "chaseFar", "cinematic"];
 const GARAGE_PSX_CAR_TARGET_ID = "psx:garage-player-car";
 const TRAFFIC_PSX_CAR_TARGET_PREFIX = "psx:traffic-car:";
@@ -114,7 +114,7 @@ export class Game {
     this.cameraModeIndex = 0;
     this.hudSlowUpdateTimer = 0;
     this.timeSettingUiTimer = 0;
-    this.roadLightVisibilityTimer = 0;
+    this.worldVisibilityTimer = 0;
     this.upgradeCosts = this.getUpgradeCosts();
     this.remodelClipboard = null;
     this.remodelUndoStack = [];
@@ -1892,11 +1892,12 @@ export class Game {
         this.hud.updateSettingValue?.("timeOfDay", this.settings.timeOfDay, { skipPlayerSync: true });
       }
     }
-    this.roadLightVisibilityTimer -= dt;
-    if (this.roadLightVisibilityTimer <= 0) {
-      this.roadLightVisibilityTimer = ROAD_LIGHT_VISIBILITY_INTERVAL;
+    this.worldVisibilityTimer -= dt;
+    if (this.worldVisibilityTimer <= 0) {
+      this.worldVisibilityTimer = WORLD_VISIBILITY_INTERVAL;
       const road = this.world.getNearestRoadInfo?.(this.player.position);
       this.world.updateRoadLightVisibility?.(road?.s ?? 0, this.getViewDistance());
+      this.world.updateChunkVisibility?.(road?.s ?? 0, this.getViewDistance());
     }
     this.world.applyEnvironment?.(this.settings, dt);
   }
