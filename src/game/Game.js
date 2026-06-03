@@ -33,6 +33,7 @@ const IMPACT_RECOVERY_SECONDS = 0;
 const MAX_SIMULATION_DT = 1 / 30;
 const HUD_SLOW_UPDATE_INTERVAL = 0.25;
 const TIME_SETTING_UI_INTERVAL = 0.2;
+const ROAD_LIGHT_VISIBILITY_INTERVAL = 0.1;
 const CAMERA_MODES = ["hood", "roof", "chaseClose", "chaseFar", "cinematic"];
 const GARAGE_PSX_CAR_TARGET_ID = "psx:garage-player-car";
 const TRAFFIC_PSX_CAR_TARGET_PREFIX = "psx:traffic-car:";
@@ -113,6 +114,7 @@ export class Game {
     this.cameraModeIndex = 0;
     this.hudSlowUpdateTimer = 0;
     this.timeSettingUiTimer = 0;
+    this.roadLightVisibilityTimer = 0;
     this.upgradeCosts = this.getUpgradeCosts();
     this.remodelClipboard = null;
     this.remodelUndoStack = [];
@@ -1135,6 +1137,7 @@ export class Game {
     }
     if (TRAFFIC_CAR_IDS.includes(this.selectedRemodelPsxCarId)) {
       this.updateTrafficPsxRemodelTarget(this.selectedRemodelPsxCarId);
+      this.traffic?.invalidateBounds?.();
     }
     this.updateGaragePsxRemodelTarget();
     this.buildRemodelPsxLineup();
@@ -1149,6 +1152,7 @@ export class Game {
     this.vehicleRigOverrides[this.selectedRemodelPsxCarId] = this.getVehicleRigForCar(this.selectedRemodelPsxCarId);
     if (CAR_PRESETS.find((preset) => preset.id === this.selectedRemodelPsxCarId)?.trafficEligible) {
       this.traffic?.refreshModel?.(this.selectedRemodelPsxCarId);
+      this.traffic?.invalidateBounds?.();
       this.updateTrafficPsxRemodelTarget(this.selectedRemodelPsxCarId);
     }
     this.markProgressDirty({ immediate: true });
@@ -1888,8 +1892,12 @@ export class Game {
         this.hud.updateSettingValue?.("timeOfDay", this.settings.timeOfDay, { skipPlayerSync: true });
       }
     }
-    const road = this.world.getNearestRoadInfo?.(this.player.position);
-    this.world.updateRoadLightVisibility?.(road?.s ?? 0, this.getViewDistance());
+    this.roadLightVisibilityTimer -= dt;
+    if (this.roadLightVisibilityTimer <= 0) {
+      this.roadLightVisibilityTimer = ROAD_LIGHT_VISIBILITY_INTERVAL;
+      const road = this.world.getNearestRoadInfo?.(this.player.position);
+      this.world.updateRoadLightVisibility?.(road?.s ?? 0, this.getViewDistance());
+    }
     this.world.applyEnvironment?.(this.settings, dt);
   }
 

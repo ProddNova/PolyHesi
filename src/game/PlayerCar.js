@@ -48,6 +48,7 @@ export class PlayerCar {
 
   buildMesh(preset = this.activePreset, options = {}) {
     const usePorscheTestModel = Boolean(options.usePorscheTestModel);
+    this.disposeCarMaterials();
     this.group.clear();
     this.activePreset = preset;
     this.activePresetId = preset.id;
@@ -166,6 +167,23 @@ export class PlayerCar {
     this.group.add(headLight);
     this.group.add(headLight.target);
     this.applyGraphicsQualityToLights();
+  }
+
+  disposeCarMaterials() {
+    const disposed = new Set();
+    this.group.traverse((child) => {
+      if (!child.isMesh || !child.material) {
+        return;
+      }
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) {
+        if (!material?.userData?.disposeWithCar || disposed.has(material)) {
+          continue;
+        }
+        disposed.add(material);
+        material.dispose();
+      }
+    });
   }
 
   addHeadLight(length) {

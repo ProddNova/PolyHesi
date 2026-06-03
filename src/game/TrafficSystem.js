@@ -43,6 +43,7 @@ const JUNCTION_TAKE_CHANCE_PER_SECOND = 0.34;
 const LANE_CLOSURE_LOOKAHEAD = 95;
 const MERGE_YIELD_FACTOR = 0.6;
 const TRAFFIC_INDICATOR_MATERIAL = new THREE.MeshBasicMaterial({ color: 0xffb21a });
+const TRAFFIC_DENSITY_ADJUST_INTERVAL = 0.18;
 
 export class TrafficSystem {
   constructor(scene, world, options = {}) {
@@ -51,6 +52,9 @@ export class TrafficSystem {
     this.getVehicleRigForCar = options.getVehicleRigForCar ?? (() => ({}));
     this.cars = [];
     this.nextId = 1;
+    this.activeTarget = 0;
+    this.densityAdjustTimer = 0;
+    this.boundsRevision = 0;
   }
 
   prewarm(settings = {}) {
@@ -69,6 +73,8 @@ export class TrafficSystem {
 
   reset(settings, focusS = 0) {
     const target = this.getActiveTarget(settings);
+    this.activeTarget = target;
+    this.densityAdjustTimer = 0;
     while (this.cars.length < target) {
       const car = this.createVehicle();
       car.group.visible = false;
@@ -78,6 +84,7 @@ export class TrafficSystem {
     while (this.cars.length > target) {
       const car = this.cars.pop();
       this.scene.remove(car.group);
+      this.disposeObjectMaterials(car.group);
     }
 
     const openLanes = this.getOpenLanesAtS(focusS);
@@ -120,7 +127,9 @@ export class TrafficSystem {
 
   syncDensity(settings, focusS = 0) {
     const target = this.getActiveTarget(settings);
-    while (this.cars.length < target) {
+    this.activeTarget = target;
+
+    if (this.cars.length < target) {
       const car = this.createVehicle();
       car.lane = this.pickOpenLane(focusS);
       car.s = this.findOpenSpawnS(car.lane, focusS, "ahead");
@@ -132,14 +141,18 @@ export class TrafficSystem {
       this.applyFrame(car, 1, true);
     }
 
-    while (this.cars.length > target) {
+    if (this.cars.length > target) {
       const car = this.cars.pop();
       this.scene.remove(car.group);
+      this.disposeObjectMaterials(car.group);
     }
   }
 
   update(dt, settings, focusS = 0) {
-    if (this.cars.length !== this.getActiveTarget(settings)) {
+    const target = this.getActiveTarget(settings);
+    this.densityAdjustTimer = Math.max(0, this.densityAdjustTimer - dt);
+    if (target !== this.activeTarget || (this.cars.length !== target && this.densityAdjustTimer <= 0)) {
+      this.densityAdjustTimer = TRAFFIC_DENSITY_ADJUST_INTERVAL;
       this.syncDensity(settings, focusS);
     }
 
@@ -492,18 +505,39 @@ export class TrafficSystem {
   }
 
   getTrafficBounds(car) {
-    return this.world.getHitboxProfile(
+    const height = car.kind === "truck" ? 2.75 : 1.55;
+    const centerY = car.kind === "truck" ? 1.38 : 0.78;
+    const key = `${car.kind}:${car.width}:${height}:${car.length}:${centerY}`;
+    if (
+      car.trafficBounds &&
+      car.trafficBoundsKey === key &&
+      car.trafficBoundsRevision === this.boundsRevision
+    ) {
+      return car.trafficBounds;
+    }
+
+    car.trafficBoundsKey = key;
+    car.trafficBoundsRevision = this.boundsRevision;
+    car.trafficBounds = this.world.getHitboxProfile(
       car.kind === "truck" ? "hitbox:traffic-truck" : "hitbox:traffic-car",
       {
         width: car.width,
-        height: car.kind === "truck" ? 2.75 : 1.55,
+        height,
         length: car.length,
         centerX: 0,
-        centerY: car.kind === "truck" ? 1.38 : 0.78,
+        centerY,
         centerZ: 0,
         yawOffset: 0,
       },
     );
+    return car.trafficBounds;
+  }
+
+  invalidateBounds() {
+    this.boundsRevision += 1;
+    for (const car of this.cars) {
+      car.trafficBounds = null;
+    }
   }
 
   randomizeSpeed(car, settings) {
@@ -622,6 +656,9 @@ export class TrafficSystem {
       indicators: visual.indicators,
       overtakeArmed: false,
       mergeYield: false,
+      trafficBounds: null,
+      trafficBoundsKey: "",
+      trafficBoundsRevision: -1,
     };
   }
 
@@ -755,9 +792,26 @@ export class TrafficSystem {
       car.indicators = visual.indicators;
       car.width = visual.width;
       car.length = visual.length;
+      car.trafficBounds = null;
       this.scene.remove(previousGroup);
+      this.disposeObjectMaterials(previousGroup);
       this.scene.add(car.group);
       this.applyFrame(car, 1, true);
     }
+  }
+
+  disposeObjectMaterials(object) {
+    object?.traverse((child) => {
+      if (!child.isMesh || !child.material) {
+        return;
+      }
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) {
+        if (material === TRAFFIC_INDICATOR_MATERIAL) {
+          continue;
+        }
+        material?.dispose?.();
+      }
+    });
   }
 }

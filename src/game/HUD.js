@@ -33,6 +33,16 @@ function normalizeRemodelBarrierType(value) {
   return key === "guardrail" ? "guardrail" : "barrier";
 }
 
+function setTextIfChanged(node, text) {
+  if (!node) {
+    return;
+  }
+  const next = String(text);
+  if (node.textContent !== next) {
+    node.textContent = next;
+  }
+}
+
 function formatPartEffects(part) {
   return Object.entries(part.effects ?? {})
     .filter(([_key, value]) => Number(value) > 0)
@@ -867,15 +877,15 @@ export class HUD {
   }
 
   update({ speedKmh, score, coins, comboMultiplier, nearMisses, hits, maxHits, fps, crashed, canRestart }) {
-    this.nodes.speed.textContent = Math.round(speedKmh);
-    this.nodes.score.textContent = Math.floor(score).toLocaleString("en-US");
-    this.nodes.coins.textContent = Math.floor(coins).toLocaleString("en-US");
-    this.nodes.combo.textContent = `x${comboMultiplier.toFixed(1)}`;
-    this.nodes.nearMiss.textContent = nearMisses;
+    setTextIfChanged(this.nodes.speed, Math.round(speedKmh));
+    setTextIfChanged(this.nodes.score, Math.floor(score).toLocaleString("en-US"));
+    setTextIfChanged(this.nodes.coins, Math.floor(coins).toLocaleString("en-US"));
+    setTextIfChanged(this.nodes.combo, `x${comboMultiplier.toFixed(1)}`);
+    setTextIfChanged(this.nodes.nearMiss, nearMisses);
     if (this.nodes.hits) {
-      this.nodes.hits.textContent = `${hits}/${maxHits}`;
+      setTextIfChanged(this.nodes.hits, `${hits}/${maxHits}`);
     }
-    this.nodes.fps.textContent = Math.round(fps);
+    setTextIfChanged(this.nodes.fps, Math.round(fps));
 
     if (performance.now() > this.nearMissUntil) {
       this.nodes.nearMissToast.classList.remove("is-active");
@@ -886,7 +896,7 @@ export class HUD {
     this.nodes.restart.disabled = !canRestart;
     this.nodes.restart.classList.toggle("is-disabled", !canRestart);
     if (crashed) {
-      this.nodes.finalScore.textContent = Math.floor(score).toLocaleString("en-US");
+      setTextIfChanged(this.nodes.finalScore, Math.floor(score).toLocaleString("en-US"));
     }
   }
 

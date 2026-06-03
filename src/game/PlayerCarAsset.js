@@ -42,6 +42,13 @@ rimGeometry.rotateZ(Math.PI / 2);
 const hubGeometry = new THREE.CylinderGeometry(1, 1, 1, 8);
 hubGeometry.rotateZ(Math.PI / 2);
 
+function markDisposableMaterial(material) {
+  if (material) {
+    material.userData.disposeWithCar = true;
+  }
+  return material;
+}
+
 function getTexture(url) {
   if (!textureCache.has(url)) {
     const texture = textureLoader.load(url);
@@ -260,14 +267,14 @@ function measureObject(object) {
 
 function createBodyMaterials(preset) {
   const rig = preset.vehicleRig ?? {};
-  const body = new THREE.MeshStandardMaterial({
+  const body = markDisposableMaterial(new THREE.MeshStandardMaterial({
     name: "psxBodyPaint",
     color: rig.bodyColor ?? preset.color,
     roughness: 0.56,
     metalness: 0.18,
     flatShading: true,
-  });
-  const glass = new THREE.MeshStandardMaterial({
+  }));
+  const glass = markDisposableMaterial(new THREE.MeshStandardMaterial({
     name: "psxGlass",
     color: 0x05070a,
     emissive: 0x000000,
@@ -275,15 +282,15 @@ function createBodyMaterials(preset) {
     roughness: 0.28,
     metalness: 0.12,
     flatShading: true,
-  });
-  const trim = new THREE.MeshStandardMaterial({
+  }));
+  const trim = markDisposableMaterial(new THREE.MeshStandardMaterial({
     name: "psxTrim",
     color: 0x0b0d10,
     roughness: 0.78,
     metalness: 0.08,
     flatShading: true,
-  });
-  const headlight = new THREE.MeshStandardMaterial({
+  }));
+  const headlight = markDisposableMaterial(new THREE.MeshStandardMaterial({
     name: "psxHeadlightTexture",
     color: 0xffffff,
     map: getTexture(headlightTextureUrl),
@@ -292,8 +299,8 @@ function createBodyMaterials(preset) {
     roughness: 0.42,
     metalness: 0.04,
     flatShading: true,
-  });
-  const taillight = new THREE.MeshStandardMaterial({
+  }));
+  const taillight = markDisposableMaterial(new THREE.MeshStandardMaterial({
     name: "psxTaillightTexture",
     color: 0xffddd8,
     map: getTexture(taillightTextureUrl),
@@ -302,7 +309,7 @@ function createBodyMaterials(preset) {
     roughness: 0.45,
     metalness: 0.02,
     flatShading: true,
-  });
+  }));
 
   return new Map([
     ["Material.001", body],
@@ -353,14 +360,14 @@ function createWheelAsset(preset, wheelRadius, wheelThickness) {
   const nativeThickness = Math.max(bounds.size.x, 0.001);
   const radiusScale = wheelRadius / nativeRadius;
   const thicknessScale = (wheelThickness * 1.06) / nativeThickness;
-  const rimMaterial = new THREE.MeshStandardMaterial({
+  const rimMaterial = markDisposableMaterial(new THREE.MeshStandardMaterial({
     name: "psxWheelMetal",
     color: preset.wheelColor ?? preset.vehicleRig?.wheelColor ?? 0x9aa0a4,
     roughness: 0.44,
     metalness: 0.46,
     flatShading: true,
     side: THREE.DoubleSide,
-  });
+  }));
   wheel.traverse((child) => {
     if (!child.isMesh) {
       return;
@@ -435,13 +442,13 @@ export function createPlayerCarAsset(preset) {
   for (const wheelConfig of wheelPositions) {
     const wheel = new THREE.Group();
     const psxWheel = createWheelAsset(preset, wheelRadius, wheelThickness);
-    const tire = new THREE.Mesh(tireGeometry, new THREE.MeshStandardMaterial({
+    const tire = new THREE.Mesh(tireGeometry, markDisposableMaterial(new THREE.MeshStandardMaterial({
       color: 0x050608,
       roughness: 0.94,
       metalness: 0.02,
       flatShading: true,
       side: THREE.DoubleSide,
-    }));
+    })));
     tire.scale.set(wheelThickness, wheelRadius, wheelRadius);
     tire.castShadow = true;
     tire.receiveShadow = true;
@@ -449,20 +456,20 @@ export function createPlayerCarAsset(preset) {
     if (psxWheel) {
       wheel.add(psxWheel);
     } else {
-      const rim = new THREE.Mesh(rimGeometry, new THREE.MeshStandardMaterial({
+      const rim = new THREE.Mesh(rimGeometry, markDisposableMaterial(new THREE.MeshStandardMaterial({
         color: 0x8b9298,
         roughness: 0.38,
         metalness: 0.55,
         flatShading: true,
         side: THREE.DoubleSide,
-      }));
-      const hub = new THREE.Mesh(hubGeometry, new THREE.MeshStandardMaterial({
+      })));
+      const hub = new THREE.Mesh(hubGeometry, markDisposableMaterial(new THREE.MeshStandardMaterial({
         color: 0x545a60,
         roughness: 0.48,
         metalness: 0.42,
         flatShading: true,
         side: THREE.DoubleSide,
-      }));
+      })));
       rim.scale.set(wheelThickness * 1.08, wheelRadius * 0.58, wheelRadius * 0.58);
       hub.scale.set(wheelThickness * 1.18, wheelRadius * 0.26, wheelRadius * 0.26);
       rim.castShadow = true;
@@ -561,6 +568,7 @@ function cloneMaterialsForTraffic(object, bodyColor) {
         return material;
       }
       const next = material.clone();
+      markDisposableMaterial(next);
       if (next.name === "psxBodyPaint" && next.color) {
         next.color.set(bodyColor);
       }
