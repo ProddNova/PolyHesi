@@ -481,6 +481,7 @@ export class TrafficSystem {
     const routeKey = this.getRouteKey(car);
     let closest = null;
     let closestDistance = Infinity;
+    const carBounds = this.getTrafficBounds(car);
 
     for (const other of this.cars) {
       if (other === car || other.lane !== car.lane || this.getRouteKey(other) !== routeKey) {
@@ -488,7 +489,6 @@ export class TrafficSystem {
       }
 
       const distance = (other.s - car.s + this.world.trackLength) % this.world.trackLength;
-      const carBounds = this.getTrafficBounds(car);
       const otherBounds = this.getTrafficBounds(other);
       const followingDistance = 22 + carBounds.length * 0.7 + otherBounds.length * 0.4;
       if (distance > 0 && distance < followingDistance && distance < closestDistance) {
@@ -573,8 +573,8 @@ export class TrafficSystem {
       this.ensureOpenLane(car);
     }
     const frame = car.route?.type === "branch"
-      ? this.world.getBranchFrame?.(car.route.id, car.route.s) ?? this.world.getFrameAtDistance(car.s)
-      : this.world.getFrameAtDistance(car.s);
+      ? this.world.getBranchFrame?.(car.route.id, car.route.s, car.frameScratch) ?? this.world.getFrameAtDistance(car.s, car.frameScratch)
+      : this.world.getFrameAtDistance(car.s, car.frameScratch);
     if (car.route?.type === "branch" && car.route.direction < 0) {
       frame.tangent.multiplyScalar(-1);
       frame.normal.multiplyScalar(-1);
@@ -585,9 +585,8 @@ export class TrafficSystem {
       : this.getLaneOffset(car.s, car.lane);
     const laneChangeResponse = car.kind === "truck" ? LANE_CHANGE_RESPONSE_TRUCK : LANE_CHANGE_RESPONSE_CAR;
     car.lateralOffset = snap ? targetOffset : damp(car.lateralOffset, targetOffset, laneChangeResponse, dt);
-    const position = this.world.offsetPoint(frame, car.lateralOffset, 0);
-    car.x = position.x;
-    car.z = position.z;
+    car.x = frame.center.x + frame.normal.x * car.lateralOffset;
+    car.z = frame.center.z + frame.normal.z * car.lateralOffset;
     car.yaw = frame.yaw;
     car.visualYaw = snap || car.visualYaw === undefined
       ? frame.yaw
@@ -654,6 +653,11 @@ export class TrafficSystem {
       signalClock: rand(0, 1),
       junctionCooldown: rand(0.5, 5.5),
       indicators: visual.indicators,
+      frameScratch: {
+        center: new THREE.Vector3(),
+        tangent: new THREE.Vector3(),
+        normal: new THREE.Vector3(),
+      },
       overtakeArmed: false,
       mergeYield: false,
       trafficBounds: null,

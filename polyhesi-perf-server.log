@@ -2,5 +2,5 @@
 > polyhesi@0.1.0 dev
 > node server/index.js
 
-◇ injected env (0) from .env // tip: ⌘ suppress logs { quiet: true }
-PolyHesi server listening on http://127.0.0.1:10000 (memory)
+◇ injected env (0) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+PolyHesi server listening on http://0.0.0.0:10000 (memory)

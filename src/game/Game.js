@@ -55,7 +55,9 @@ const REMODEL_PRESETS = {
   },
 };
 const SAVE_DEBOUNCE_MS = 1800;
+const SAVE_DRIVING_DEBOUNCE_MS = 30000;
 const SAVE_RETRY_MS = 8000;
+const TRAFFIC_COLLISION_RANGE_PADDING = 3.2;
 const LEGACY_PART_MIGRATION = {
   engine: ["air_filter_kmn", "exhaust_remus_street"],
   turbo: ["turbo_ihi_stage1", "turbo_garrett_gtx"],
@@ -640,47 +642,56 @@ export class Game {
       this.combo = 0;
     }
 
+    const playerPreset = this.player.activePreset;
+    const playerCollisionContext = this.getPlayerCollisionContext(playerPreset);
+    const playerVelocity = this.player.getVelocityVector?.() ?? {
+      x: this.player.getForwardVector().x * this.player.speed,
+      z: this.player.getForwardVector().z * this.player.speed,
+    };
+    const playerSpeed = this.getPlayerSpeed();
     for (const car of this.traffic.cars) {
       const dx = car.x - this.player.position.x;
       const dz = car.z - this.player.position.z;
-      const distance = Math.hypot(dx, dz);
-      const trafficHitbox = this.getTrafficHitboxProfile(car);
+      const distanceSq = dx * dx + dz * dz;
+      const collisionRange =
+        (playerPreset.bodyLength + car.length) * 0.5 + TRAFFIC_COLLISION_RANGE_PADDING;
+      let trafficCollision = null;
 
-      const trafficCollision = !this.settings.noClip && this.intersectsTraffic(car);
+      if (!this.settings.noClip && distanceSq <= collisionRange * collisionRange) {
+        trafficCollision = this.getTrafficCollision(car, playerCollisionContext);
+      }
       if (trafficCollision) {
-        this.resolveTrafficImpact(car);
+        this.resolveTrafficImpact(car, trafficCollision);
         if (this.invulnerableTimer <= 0 && this.hitCooldown <= 0) {
           this.registerHit(car.kind === "truck" ? "Truck impact" : "Traffic hit");
           return;
         }
       }
 
-      const playerVelocity = this.player.getVelocityVector?.() ?? {
-        x: this.player.getForwardVector().x * this.player.speed,
-        z: this.player.getForwardVector().z * this.player.speed,
-      };
-      const trafficVelocity = {
-        x: Math.sin(car.yaw) * car.speed,
-        z: Math.cos(car.yaw) * car.speed,
-      };
-      const relativeSpeed = Math.hypot(
-        playerVelocity.x - trafficVelocity.x,
-        playerVelocity.z - trafficVelocity.z,
-      );
-      const nearMissDistance = 3.2 + trafficHitbox.width * 0.5;
       if (
         !this.crashed &&
         canScore &&
         car.nearMissCooldown <= 0 &&
-        distance < nearMissDistance &&
-        distance > 1.35 + trafficHitbox.width * 0.45 &&
-        relativeSpeed > 12 &&
-        this.getPlayerSpeed() > 14
+        playerSpeed > 14
       ) {
-        this.registerNearMiss(car, distance);
+        const nearMissDistance = 3.2 + car.width * 0.5;
+        const nearMissMinDistance = 1.35 + car.width * 0.45;
+        if (
+          distanceSq < nearMissDistance * nearMissDistance &&
+          distanceSq > nearMissMinDistance * nearMissMinDistance
+        ) {
+          const trafficVelocityX = Math.sin(car.yaw) * car.speed;
+          const trafficVelocityZ = Math.cos(car.yaw) * car.speed;
+          const relativeSpeedSq =
+            (playerVelocity.x - trafficVelocityX) * (playerVelocity.x - trafficVelocityX) +
+            (playerVelocity.z - trafficVelocityZ) * (playerVelocity.z - trafficVelocityZ);
+          if (relativeSpeedSq > 144) {
+            this.registerNearMiss(car, Math.sqrt(distanceSq));
+          }
+        }
       }
 
-      if (canScore && playerRoad && this.getPlayerSpeed() > 14) {
+      if (canScore && playerRoad && playerSpeed > 14) {
         this.updateOvertakeState(car, playerRoad.s);
       }
     }
@@ -739,8 +750,7 @@ export class Game {
     this.audio.coin();
   }
 
-  resolveTrafficImpact(car) {
-    const collision = this.getTrafficCollision(car);
+  resolveTrafficImpact(car, collision = this.getTrafficCollision(car)) {
     if (!collision) {
       return;
     }
@@ -1507,9 +1517,8 @@ export class Game {
     return Boolean(this.getTrafficCollision(car));
   }
 
-  getTrafficCollision(car) {
-    const preset = this.player.activePreset;
-    const playerProfile = this.world.getHitboxProfile("hitbox:player", {
+  getPlayerCollisionContext(preset = this.player.activePreset) {
+    const profile = this.world.getHitboxProfile("hitbox:player", {
       width: preset.bodyWidth,
       height: 1.72,
       length: preset.bodyLength * 0.98,
@@ -1518,22 +1527,41 @@ export class Game {
       centerZ: 0,
       yawOffset: 0,
     });
-    const trafficProfile = this.getTrafficHitboxProfile(car);
-    const playerPose = this.getVehicleHitboxPose(
+    const pose = this.getVehicleHitboxPose(
       this.player.position.x,
       this.player.position.z,
       this.player.yaw,
-      playerProfile,
+      profile,
     );
+    const rightX = Math.cos(pose.yaw);
+    const rightZ = -Math.sin(pose.yaw);
+    const forwardX = Math.sin(pose.yaw);
+    const forwardZ = Math.cos(pose.yaw);
+    return {
+      profile,
+      pose,
+      halfWidth: profile.width * 0.5,
+      halfLength: profile.length * 0.5,
+      rightX,
+      rightZ,
+      forwardX,
+      forwardZ,
+    };
+  }
+
+  getTrafficCollision(car, playerContext = this.getPlayerCollisionContext()) {
+    const playerProfile = playerContext.profile;
+    const trafficProfile = this.getTrafficHitboxProfile(car);
+    const playerPose = playerContext.pose;
     const trafficPose = this.getVehicleHitboxPose(car.x, car.z, car.yaw, trafficProfile);
-    const playerHalfWidth = playerProfile.width * 0.5;
-    const playerHalfLength = playerProfile.length * 0.5;
+    const playerHalfWidth = playerContext.halfWidth;
+    const playerHalfLength = playerContext.halfLength;
     const trafficHalfWidth = trafficProfile.width * 0.5;
     const trafficHalfLength = trafficProfile.length * 0.5;
-    const playerRightX = Math.cos(playerPose.yaw);
-    const playerRightZ = -Math.sin(playerPose.yaw);
-    const playerForwardX = Math.sin(playerPose.yaw);
-    const playerForwardZ = Math.cos(playerPose.yaw);
+    const playerRightX = playerContext.rightX;
+    const playerRightZ = playerContext.rightZ;
+    const playerForwardX = playerContext.forwardX;
+    const playerForwardZ = playerContext.forwardZ;
     const trafficRightX = Math.cos(trafficPose.yaw);
     const trafficRightZ = -Math.sin(trafficPose.yaw);
     const trafficForwardX = Math.sin(trafficPose.yaw);
@@ -2097,14 +2125,14 @@ export class Game {
     }
 
     this.progressDirty = true;
-    this.setSaveStatus("saving");
     if (immediate) {
       this.flushProgressSave({ force: true });
       return;
     }
 
     if (!this.progressSaveTimer) {
-      this.progressSaveTimer = window.setTimeout(() => this.flushProgressSave(), SAVE_DEBOUNCE_MS);
+      const debounceMs = this.mode === "driving" ? SAVE_DRIVING_DEBOUNCE_MS : SAVE_DEBOUNCE_MS;
+      this.progressSaveTimer = window.setTimeout(() => this.flushProgressSave(), debounceMs);
     }
   }
 
@@ -2718,18 +2746,18 @@ export class Game {
 
   getRenderPixelRatio() {
     if (this.settings.ultraGraphics) {
-      return Math.min(window.devicePixelRatio || 1, 1.35);
+      return Math.min(window.devicePixelRatio || 1, 1.25);
     }
     const rawQuality = Number(this.settings.graphicsQuality);
     const quality = Number.isFinite(rawQuality) ? Math.round(rawQuality) : 1;
-    const cap = quality <= 0 ? 0.65 : quality >= 2 ? 1.0 : 0.85;
+    const cap = quality <= 0 ? 0.5 : quality >= 2 ? 1.0 : 0.75;
     return Math.min(window.devicePixelRatio || 1, cap);
   }
 
   applyGraphicsQuality() {
     const rawQuality = Number(this.settings.graphicsQuality);
     const quality = Number.isFinite(rawQuality) ? Math.round(rawQuality) : 1;
-    const shadowEnabled = this.settings.ultraGraphics || quality >= 1;
+    const shadowEnabled = this.settings.ultraGraphics || quality >= 2;
     this.camera.far = this.getViewDistance();
     this.camera.updateProjectionMatrix();
     this.renderer.toneMappingExposure = this.settings.ultraGraphics ? 1.12 : 1;

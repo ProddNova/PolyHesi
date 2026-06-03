@@ -290,8 +290,8 @@ const DEFAULT_ROUTE_CONTROL_POINTS = [
   [0, -650],
 ].map(([x, z]) => ({ x: x * DEFAULT_ROUTE_SCALE, z: z * DEFAULT_ROUTE_SCALE }));
 const GRAPHICS_PROFILES = [
-  { shadowSize: 0, anisotropy: 1, roadLightStep: 6, chunkRange: 780 },
-  { shadowSize: 512, anisotropy: 1, roadLightStep: 4, chunkRange: 1180 },
+  { shadowSize: 0, anisotropy: 1, roadLightStep: 9999, chunkRange: 620 },
+  { shadowSize: 0, anisotropy: 1, roadLightStep: 6, chunkRange: 920 },
   { shadowSize: 1024, anisotropy: 2, roadLightStep: 2, chunkRange: 1800 },
 ];
 
@@ -344,6 +344,13 @@ export class HighwayWorld {
     this.remodelCreatedGroup = null;
     this.remodelHitboxGroup = null;
     this.environment = null;
+    this.environmentScratch = {
+      sky: new THREE.Color(),
+      hemi: new THREE.Color(),
+      ground: new THREE.Color(),
+      light: new THREE.Color(),
+      streetlight: new THREE.Color(),
+    };
     this.roadLights = [];
     this.garageLights = [];
     this.ultraGraphics = false;
@@ -1297,7 +1304,7 @@ export class HighwayWorld {
     const lampPower = smoothstep(0.06, 0.46, night);
     const { hemisphere, keyLight, fog, colors } = this.environment;
 
-    const sky = colors.nightSky.clone();
+    const sky = this.environmentScratch.sky.copy(colors.nightSky);
     sky.lerp(dawn > dusk ? colors.dawnSky : colors.duskSky, twilight * 0.68);
     sky.lerp(colors.daySky, daylight);
     this.scene.background.lerp(sky, smooth);
@@ -1308,8 +1315,8 @@ export class HighwayWorld {
       smooth,
     );
 
-    const hemiColor = colors.nightHemi.clone().lerp(colors.dayHemi, daylight);
-    const groundColor = colors.nightGround.clone().lerp(colors.dayGround, daylight);
+    const hemiColor = this.environmentScratch.hemi.copy(colors.nightHemi).lerp(colors.dayHemi, daylight);
+    const groundColor = this.environmentScratch.ground.copy(colors.nightGround).lerp(colors.dayGround, daylight);
     hemisphere.color.lerp(hemiColor, smooth);
     hemisphere.groundColor.lerp(groundColor, smooth);
     hemisphere.intensity = THREE.MathUtils.lerp(
@@ -1329,7 +1336,7 @@ export class HighwayWorld {
       lightHeight * lightRadius,
       Math.sin(lightAngle) * -220,
     );
-    const lightColor = colors.sun.clone().lerp(colors.moon, moonBlend);
+    const lightColor = this.environmentScratch.light.copy(colors.sun).lerp(colors.moon, moonBlend);
     keyLight.color.lerp(lightColor, smooth);
     keyLight.intensity = THREE.MathUtils.lerp(
       keyLight.intensity,
@@ -1337,7 +1344,8 @@ export class HighwayWorld {
       smooth,
     );
     if (this.materials?.streetlightGlow) {
-      this.materials.streetlightGlow.color.lerp(new THREE.Color(lampPower > 0.02 ? 0xfff1d8 : 0x665f56), smooth);
+      this.environmentScratch.streetlight.set(lampPower > 0.02 ? 0xfff1d8 : 0x665f56);
+      this.materials.streetlightGlow.color.lerp(this.environmentScratch.streetlight, smooth);
     }
     for (const light of this.roadLights) {
       if (!light.visible) {
@@ -1399,7 +1407,7 @@ export class HighwayWorld {
         light.intensity = 0;
       }
     }
-    this.roadLightRange = this.ultraGraphics ? 1080 : this.graphicsQuality >= 2 ? 920 : this.graphicsQuality >= 1 ? 720 : 520;
+    this.roadLightRange = this.ultraGraphics ? 1080 : this.graphicsQuality >= 2 ? 920 : this.graphicsQuality >= 1 ? 520 : 0;
     this.chunkVisibilityRange = this.ultraGraphics ? 2600 : profile.chunkRange;
     for (const chunk of this.cullableChunks) {
       chunk.visible = true;
@@ -4822,8 +4830,8 @@ export class HighwayWorld {
     }
   }
 
-  getFrameAtDistance(distance) {
-    const frame = this.getFrameOnCurve(this.curve, this.trackLength, distance, true);
+  getFrameAtDistance(distance, target = null) {
+    const frame = this.getFrameOnCurve(this.curve, this.trackLength, distance, true, target);
     frame.routeId = "main";
     frame.isBranch = false;
     frame.roadHalfWidth = this.getRoadHalfWidthAtDistance(frame.s);
@@ -4832,19 +4840,20 @@ export class HighwayWorld {
     return frame;
   }
 
-  getFrameOnCurve(curve, length, distance, closed) {
+  getFrameOnCurve(curve, length, distance, closed, target = null) {
     const routeS = closed ? ((distance % length) + length) % length : clamp(distance, 0, length);
     const t = clamp(routeS / length, 0, 1);
-    const center = curve.getPointAt(t);
-    const tangent = curve.getTangentAt(t).normalize();
-    const normal = new THREE.Vector3(tangent.z, 0, -tangent.x).normalize();
-    return {
-      s: routeS,
-      center,
-      tangent,
-      normal,
-      yaw: Math.atan2(tangent.x, tangent.z),
-    };
+    const frame = target ?? {};
+    const center = curve.getPointAt(t, frame.center ?? new THREE.Vector3());
+    const tangent = curve.getTangentAt(t, frame.tangent ?? new THREE.Vector3()).normalize();
+    const normal = frame.normal ?? new THREE.Vector3();
+    normal.set(tangent.z, 0, -tangent.x).normalize();
+    frame.s = routeS;
+    frame.center = center;
+    frame.tangent = tangent;
+    frame.normal = normal;
+    frame.yaw = Math.atan2(tangent.x, tangent.z);
+    return frame;
   }
 
   offsetPoint(frame, lateralOffset, y) {
@@ -5194,12 +5203,12 @@ export class HighwayWorld {
     return this.branchRoutes.find((route) => route.id === id) ?? null;
   }
 
-  getBranchFrame(routeOrId, distance) {
+  getBranchFrame(routeOrId, distance, target = null) {
     const route = typeof routeOrId === "string" ? this.getBranchRoute(routeOrId) : routeOrId;
     if (!route) {
-      return this.getFrameAtDistance(distance);
+      return this.getFrameAtDistance(distance, target);
     }
-    const frame = this.getFrameOnCurve(route.curve, route.length, distance, false);
+    const frame = this.getFrameOnCurve(route.curve, route.length, distance, false, target);
     frame.isBranch = true;
     frame.routeId = route.id;
     frame.routeDistance = clamp(distance, 0, route.length);
