@@ -295,6 +295,12 @@ const GRAPHICS_PROFILES = [
   { shadowSize: 0, anisotropy: 2, roadLightStep: 4, chunkRange: 1120, roadLightRange: 620 },
 ];
 
+// Number of real PointLights used for the whole road network. We keep this count
+// FIXED and just reposition the pool onto the nearest streetlights each update.
+// A varying number of visible lights forces three.js to recompile every shader
+// in the scene (the stutter/freeze while driving), so the count must never change.
+const ROAD_LIGHT_POOL_SIZE = 8;
+
 function seededRandom(seed) {
   let state = seed >>> 0;
   return () => {
@@ -351,8 +357,11 @@ export class HighwayWorld {
       light: new THREE.Color(),
       streetlight: new THREE.Color(),
     };
-    this.roadLights = [];
-    this.activeRoadLights = new Set();
+    // Lightweight descriptors (position + intensity), NOT real lights. The actual
+    // lighting is done by a small fixed pool that follows the player. See
+    // ROAD_LIGHT_POOL_SIZE and updateRoadLightVisibility().
+    this.roadLightSlots = [];
+    this.roadLightPool = [];
     this.garageLights = [];
     this.ultraGraphics = false;
     this.graphicsQuality = 1;
@@ -1096,8 +1105,11 @@ export class HighwayWorld {
         object.geometry?.dispose?.();
       });
     }
-    this.roadLights = [];
-    this.activeRoadLights.clear();
+    this.roadLightSlots = [];
+    for (const light of this.roadLightPool) {
+      light.userData.slot = null;
+      light.intensity = 0;
+    }
     this.createRoute();
     this.createStaticHighway();
     this.rebuildRemodelTargets();
@@ -1269,6 +1281,19 @@ export class HighwayWorld {
     keyLight.shadow.camera.bottom = -180;
     this.scene.add(keyLight);
 
+    // Fixed pool of road lights. These are the ONLY real lights for the whole
+    // streetlight/tunnel network; they get repositioned onto the nearest emitters
+    // each visibility update. Count is constant so shaders never recompile.
+    this.roadLightPool = [];
+    for (let i = 0; i < ROAD_LIGHT_POOL_SIZE; i += 1) {
+      const light = new THREE.PointLight(0xfff1d8, 0, 132, 1.02);
+      light.visible = true;
+      light.castShadow = false;
+      light.userData.slot = null;
+      this.scene.add(light);
+      this.roadLightPool.push(light);
+    }
+
     const fog = new THREE.FogExp2(0x80c8ff, 0.000012);
     this.scene.fog = fog;
     this.environment = {
@@ -1349,11 +1374,14 @@ export class HighwayWorld {
       this.environmentScratch.streetlight.set(lampPower > 0.02 ? 0xfff1d8 : 0x665f56);
       this.materials.streetlightGlow.color.lerp(this.environmentScratch.streetlight, smooth);
     }
-    for (const light of this.activeRoadLights) {
-      const baseIntensity = light.userData.baseIntensity ?? 1;
-      const targetIntensity = light.userData.alwaysOn
-        ? baseIntensity * (this.ultraGraphics ? 1.34 : 1.12)
-        : lampPower * baseIntensity * (this.ultraGraphics ? 3.1 : 2.45);
+    for (const light of this.roadLightPool) {
+      const slot = light.userData.slot;
+      const baseIntensity = slot ? slot.baseIntensity ?? 1 : 0;
+      const targetIntensity = !slot
+        ? 0
+        : slot.alwaysOn
+          ? baseIntensity * (this.ultraGraphics ? 1.34 : 1.12)
+          : lampPower * baseIntensity * (this.ultraGraphics ? 3.1 : 2.45);
       light.intensity = THREE.MathUtils.lerp(
         light.intensity,
         targetIntensity,
@@ -1396,15 +1424,9 @@ export class HighwayWorld {
         this.environment.keyLight.shadow.needsUpdate = true;
       }
     }
-    const roadLightStep = this.ultraGraphics ? 2 : profile.roadLightStep;
-    this.roadLightStep = roadLightStep;
-    this.activeRoadLights.clear();
-    for (const light of this.roadLights) {
-      light.userData.qualityAllowed =
-        roadLightStep <= 1 || (light.userData.qualityIndex ?? 0) % roadLightStep === 0;
-      light.visible = false;
-      light.intensity = 0;
-    }
+    // Road lights now use a fixed-size pool (ROAD_LIGHT_POOL_SIZE), so quality only
+    // controls how far they reach, never how many exist. Keeping the count constant
+    // is what prevents the per-frame shader recompiles that caused the freezes.
     this.roadLightRange = this.ultraGraphics ? 980 : profile.roadLightRange;
     this.chunkVisibilityRange = this.ultraGraphics ? 2600 : profile.chunkRange;
     for (const chunk of this.cullableChunks) {
@@ -1644,22 +1666,44 @@ export class HighwayWorld {
   }
 
   updateRoadLightVisibility(focusS = 0, viewDistance = 900) {
+    const pool = this.roadLightPool;
+    if (!pool.length) {
+      return;
+    }
     const range = Math.min(Math.max(0, viewDistance * 0.9), this.roadLightRange);
     const hasRange = range > 0 && this.trackLength > 0;
-    for (const light of this.roadLights) {
-      const allowed = Boolean(light.userData.qualityAllowed);
-      const lightS = light.userData.s ?? 0;
-      const visible = hasRange && allowed && this.loopDistance(focusS, lightS) <= range;
-      if (light.visible !== visible) {
-        light.visible = visible;
+
+    // Find the nearest emitters to the player and bind the (fixed) pool to them.
+    // The number of real lights never changes, so no shader recompiles happen.
+    const nearest = [];
+    if (hasRange) {
+      for (const slot of this.roadLightSlots) {
+        const distance = this.loopDistance(focusS, slot.s);
+        if (distance <= range) {
+          nearest.push({ slot, distance });
+        }
       }
-      if (visible) {
-        this.activeRoadLights.add(light);
+      nearest.sort((a, b) => a.distance - b.distance);
+      nearest.length = Math.min(nearest.length, pool.length);
+      // Sort the chosen emitters by position so each pool light keeps a stable
+      // emitter as the player advances (avoids lights visibly jumping around).
+      nearest.sort((a, b) => a.slot.s - b.slot.s);
+    }
+
+    for (let i = 0; i < pool.length; i += 1) {
+      const light = pool[i];
+      const entry = nearest[i];
+      if (!entry) {
+        light.userData.slot = null;
         continue;
       }
-      this.activeRoadLights.delete(light);
-      if (!visible) {
-        light.intensity = 0;
+      const slot = entry.slot;
+      if (light.userData.slot !== slot) {
+        light.userData.slot = slot;
+        light.position.set(slot.x, slot.y, slot.z);
+        light.color.setHex(slot.color);
+        light.distance = slot.range;
+        light.decay = slot.decay;
       }
     }
   }
@@ -2419,9 +2463,6 @@ export class HighwayWorld {
     const details = new THREE.Group();
     details.name = "RoadsideCityInfrastructure";
 
-    const lightGroup = new THREE.Group();
-    lightGroup.name = "RoadStreetLightEmitters";
-    lightGroup.userData.remodelIgnore = true;
     const poles = [];
     const arms = [];
     const heads = [];
@@ -2464,15 +2505,17 @@ export class HighwayWorld {
           scale: { x: 0.42, y: 0.08, z: 0.26 },
         });
 
-        const light = new THREE.PointLight(0xfff1d8, 0, 132, 1.02);
-        light.position.copy(glowPosition);
-        light.visible = false;
-        light.userData.baseIntensity = 15.5;
-        light.userData.qualityIndex = this.roadLights.length;
-        light.userData.qualityAllowed = true;
-        light.userData.s = s;
-        this.roadLights.push(light);
-        lightGroup.add(light);
+        this.roadLightSlots.push({
+          s,
+          x: glowPosition.x,
+          y: glowPosition.y,
+          z: glowPosition.z,
+          color: 0xfff1d8,
+          range: 132,
+          decay: 1.02,
+          baseIntensity: 15.5,
+          alwaysOn: false,
+        });
       }
     }
 
@@ -2480,7 +2523,6 @@ export class HighwayWorld {
     details.add(this.createChunkedScaledInstancedBoxes(arms, this.materials.streetlightPole, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
     details.add(this.createChunkedScaledInstancedBoxes(heads, this.materials.railDark, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
     details.add(this.createChunkedScaledInstancedBoxes(glowHeads, this.materials.streetlightGlow, false, false, this.trackLength, CITY_NEAR_DETAIL_CHUNK_LENGTH));
-    details.add(lightGroup);
     parent.add(details);
   }
 
@@ -3983,16 +4025,17 @@ export class HighwayWorld {
   }
 
   addTunnelRoofLight(parent, frame, x, y, z) {
-    const light = new THREE.PointLight(0xffdda0, 0, 42, 1.28);
-    light.position.set(x, y, z);
-    light.visible = false;
-    light.userData.baseIntensity = 9.5;
-    light.userData.qualityIndex = this.roadLights.length;
-    light.userData.qualityAllowed = true;
-    light.userData.alwaysOn = true;
-    light.userData.s = frame.s;
-    this.roadLights.push(light);
-    parent.add(light);
+    this.roadLightSlots.push({
+      s: frame.s,
+      x,
+      y,
+      z,
+      color: 0xffdda0,
+      range: 42,
+      decay: 1.28,
+      baseIntensity: 9.5,
+      alwaysOn: true,
+    });
   }
 
   addTunnelPortal(parent, frame, label) {
