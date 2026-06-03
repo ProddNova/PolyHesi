@@ -27,17 +27,22 @@ tk's
 
 - Spesso si riesce ad uscire fuori dal guardrail passandoci attraverso cio non deve accadere
 
+- Nello switch da 3 a 2 corsie attualmente veiene messo un blocco arancione che porta le macchine a cmabiare corsia chiudendone una, viceversa ad aprire, però attualmente sembrano tanti birilli e il cambio viene eseguito in modo fluido io vorrei invece ci fosse uno stacco netto e un roadblock che chiuda la corsia, ti ho messo la foto in arancioni in road blocke deve essere proprio tipo un muro hai presenti i classici road block della shutoku expressway, mentre in nero ti ho messo le corsie conta che è la strada vista dall'alto quella che ho disegnato
+
+- Aggiungere oltre al tipo di strada classico e 2 corsie anche un terzo: una strada classica a 3 corsie, ma con anche dall'altra parte affianco un altra strada a 3 corsie che va nel senso opposto, tutto questo modificabile remodel map, è importante chiaramente che vengano fatti bene gli switch e il ripiazzamento palazzi per la corsia doppio senso. Per la 3. quindi doppio senso (6 corsie) dovrà comparire sul remodel map come un tratto di strata editabile
+
 
 
 map tks-s
 
 - Migliora la segnaletica stradale orizzontale esattamente come in foto seguendo quello stile delal shutoku expressway (vedi foto in allegato)
 
-- Fai le pareti interne delle gallerie con 3/4 dell parete partendo dal basso giallino consumato sporco a mattoni e gli altri 1/4 sopra grigio cemento scuro, inoltre aggiungi come dettaglio dentro le gallerie i classici pannelli grigi dell'eletrricità posizionati sulla parete appesi, poi qualche segnale rosso di emergenza e infine anche i classici piccoli cartelli verdi con l'omino che segnano l'uscita
+- Rendi le gallerie e cartelli stradali piu alti non esagerare ma alzali
 
-- Aumentare decisamente numero di carterlli pubblicitari
+- Migliorare texture dell'asfalto e renderla più stile psx Playstation 1/2
 
-- Rimuovere i lampioni dentro l'autostrada
+- Migliorare l'effetto della luce sui materiali, infatti ora sembra tutto plasticoso e liscio non so come spiegarti invece io miro piu a uno stile psx Playstation 1/2 piu grezzo e ruvido capisci come posso spiegarti...
+
 
 later-tk's
 
