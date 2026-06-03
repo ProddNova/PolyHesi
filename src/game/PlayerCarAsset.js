@@ -267,29 +267,24 @@ function measureObject(object) {
 
 function createBodyMaterials(preset) {
   const rig = preset.vehicleRig ?? {};
-  // Higher roughness + near-zero metalness kills the glossy "plastic toy" sheen
-  // and gives the matte, vertex-lit-looking paint of a PSX/PS2 car.
-  const body = markDisposableMaterial(new THREE.MeshStandardMaterial({
+  // MeshLambertMaterial = pure diffuse, no specular highlight at all. This is the
+  // single biggest lever away from the glossy "plastic toy" look toward the
+  // matte, vertex-lit paint of a PSX/PS2 car. flatShading keeps the facets crisp.
+  const body = markDisposableMaterial(new THREE.MeshLambertMaterial({
     name: "psxBodyPaint",
     color: rig.bodyColor ?? preset.color,
-    roughness: 0.82,
-    metalness: 0.03,
     flatShading: true,
   }));
-  const glass = markDisposableMaterial(new THREE.MeshStandardMaterial({
+  const glass = markDisposableMaterial(new THREE.MeshLambertMaterial({
     name: "psxGlass",
     color: 0x05070a,
-    emissive: 0x000000,
-    emissiveIntensity: 0,
-    roughness: 0.42,
-    metalness: 0.04,
+    emissive: 0x05070a,
+    emissiveIntensity: 0.18,
     flatShading: true,
   }));
-  const trim = markDisposableMaterial(new THREE.MeshStandardMaterial({
+  const trim = markDisposableMaterial(new THREE.MeshLambertMaterial({
     name: "psxTrim",
     color: 0x0b0d10,
-    roughness: 0.9,
-    metalness: 0,
     flatShading: true,
   }));
   const headlight = markDisposableMaterial(new THREE.MeshStandardMaterial({

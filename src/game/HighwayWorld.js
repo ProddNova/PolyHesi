@@ -415,7 +415,9 @@ export class HighwayWorld {
 
   createMaterials() {
     const asphaltTexture = this.createAsphaltTexture();
-    asphaltTexture.repeat.set(56, 56);
+    // Lower repeat = larger on-screen texels. At 56x the grit averaged into a
+    // flat grey blur; ~30x keeps the chunky, dithered PSX texture readable.
+    asphaltTexture.repeat.set(30, 30);
     const concreteTexture = this.createSurfaceTexture("#3a424b", "#48525d", "#252c34", 120);
     concreteTexture.repeat.set(18, 18);
     const barrierBaseTexture = this.createSurfaceTexture("#aeb1ad", "#c9cbc6", "#777d78", 150);
@@ -462,18 +464,17 @@ export class HighwayWorld {
         flatShading: true,
         side: THREE.DoubleSide,
       }),
-      asphalt: new THREE.MeshStandardMaterial({
+      // Lambert (diffuse-only) across the road surfaces: removes the wet-plastic
+      // specular sheen and gives the dry, matte, vertex-lit PSX/PS2 tarmac look.
+      asphalt: new THREE.MeshLambertMaterial({
         color: 0x363d43,
         map: asphaltTexture,
-        roughness: 1,
-        metalness: 0,
         flatShading: true,
         side: THREE.DoubleSide,
       }),
-      shoulder: new THREE.MeshStandardMaterial({
+      shoulder: new THREE.MeshLambertMaterial({
         color: 0x293139,
         map: shoulderTexture,
-        roughness: 0.9,
         flatShading: true,
         side: THREE.DoubleSide,
       }),
@@ -486,51 +487,39 @@ export class HighwayWorld {
         flatShading: true,
       }),
       roadblockStripe: new THREE.MeshBasicMaterial({ color: 0xf2efe6 }),
-      rail: new THREE.MeshStandardMaterial({
+      rail: new THREE.MeshLambertMaterial({
         color: 0x8f9698,
         map: railTexture,
-        roughness: 0.82,
-        metalness: 0.04,
         flatShading: true,
       }),
-      railDark: new THREE.MeshStandardMaterial({
+      railDark: new THREE.MeshLambertMaterial({
         color: 0x3a3f42,
         map: railDarkTexture,
-        roughness: 0.88,
-        metalness: 0,
         flatShading: true,
       }),
-      shutokuBarrier: new THREE.MeshStandardMaterial({
+      shutokuBarrier: new THREE.MeshLambertMaterial({
         color: 0xb7b7b1,
         map: this.createShutokuBarrierTexture(),
-        roughness: 0.88,
-        metalness: 0.01,
         flatShading: true,
       }),
-      shutokuBarrierBase: new THREE.MeshStandardMaterial({
+      shutokuBarrierBase: new THREE.MeshLambertMaterial({
         color: 0xb2b4b0,
         map: barrierBaseTexture,
-        roughness: 0.94,
-        metalness: 0.02,
         flatShading: true,
       }),
-      sidewalkEdgeWall: new THREE.MeshStandardMaterial({
+      sidewalkEdgeWall: new THREE.MeshLambertMaterial({
         color: 0xc8cbc7,
         map: barrierBaseTexture,
-        roughness: 0.82,
-        metalness: 0.02,
         flatShading: true,
       }),
-      concrete: new THREE.MeshStandardMaterial({
+      concrete: new THREE.MeshLambertMaterial({
         color: 0x3a424a,
         map: concreteTexture,
-        roughness: 0.82,
         flatShading: true,
       }),
-      curb: new THREE.MeshStandardMaterial({
+      curb: new THREE.MeshLambertMaterial({
         color: 0x5c6877,
         map: curbTexture,
-        roughness: 0.7,
         flatShading: true,
       }),
       reflectorAmber: new THREE.MeshBasicMaterial({ color: 0xd8a64b }),
@@ -763,8 +752,8 @@ export class HighwayWorld {
       // Coarse, high-contrast palette so the surface reads as gritty/rough rather
       // than a smooth flat tarmac. PSX-era textures leaned on a small set of
       // strongly separated tones plus heavy per-pixel dithering.
-      const palette = ["#23282d", "#2c333a", "#373f47", "#1a1f24", "#454e56", "#13171b"];
-      const stainPalette = ["#0d1014", "#191e23", "#5a626a", "#737b83", "#0a0d10"];
+      const palette = ["#21262b", "#2c333a", "#3b444c", "#171c21", "#4d5760", "#0f1316", "#586470"];
+      const stainPalette = ["#0b0e12", "#191e23", "#646d76", "#828b94", "#070a0d"];
       const cell = 4;
       // 4x4 ordered (Bayer) dither matrix, normalised 0..1.
       const bayer = [
@@ -825,12 +814,12 @@ export class HighwayWorld {
       }
 
       // Bright aggregate speckle (loose gravel catching light).
-      ctx.globalAlpha = 0.28;
-      ctx.fillStyle = "#b9bab1";
-      for (let i = 0; i < 110; i += 1) {
+      for (let i = 0; i < 150; i += 1) {
         const seed = i * 12.91;
         const x = Math.floor((cityNoise(seed + 3.3) * canvas.width) / cell) * cell;
         const y = Math.floor((cityNoise(seed + 6.7) * canvas.height) / cell) * cell;
+        ctx.globalAlpha = 0.3 + cityNoise(seed + 8.1) * 0.4;
+        ctx.fillStyle = cityNoise(seed + 2.7) > 0.5 ? "#c6c7be" : "#9aa39c";
         ctx.fillRect(x, y, cell, cell);
       }
 
@@ -4079,15 +4068,20 @@ export class HighwayWorld {
   }
 
   addTunnelRoofLight(parent, frame, x, y, z) {
+    // x/z arrive as tunnel-local lateral/forward offsets; the road-light pool
+    // consumes slot positions in WORLD space, so convert here. Previously the
+    // raw local values were stored, dumping the tunnel lights near the world
+    // origin and leaving the tunnels pitch black.
+    const world = this.offsetAlong(frame, x, z, y);
     this.roadLightSlots.push({
       s: frame.s,
-      x,
-      y,
-      z,
+      x: world.x,
+      y: world.y,
+      z: world.z,
       color: 0xffdda0,
-      range: 42,
-      decay: 1.28,
-      baseIntensity: 9.5,
+      range: 52,
+      decay: 1.18,
+      baseIntensity: 12,
       alwaysOn: true,
     });
   }
@@ -5407,7 +5401,7 @@ export class HighwayWorld {
       // lag-spike (large dt) frame can't tunnel clean through the guardrail.
       if (
         previousRoad &&
-        previousRoad.distance < this.getDriveLimitForFrame(previousRoad, Math.sign(previousRoad.lateral || 1)) + 16
+        previousRoad.distance < this.getDriveLimitForFrame(previousRoad, Math.sign(previousRoad.lateral || 1)) + 48
       ) {
         road = this.projectRoadInfo(previousRoad, p);
         sweptFromRoad = true;
@@ -5423,7 +5417,7 @@ export class HighwayWorld {
       previousRoad = this.getNearestRoadInfo(player.previousPosition);
     }
 
-    if (!inMeet && !inDriveway && road && (road.distance < 64 || sweptFromRoad)) {
+    if (!inMeet && !inDriveway && road && (road.distance < 140 || sweptFromRoad)) {
       const side = Math.sign(road.lateral || 1);
       const limit = this.getDriveLimitForFrame(road, side);
       const over = Math.abs(road.lateral) - limit;

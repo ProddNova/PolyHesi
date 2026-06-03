@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "polyhesi-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 10000,
+      "env": { "TEST_PASSWORD": "drive123", "SESSION_SECRET": "devsecret" }
+    }
+  ]
+}
