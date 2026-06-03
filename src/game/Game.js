@@ -420,6 +420,26 @@ export class Game {
     this.debugOverlay.update(this.player, this.traffic, this.world);
 
     this.renderer.render(this.scene, this.camera);
+    this.logPerfStats(rawDt);
+  }
+
+  // Admin-only console readout to find CPU bottlenecks (draw calls dominate the
+  // main-thread cost). Logs roughly once per second so it doesn't spam.
+  logPerfStats(rawDt) {
+    if (!this.isAdmin) {
+      return;
+    }
+    this.perfLogTimer = (this.perfLogTimer ?? 0) - rawDt;
+    if (this.perfLogTimer > 0) {
+      return;
+    }
+    this.perfLogTimer = 1;
+    const info = this.renderer.info;
+    console.log(
+      `[perf] ${Math.round(this.fps)} fps | draw calls: ${info.render.calls} | ` +
+      `triangles: ${info.render.triangles.toLocaleString("en-US")} | ` +
+      `programs: ${info.programs?.length ?? "?"} | traffic: ${this.traffic.cars.length}`,
+    );
   }
 
   updateNoClip(dt, inputState) {

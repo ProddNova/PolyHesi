@@ -299,7 +299,9 @@ const GRAPHICS_PROFILES = [
 // FIXED and just reposition the pool onto the nearest streetlights each update.
 // A varying number of visible lights forces three.js to recompile every shader
 // in the scene (the stutter/freeze while driving), so the count must never change.
-const ROAD_LIGHT_POOL_SIZE = 8;
+// 20 gives continuous coverage around the car (~10 lamp posts per side) so the
+// player is never left in a dark gap; the count is constant regardless of quality.
+const ROAD_LIGHT_POOL_SIZE = 20;
 
 function seededRandom(seed) {
   let state = seed >>> 0;
@@ -388,6 +390,27 @@ export class HighwayWorld {
     this.createSavedRemodelPieces();
     this.rebuildRemodelTargets();
     this.applySavedRemodelOverrides();
+    this.freezeStaticMatrices();
+  }
+
+  // The static world (58 km of road + city) is thousands of meshes that never
+  // move. By default three.js recomputes every object's world matrix every frame,
+  // which is a large CPU cost that is independent of graphics quality. Baking the
+  // matrices once and turning off auto-update lets the renderer skip these whole
+  // subtrees each frame. Dynamic objects (traffic, player, road-light pool, remodel
+  // groups) are added elsewhere and keep updating normally.
+  freezeStaticMatrices() {
+    for (const name of ["StaticHighwayLoop", "SpawnServiceLot"]) {
+      const root = this.scene.getObjectByName(name);
+      if (!root) {
+        continue;
+      }
+      root.updateMatrixWorld(true);
+      root.traverse((object) => {
+        object.matrixAutoUpdate = false;
+      });
+      root.matrixWorldAutoUpdate = false;
+    }
   }
 
   createMaterials() {
@@ -1114,6 +1137,7 @@ export class HighwayWorld {
     this.createStaticHighway();
     this.rebuildRemodelTargets();
     this.applySavedRemodelOverrides();
+    this.freezeStaticMatrices();
   }
 
   createRoute() {
@@ -1683,7 +1707,14 @@ export class HighwayWorld {
           nearest.push({ slot, distance });
         }
       }
-      nearest.sort((a, b) => a.distance - b.distance);
+      // Tunnel lights (alwaysOn) win ties so a tunnel is never left dark when the
+      // pool is competing with nearby streetlights; otherwise pick the closest.
+      nearest.sort((a, b) => {
+        if (a.slot.alwaysOn !== b.slot.alwaysOn) {
+          return a.slot.alwaysOn ? -1 : 1;
+        }
+        return a.distance - b.distance;
+      });
       nearest.length = Math.min(nearest.length, pool.length);
       // Sort the chosen emitters by position so each pool light keeps a stable
       // emitter as the player advances (avoids lights visibly jumping around).
