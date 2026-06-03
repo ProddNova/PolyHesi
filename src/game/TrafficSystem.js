@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { LANES, TRAFFIC_CAR_IDS, getCarPreset } from "./config.js";
-import { createTrafficCarAsset, warmTrafficCarAsset } from "./PlayerCarAsset.js";
+import { applyTrafficBodyColor, createTrafficCarAsset, warmTrafficCarAsset } from "./PlayerCarAsset.js";
 import { choice, clamp, damp, dampAngle, makeBox, rand } from "./utils.js";
 
 const TRAFFIC_COLORS = [
@@ -589,6 +589,9 @@ export class TrafficSystem {
       : dampAngle(car.visualYaw, frame.yaw, car.kind === "truck" ? 2.2 : 2.8, dt);
     car.group.position.set(car.x, 0, car.z);
     car.group.rotation.y = car.visualYaw;
+    // matrixAutoUpdate is off on the group; refresh its matrix once here. This
+    // flags children (indicators, merged meshes) for world-matrix propagation.
+    car.group.updateMatrix();
     this.updateIndicators(car, dt);
   }
 
@@ -696,6 +699,9 @@ export class TrafficSystem {
       const preset = this.getTrafficPreset(modelId, bodyColor);
       const group = createTrafficCarAsset(preset);
       group.name = `TrafficPSX_${modelId}`;
+      // We position the group manually every frame, so skip the per-frame
+      // auto matrix recompute and call updateMatrix() ourselves in applyFrame.
+      group.matrixAutoUpdate = false;
       const indicators = this.createIndicatorMeshes(preset.bodyWidth, preset.bodyLength);
       [...indicators.left, ...indicators.right].forEach((mesh) => group.add(mesh));
       return {
@@ -711,18 +717,12 @@ export class TrafficSystem {
   }
 
   recolorTrafficVisual(group, color) {
-    group?.traverse((child) => {
-      if (!child.isMesh || !child.material) {
-        return;
-      }
-      const materials = Array.isArray(child.material) ? child.material : [child.material];
-      for (const material of materials) {
-        if ((material?.name === "psxBodyPaint" || material?.name === "trafficBodyPaint") && material.color) {
-          material.color.set(color);
-          material.needsUpdate = true;
-        }
-      }
-    });
+    if (!group) {
+      return;
+    }
+    // Swap to the shared per-color body-paint material rather than mutating the
+    // material in place — the material is shared across every car of this color.
+    applyTrafficBodyColor(group, color);
   }
 
   getTrafficPreset(modelId, bodyColor = null) {
@@ -834,13 +834,22 @@ export class TrafficSystem {
   }
 
   disposeObjectMaterials(object) {
+    // Traffic materials and geometry are now shared across cars (template
+    // materials, the per-color body-paint cache, the shared indicator material)
+    // and reused by future cars, so disposing them here would corrupt other
+    // live cars. Only dispose materials explicitly flagged as car-unique, which
+    // is the rare lightweight fallback path that mints its own materials.
     object?.traverse((child) => {
       if (!child.isMesh || !child.material) {
         return;
       }
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       for (const material of materials) {
-        if (material === TRAFFIC_INDICATOR_MATERIAL) {
+        if (
+          material === TRAFFIC_INDICATOR_MATERIAL ||
+          material?.userData?.sharedTraffic ||
+          material?.name === "psxBodyPaint"
+        ) {
           continue;
         }
         material?.dispose?.();

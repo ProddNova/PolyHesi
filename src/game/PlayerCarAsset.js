@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 import porscheTestModelUrl from "../../added/porsche_911_carrera_993_gt2psx_style.glb?url";
 import headlightTextureUrl from "../../PSXStyleCars-DevEdition/body/JapanSportCoupe/MaterialsAndTextures/texture1.png?url";
@@ -33,6 +34,10 @@ const bodyTemplates = new Map();
 const wheelTemplates = new Map();
 const trafficCarTemplates = new Map();
 const textureCache = new Map();
+// Traffic cars share one body-paint material per color instead of each car
+// owning a unique clone. Keyed by 0xRRGGBB so dozens of cars collapse onto a
+// handful of materials, slashing per-frame material/state changes.
+const trafficBodyPaintCache = new Map();
 let porscheTestTemplate = null;
 let porscheTestLoadPromise = null;
 const tireGeometry = new THREE.CylinderGeometry(1, 1, 1, 14);
@@ -539,6 +544,11 @@ function ensureTrafficTemplate(preset) {
   if (!trafficCarTemplates.has(key)) {
     const template = createPlayerCarAsset(preset);
     template.name = `TrafficPSXTemplate_${preset.psxModel ?? preset.carId ?? preset.id}`;
+    // Collapse the four wheels (tire + rim meshes) into one merged mesh per
+    // material. Traffic wheels never spin or move independently, so baking
+    // their transforms is visually identical but turns ~8 wheel draw calls per
+    // car into 2. Done once per template; every cloned car inherits it.
+    mergeTrafficWheels(template);
     template.traverse((child) => {
       if (!child.isMesh) {
         return;
@@ -546,6 +556,14 @@ function ensureTrafficTemplate(preset) {
       child.castShadow = false;
       child.receiveShadow = false;
       child.frustumCulled = true;
+      // Every material on the template is shared by all cloned cars, so flag it
+      // as shared to keep the per-car dispose path from freeing it.
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) {
+        if (material) {
+          material.userData.sharedTraffic = true;
+        }
+      }
     });
     trafficCarTemplates.set(key, template);
   }
@@ -553,27 +571,162 @@ function ensureTrafficTemplate(preset) {
   return trafficCarTemplates.get(key);
 }
 
-function cloneMaterialsForTraffic(object, bodyColor) {
+// Merge every single-material (wheel) sub-tree of a traffic template into one
+// baked mesh per shared material. The body keeps its multi-material mesh
+// untouched so recolor, hitboxes and visual look are unaffected.
+function mergeTrafficWheels(root) {
+  root.updateMatrixWorld(true);
+
+  // Each wheel was built with its own fresh material instance, so bucket by a
+  // material *signature* (not identity): identical rim materials across the four
+  // wheels collapse into one merged mesh, while genuinely different materials
+  // (rim vs hub vs tire) stay separate so the look is unchanged.
+  const buckets = new Map();
+  const removals = [];
+  for (const child of root.children) {
+    let hasArrayMaterial = false;
+    const meshes = [];
+    child.traverse((node) => {
+      if (!node.isMesh) {
+        return;
+      }
+      if (Array.isArray(node.material)) {
+        hasArrayMaterial = true;
+      } else {
+        meshes.push(node);
+      }
+    });
+    // Subtrees with an array material are the body — leave them alone.
+    if (hasArrayMaterial || meshes.length === 0) {
+      continue;
+    }
+    for (const mesh of meshes) {
+      const baked = normalizeGeometryForMerge(mesh.geometry, mesh.matrixWorld);
+      if (!baked) {
+        continue;
+      }
+      const sig = trafficMergeMaterialKey(mesh.material);
+      let bucket = buckets.get(sig);
+      if (!bucket) {
+        bucket = { material: mesh.material, geometries: [] };
+        buckets.set(sig, bucket);
+      }
+      bucket.geometries.push(baked);
+    }
+    removals.push(child);
+  }
+
+  if (buckets.size === 0) {
+    return;
+  }
+
+  const mergedMeshes = [];
+  let failed = false;
+  for (const { material, geometries } of buckets.values()) {
+    const merged = geometries.length === 1 ? geometries[0] : mergeGeometries(geometries, false);
+    if (!merged) {
+      failed = true;
+      break;
+    }
+    merged.computeBoundingBox();
+    merged.computeBoundingSphere();
+    const mesh = new THREE.Mesh(merged, material);
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    mesh.frustumCulled = true;
+    mergedMeshes.push(mesh);
+  }
+
+  // Only apply the merge if every bucket succeeded; otherwise keep the template
+  // exactly as built (correctness over the optimization).
+  if (failed) {
+    return;
+  }
+  for (const child of removals) {
+    root.remove(child);
+  }
+  for (const mesh of mergedMeshes) {
+    root.add(mesh);
+  }
+}
+
+function trafficMergeMaterialKey(material) {
+  if (!material) {
+    return "none";
+  }
+  return [
+    material.type,
+    material.name || "",
+    material.color?.getHexString?.() ?? "",
+    material.roughness ?? "",
+    material.metalness ?? "",
+    material.map?.uuid ?? "",
+    material.side ?? "",
+  ].join("|");
+}
+
+function normalizeGeometryForMerge(geometry, matrixWorld) {
+  if (!geometry) {
+    return null;
+  }
+  let geom = geometry.clone();
+  geom.applyMatrix4(matrixWorld);
+  if (geom.index) {
+    geom = geom.toNonIndexed();
+  }
+  if (!geom.getAttribute("normal")) {
+    geom.computeVertexNormals();
+  }
+  if (!geom.getAttribute("uv")) {
+    const count = geom.getAttribute("position").count;
+    geom.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(count * 2), 2));
+  }
+  for (const name of Object.keys(geom.attributes)) {
+    if (name !== "position" && name !== "normal" && name !== "uv") {
+      geom.deleteAttribute(name);
+    }
+  }
+  geom.morphAttributes = {};
+  // No material groups: each merged bucket is a single material, one draw call.
+  geom.clearGroups();
+  return geom;
+}
+
+function getTrafficBodyPaintMaterial(color) {
+  const key = (Number(color) >>> 0);
+  let material = trafficBodyPaintCache.get(key);
+  if (!material) {
+    material = new THREE.MeshLambertMaterial({
+      name: "psxBodyPaint",
+      color: key,
+      flatShading: true,
+    });
+    material.userData.sharedTraffic = true;
+    trafficBodyPaintCache.set(key, material);
+  }
+  return material;
+}
+
+// Swap the body-paint material for a traffic car to the shared cached material
+// for the requested color. We swap the reference (never mutate) so cars that
+// share a color also share one material, and recoloring one never bleeds into
+// another. Always builds a fresh material array per mesh to avoid mutating the
+// array reference shared by clone().
+export function applyTrafficBodyColor(object, color) {
+  const paint = getTrafficBodyPaintMaterial(color);
   object.traverse((child) => {
     if (!child.isMesh || !child.material) {
       return;
     }
-
-    const materials = Array.isArray(child.material) ? child.material : [child.material];
-    const cloned = materials.map((material) => {
-      if (!material) {
-        return material;
+    const isPaint = (material) =>
+      material && (material.name === "psxBodyPaint" || material.name === "trafficBodyPaint");
+    if (Array.isArray(child.material)) {
+      if (child.material.some(isPaint)) {
+        child.material = child.material.map((material) => (isPaint(material) ? paint : material));
       }
-      const next = material.clone();
-      markDisposableMaterial(next);
-      if (next.name === "psxBodyPaint" && next.color) {
-        next.color.set(bodyColor);
-      }
-      next.flatShading = true;
-      next.needsUpdate = true;
-      return next;
-    });
-    child.material = Array.isArray(child.material) ? cloned : cloned[0];
+    } else if (isPaint(child.material)) {
+      child.material = paint;
+    }
   });
 }
 
@@ -584,6 +737,8 @@ export function warmTrafficCarAsset(preset) {
 export function createTrafficCarAsset(preset) {
   const clone = ensureTrafficTemplate(preset).clone(true);
   clone.name = `TrafficPSX_${preset.psxModel ?? preset.carId ?? preset.id}`;
-  cloneMaterialsForTraffic(clone, preset.vehicleRig?.bodyColor ?? preset.color);
+  // Non-body materials stay shared with the template (clone keeps material
+  // refs); only the body paint is swapped to the shared per-color material.
+  applyTrafficBodyColor(clone, preset.vehicleRig?.bodyColor ?? preset.color);
   return clone;
 }
