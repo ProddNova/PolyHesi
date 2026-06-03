@@ -213,30 +213,6 @@ canvas {
   text-transform: uppercase;
 }
 
-.perf-readout {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
-  margin: 0 12px 10px;
-  color: rgba(226, 221, 206, 0.72);
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.perf-readout span {
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid rgba(225, 215, 181, 0.14);
-  border-radius: 4px;
-  background: rgba(8, 10, 11, 0.36);
-  padding: 4px 3px;
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* ===== PSX / Night Runners style HUD ===== */
 .dev-panel,
 .restart-button,

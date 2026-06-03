@@ -32,7 +32,6 @@ const DAMAGE_INVULNERABILITY_SECONDS = 5;
 const IMPACT_RECOVERY_SECONDS = 0;
 const MAX_SIMULATION_DT = 1 / 30;
 const HUD_SLOW_UPDATE_INTERVAL = 0.25;
-const PERF_STATS_UPDATE_INTERVAL = 1;
 const TIME_SETTING_UI_INTERVAL = 0.2;
 const WORLD_VISIBILITY_INTERVAL = 0.16;
 const CAMERA_MODES = ["hood", "roof", "chaseClose", "chaseFar", "cinematic"];
@@ -116,14 +115,6 @@ export class Game {
     this.cameraMode = "hood";
     this.cameraModeIndex = 0;
     this.hudSlowUpdateTimer = 0;
-    this.perfStatsTimer = 0;
-    this.perfStats = {
-      drawCalls: 0,
-      triangles: 0,
-      geometries: 0,
-      textures: 0,
-      objects: 0,
-    };
     this.timeSettingUiTimer = 0;
     this.worldVisibilityTimer = 0;
     this.upgradeCosts = this.getUpgradeCosts();
@@ -1915,12 +1906,6 @@ export class Game {
         activeVehicleId: this.activeVehicleId,
       });
     }
-    this.perfStatsTimer -= rawDt;
-    if (this.perfStatsTimer <= 0) {
-      this.perfStatsTimer = PERF_STATS_UPDATE_INTERVAL;
-      this.perfStats = this.collectPerfStats();
-      this.hud.updatePerfStats(this.perfStats);
-    }
     this.hud.updateNoClipInfo({
       active: this.settings.noClip,
       position: this.settings.noClip
@@ -1943,21 +1928,6 @@ export class Game {
       boostSpeedKmh: this.settings.noClipBoostSpeedKmh,
     });
     this.hud.updateMiniMap(this.world, this.player, this.traffic);
-  }
-
-  collectPerfStats() {
-    let objects = 0;
-    this.scene.traverse(() => {
-      objects += 1;
-    });
-    const info = this.renderer.info;
-    return {
-      drawCalls: info.render.calls,
-      triangles: info.render.triangles,
-      geometries: info.memory.geometries,
-      textures: info.memory.textures,
-      objects,
-    };
   }
 
   updateDayNight(dt) {

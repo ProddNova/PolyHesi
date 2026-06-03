@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { LANES, TRAFFIC_CAR_IDS, getCarPreset } from "./config.js";
-import { createTrafficCarAsset, recolorTrafficCarAsset, warmTrafficCarAsset } from "./PlayerCarAsset.js";
+import { createTrafficCarAsset, warmTrafficCarAsset } from "./PlayerCarAsset.js";
 import { choice, clamp, damp, dampAngle, makeBox, rand } from "./utils.js";
 
 const TRAFFIC_COLORS = [
@@ -68,6 +68,7 @@ export class TrafficSystem {
     for (let i = pooledCount; i < warmCount; i += 1) {
       const car = this.createVehicle();
       car.group.visible = false;
+      this.scene.add(car.group);
       this.inactiveCars.push(car);
     }
   }
@@ -674,7 +675,6 @@ export class TrafficSystem {
     if (!car) {
       return;
     }
-    this.scene.remove(car.group);
     car.group.visible = false;
     car.speed = 0;
     car.targetLane = null;
@@ -711,7 +711,18 @@ export class TrafficSystem {
   }
 
   recolorTrafficVisual(group, color) {
-    recolorTrafficCarAsset(group, color);
+    group?.traverse((child) => {
+      if (!child.isMesh || !child.material) {
+        return;
+      }
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) {
+        if ((material?.name === "psxBodyPaint" || material?.name === "trafficBodyPaint") && material.color) {
+          material.color.set(color);
+          material.needsUpdate = true;
+        }
+      }
+    });
   }
 
   getTrafficPreset(modelId, bodyColor = null) {
@@ -815,9 +826,7 @@ export class TrafficSystem {
       car.trafficBounds = null;
       this.scene.remove(previousGroup);
       this.disposeObjectMaterials(previousGroup);
-      if (wasVisible) {
-        this.scene.add(car.group);
-      }
+      this.scene.add(car.group);
       if (wasVisible) {
         this.applyFrame(car, 1, true);
       }
@@ -832,9 +841,6 @@ export class TrafficSystem {
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       for (const material of materials) {
         if (material === TRAFFIC_INDICATOR_MATERIAL) {
-          continue;
-        }
-        if (material?.userData?.sharedTrafficMaterial) {
           continue;
         }
         material?.dispose?.();
