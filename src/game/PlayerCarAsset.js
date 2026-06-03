@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 import porscheTestModelUrl from "../../added/porsche_911_carrera_993_gt2psx_style.glb?url";
 import headlightTextureUrl from "../../PSXStyleCars-DevEdition/body/JapanSportCoupe/MaterialsAndTextures/texture1.png?url";
@@ -32,6 +33,7 @@ const textureLoader = new THREE.TextureLoader();
 const bodyTemplates = new Map();
 const wheelTemplates = new Map();
 const trafficCarTemplates = new Map();
+const trafficMaterialVariants = new Map();
 const textureCache = new Map();
 let porscheTestTemplate = null;
 let porscheTestLoadPromise = null;
@@ -534,10 +536,86 @@ function getTrafficTemplateKey(preset) {
   ].join(":");
 }
 
+function getTrafficMergeMaterialKey(material) {
+  if (!material) {
+    return "none";
+  }
+  return [
+    material.type,
+    material.name,
+    material.color?.getHexString?.() ?? "",
+    material.emissive?.getHexString?.() ?? "",
+    material.map?.uuid ?? "",
+    material.roughness ?? "",
+    material.metalness ?? "",
+    material.transparent ? "transparent" : "opaque",
+    material.side,
+  ].join(":");
+}
+
+function getGeometrySignature(geometry) {
+  return Object.keys(geometry.attributes ?? {}).sort().join(":");
+}
+
+function createOptimizedTrafficTemplate(source) {
+  source.updateMatrixWorld(true);
+  const batches = new Map();
+  const skipped = [];
+
+  source.traverse((child) => {
+    if (!child.isMesh || !child.geometry || !child.material) {
+      return;
+    }
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    if (materials.length > 1 || child.geometry.groups?.length > 1) {
+      skipped.push(child.clone(true));
+      return;
+    }
+
+    const material = materials[0];
+    const geometry = child.geometry.clone();
+    geometry.applyMatrix4(child.matrixWorld);
+    const key = `${getTrafficMergeMaterialKey(material)}|${getGeometrySignature(geometry)}`;
+    if (!batches.has(key)) {
+      batches.set(key, { material, geometries: [] });
+    }
+    batches.get(key).geometries.push(geometry);
+  });
+
+  const optimized = new THREE.Group();
+  optimized.name = `${source.name}_Merged`;
+  optimized.userData = { ...source.userData };
+  for (const { material, geometries } of batches.values()) {
+    const geometry = geometries.length === 1 ? geometries[0] : mergeGeometries(geometries, false);
+    if (!geometry) {
+      skipped.push(...geometries.map((item) => new THREE.Mesh(item, material)));
+      continue;
+    }
+    geometry.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    mesh.frustumCulled = true;
+    optimized.add(mesh);
+  }
+  for (const object of skipped) {
+    object.traverse((child) => {
+      if (!child.isMesh) {
+        return;
+      }
+      child.castShadow = false;
+      child.receiveShadow = false;
+      child.frustumCulled = true;
+    });
+    optimized.add(object);
+  }
+  return optimized;
+}
+
 function ensureTrafficTemplate(preset) {
   const key = getTrafficTemplateKey(preset);
   if (!trafficCarTemplates.has(key)) {
-    const template = createPlayerCarAsset(preset);
+    const template = createOptimizedTrafficTemplate(createPlayerCarAsset(preset));
     template.name = `TrafficPSXTemplate_${preset.psxModel ?? preset.carId ?? preset.id}`;
     template.traverse((child) => {
       if (!child.isMesh) {
@@ -553,27 +631,36 @@ function ensureTrafficTemplate(preset) {
   return trafficCarTemplates.get(key);
 }
 
-function cloneMaterialsForTraffic(object, bodyColor) {
+function getTrafficMaterialVariant(material, bodyColor) {
+  if (!material) {
+    return material;
+  }
+
+  const colorKey = material.name === "psxBodyPaint" ? Number(bodyColor ?? 0).toString(16) : "shared";
+  const key = `${material.uuid}:${colorKey}`;
+  if (!trafficMaterialVariants.has(key)) {
+    const next = material.clone();
+    next.userData.disposeWithCar = false;
+    next.userData.sharedTrafficMaterial = true;
+    if (next.name === "psxBodyPaint" && next.color) {
+      next.color.set(bodyColor);
+    }
+    next.flatShading = true;
+    next.needsUpdate = true;
+    trafficMaterialVariants.set(key, next);
+  }
+  return trafficMaterialVariants.get(key);
+}
+
+function applySharedTrafficMaterials(object, bodyColor) {
   object.traverse((child) => {
     if (!child.isMesh || !child.material) {
       return;
     }
 
     const materials = Array.isArray(child.material) ? child.material : [child.material];
-    const cloned = materials.map((material) => {
-      if (!material) {
-        return material;
-      }
-      const next = material.clone();
-      markDisposableMaterial(next);
-      if (next.name === "psxBodyPaint" && next.color) {
-        next.color.set(bodyColor);
-      }
-      next.flatShading = true;
-      next.needsUpdate = true;
-      return next;
-    });
-    child.material = Array.isArray(child.material) ? cloned : cloned[0];
+    const shared = materials.map((material) => getTrafficMaterialVariant(material, bodyColor));
+    child.material = Array.isArray(child.material) ? shared : shared[0];
   });
 }
 
@@ -584,6 +671,10 @@ export function warmTrafficCarAsset(preset) {
 export function createTrafficCarAsset(preset) {
   const clone = ensureTrafficTemplate(preset).clone(true);
   clone.name = `TrafficPSX_${preset.psxModel ?? preset.carId ?? preset.id}`;
-  cloneMaterialsForTraffic(clone, preset.vehicleRig?.bodyColor ?? preset.color);
+  applySharedTrafficMaterials(clone, preset.vehicleRig?.bodyColor ?? preset.color);
   return clone;
+}
+
+export function recolorTrafficCarAsset(object, bodyColor) {
+  applySharedTrafficMaterials(object, bodyColor);
 }

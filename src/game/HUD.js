@@ -131,6 +131,11 @@ export class HUD {
       nearMissLabel: document.querySelector("#nearMissToast span"),
       nearMissPoints: document.querySelector("#nearMissPoints"),
       fps: document.querySelector("#fpsValue"),
+      perfDrawCalls: document.querySelector("#perfDrawCalls"),
+      perfTriangles: document.querySelector("#perfTriangles"),
+      perfGeometries: document.querySelector("#perfGeometries"),
+      perfTextures: document.querySelector("#perfTextures"),
+      perfObjects: document.querySelector("#perfObjects"),
       devPanel: document.querySelector(".dev-panel"),
       devTabs: [...document.querySelectorAll("[data-dev-tab]")],
       devPages: [...document.querySelectorAll("[data-dev-page]")],
@@ -592,23 +597,34 @@ export class HUD {
     baseSpeedKmh = 0,
     boostSpeedKmh = 0,
   } = {}) {
-    this.nodes.noClipReadout?.classList.toggle("is-active", active);
+    const readout = this.nodes.noClipReadout;
+    const activeState = Boolean(active);
+    if (readout && readout.classList.contains("is-active") !== activeState) {
+      readout.classList.toggle("is-active", activeState);
+    }
     if (!this.nodes.noClipCoords || !this.nodes.noClipAngles) {
       return;
     }
 
     if (!active) {
-      this.nodes.noClipCoords.value = "X 0.00 / Y 0.00 / Z 0.00";
-      this.nodes.noClipAngles.textContent = "Yaw 0.0 / Pitch 0.0 / Speed 0";
+      const coords = "X 0.00 / Y 0.00 / Z 0.00";
+      const angles = "Yaw 0.0 / Pitch 0.0 / Speed 0";
+      if (this.nodes.noClipCoords.value !== coords) {
+        this.nodes.noClipCoords.value = coords;
+      }
+      setTextIfChanged(this.nodes.noClipAngles, angles);
       return;
     }
 
-    this.nodes.noClipCoords.value =
-      `X ${position.x.toFixed(2)} / Y ${position.y.toFixed(2)} / Z ${position.z.toFixed(2)}`;
-    this.nodes.noClipAngles.textContent =
+    const coords = `X ${position.x.toFixed(2)} / Y ${position.y.toFixed(2)} / Z ${position.z.toFixed(2)}`;
+    const angles =
       `Yaw ${(yaw * RAD_TO_DEG).toFixed(1)} / ` +
       `Pitch ${(pitch * RAD_TO_DEG).toFixed(1)} / ` +
       `Speed ${Math.round(speedKmh)} (${Math.round(baseSpeedKmh)}/${Math.round(boostSpeedKmh)})`;
+    if (this.nodes.noClipCoords.value !== coords) {
+      this.nodes.noClipCoords.value = coords;
+    }
+    setTextIfChanged(this.nodes.noClipAngles, angles);
   }
 
   showRemodelEditor(target, state) {
@@ -900,6 +916,20 @@ export class HUD {
     }
   }
 
+  updatePerfStats({
+    drawCalls = 0,
+    triangles = 0,
+    geometries = 0,
+    textures = 0,
+    objects = 0,
+  } = {}) {
+    setTextIfChanged(this.nodes.perfDrawCalls, `DC ${Math.round(drawCalls)}`);
+    setTextIfChanged(this.nodes.perfTriangles, `TRI ${Math.round(triangles / 1000)}k`);
+    setTextIfChanged(this.nodes.perfGeometries, `GEO ${Math.round(geometries)}`);
+    setTextIfChanged(this.nodes.perfTextures, `TEX ${Math.round(textures)}`);
+    setTextIfChanged(this.nodes.perfObjects, `OBJ ${Math.round(objects)}`);
+  }
+
   setMode(mode) {
     this.nodes.shell?.classList.toggle("is-garage", mode === "garage");
   }
@@ -915,11 +945,17 @@ export class HUD {
   setInteraction(text, key = "E") {
     const active = Boolean(text);
     if (this.nodes.interactionKey) {
-      this.nodes.interactionKey.textContent = key;
-      this.nodes.interactionKey.hidden = !key;
+      setTextIfChanged(this.nodes.interactionKey, key);
+      const keyHidden = !key;
+      if (this.nodes.interactionKey.hidden !== keyHidden) {
+        this.nodes.interactionKey.hidden = keyHidden;
+      }
     }
-    this.nodes.interactionText.textContent = text ?? "";
-    this.nodes.interactionPrompt?.classList.toggle("is-active", active);
+    setTextIfChanged(this.nodes.interactionText, text ?? "");
+    const prompt = this.nodes.interactionPrompt;
+    if (prompt && prompt.classList.contains("is-active") !== active) {
+      prompt.classList.toggle("is-active", active);
+    }
   }
 
   setMarketVisible(visible) {
