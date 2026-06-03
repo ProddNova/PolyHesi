@@ -2750,14 +2750,14 @@ export class Game {
     }
     const rawQuality = Number(this.settings.graphicsQuality);
     const quality = Number.isFinite(rawQuality) ? Math.round(rawQuality) : 1;
-    const cap = quality <= 0 ? 0.5 : quality >= 2 ? 1.0 : 0.75;
+    const cap = quality <= 0 ? 0.55 : quality >= 2 ? 0.85 : 0.75;
     return Math.min(window.devicePixelRatio || 1, cap);
   }
 
   applyGraphicsQuality() {
     const rawQuality = Number(this.settings.graphicsQuality);
     const quality = Number.isFinite(rawQuality) ? Math.round(rawQuality) : 1;
-    const shadowEnabled = this.settings.ultraGraphics || quality >= 2;
+    const shadowEnabled = Boolean(this.settings.ultraGraphics);
     this.camera.far = this.getViewDistance();
     this.camera.updateProjectionMatrix();
     this.renderer.toneMappingExposure = this.settings.ultraGraphics ? 1.12 : 1;

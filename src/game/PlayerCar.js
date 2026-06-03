@@ -206,7 +206,7 @@ export class PlayerCar {
   }
 
   applyGraphicsQualityToLights() {
-    const shadowSize = this.ultraGraphics ? 1024 : this.graphicsQuality >= 2 ? 768 : 0;
+    const shadowSize = this.ultraGraphics ? 1024 : 0;
     this.group.traverse((child) => {
       if (!child.isLight) {
         return;

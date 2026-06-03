@@ -51,6 +51,7 @@ export class TrafficSystem {
     this.world = world;
     this.getVehicleRigForCar = options.getVehicleRigForCar ?? (() => ({}));
     this.cars = [];
+    this.inactiveCars = [];
     this.nextId = 1;
     this.activeTarget = 0;
     this.densityAdjustTimer = 0;
@@ -62,12 +63,13 @@ export class TrafficSystem {
       warmTrafficCarAsset(this.getTrafficPreset(modelId, this.pickTrafficColor()));
     }
 
-    const warmCount = Math.min(this.getActiveTarget(settings), TRAFFIC_CAR_IDS.length * 2);
-    for (let i = this.cars.length; i < warmCount; i += 1) {
+    const warmCount = Math.min(this.getActiveTarget(settings) + 8, TRAFFIC_CAR_IDS.length * 2);
+    const pooledCount = this.cars.length + this.inactiveCars.length;
+    for (let i = pooledCount; i < warmCount; i += 1) {
       const car = this.createVehicle();
       car.group.visible = false;
       this.scene.add(car.group);
-      this.cars.push(car);
+      this.inactiveCars.push(car);
     }
   }
 
@@ -76,15 +78,11 @@ export class TrafficSystem {
     this.activeTarget = target;
     this.densityAdjustTimer = 0;
     while (this.cars.length < target) {
-      const car = this.createVehicle();
-      car.group.visible = false;
-      this.scene.add(car.group);
-      this.cars.push(car);
+      this.cars.push(this.acquireVehicle());
     }
     while (this.cars.length > target) {
       const car = this.cars.pop();
-      this.scene.remove(car.group);
-      this.disposeObjectMaterials(car.group);
+      this.releaseVehicle(car);
     }
 
     const openLanes = this.getOpenLanesAtS(focusS);
@@ -130,21 +128,19 @@ export class TrafficSystem {
     this.activeTarget = target;
 
     if (this.cars.length < target) {
-      const car = this.createVehicle();
+      const car = this.acquireVehicle();
       car.lane = this.pickOpenLane(focusS);
       car.s = this.findOpenSpawnS(car.lane, focusS, "ahead");
       car.route = { type: "main", s: car.s };
       car.lateralOffset = this.getLaneOffset(car.s, car.lane);
       this.randomizeSpeed(car, settings);
-      this.scene.add(car.group);
       this.cars.push(car);
       this.applyFrame(car, 1, true);
     }
 
     if (this.cars.length > target) {
       const car = this.cars.pop();
-      this.scene.remove(car.group);
-      this.disposeObjectMaterials(car.group);
+      this.releaseVehicle(car);
     }
   }
 
@@ -535,7 +531,7 @@ export class TrafficSystem {
 
   invalidateBounds() {
     this.boundsRevision += 1;
-    for (const car of this.cars) {
+    for (const car of this.getAllVehicles()) {
       car.trafficBounds = null;
     }
   }
@@ -666,6 +662,35 @@ export class TrafficSystem {
     };
   }
 
+  acquireVehicle() {
+    const car = this.inactiveCars.pop() ?? this.createVehicle();
+    car.group.visible = true;
+    if (!car.group.parent) {
+      this.scene.add(car.group);
+    }
+    return car;
+  }
+
+  releaseVehicle(car) {
+    if (!car) {
+      return;
+    }
+    car.group.visible = false;
+    car.speed = 0;
+    car.targetLane = null;
+    car.signalTimer = 0;
+    car.signalHoldTimer = 0;
+    car.signalDirection = 0;
+    car.mergeYield = false;
+    car.overtakeArmed = false;
+    this.updateIndicators(car, 0);
+    this.inactiveCars.push(car);
+  }
+
+  getAllVehicles() {
+    return [...this.cars, ...this.inactiveCars];
+  }
+
   createTrafficVisual(modelId, bodyColor = null) {
     try {
       const preset = this.getTrafficPreset(modelId, bodyColor);
@@ -786,13 +811,15 @@ export class TrafficSystem {
   }
 
   refreshModel(modelId) {
-    for (const car of this.cars) {
+    for (const car of this.getAllVehicles()) {
       if (car.trafficModel !== modelId) {
         continue;
       }
       const previousGroup = car.group;
+      const wasVisible = Boolean(previousGroup.visible);
       const visual = this.createTrafficVisual(modelId, car.trafficColor);
       car.group = visual.group;
+      car.group.visible = wasVisible;
       car.indicators = visual.indicators;
       car.width = visual.width;
       car.length = visual.length;
@@ -800,7 +827,9 @@ export class TrafficSystem {
       this.scene.remove(previousGroup);
       this.disposeObjectMaterials(previousGroup);
       this.scene.add(car.group);
-      this.applyFrame(car, 1, true);
+      if (wasVisible) {
+        this.applyFrame(car, 1, true);
+      }
     }
   }
 

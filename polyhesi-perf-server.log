@@ -3,4 +3,14 @@
 > node server/index.js
 
 ◇ injected env (0) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
-PolyHesi server listening on http://0.0.0.0:10000 (memory)
+PolyHesi server listening on http://0.0.0.0:10000 (mem[2m10:58:28[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/HighwayWorld.js[22m
+[2m10:58:51[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/HighwayWorld.js[22m
+[2m10:59:03[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/HighwayWorld.js[22m
+[2m10:59:30[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/TrafficSystem.js[22m
+[2m10:59:45[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/TrafficSystem.js[22m
+[2m11:00:08[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/HighwayWorld.js[22m
+[2m11:00:20[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/Game.js[22m
+[2m11:00:28[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/PlayerCar.js[22m
+[2m11:05:06[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/HighwayWorld.js[22m
+[2m11:05:20[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/Game.js[22m
+[2m11:06:51[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/TrafficSystem.js[22m

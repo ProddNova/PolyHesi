@@ -290,9 +290,9 @@ const DEFAULT_ROUTE_CONTROL_POINTS = [
   [0, -650],
 ].map(([x, z]) => ({ x: x * DEFAULT_ROUTE_SCALE, z: z * DEFAULT_ROUTE_SCALE }));
 const GRAPHICS_PROFILES = [
-  { shadowSize: 0, anisotropy: 1, roadLightStep: 9999, chunkRange: 620 },
-  { shadowSize: 0, anisotropy: 1, roadLightStep: 6, chunkRange: 920 },
-  { shadowSize: 1024, anisotropy: 2, roadLightStep: 2, chunkRange: 1800 },
+  { shadowSize: 0, anisotropy: 1, roadLightStep: 12, chunkRange: 720, roadLightRange: 360 },
+  { shadowSize: 0, anisotropy: 1, roadLightStep: 7, chunkRange: 920, roadLightRange: 500 },
+  { shadowSize: 0, anisotropy: 2, roadLightStep: 4, chunkRange: 1120, roadLightRange: 620 },
 ];
 
 function seededRandom(seed) {
@@ -352,11 +352,12 @@ export class HighwayWorld {
       streetlight: new THREE.Color(),
     };
     this.roadLights = [];
+    this.activeRoadLights = new Set();
     this.garageLights = [];
     this.ultraGraphics = false;
     this.graphicsQuality = 1;
     this.roadLightStep = GRAPHICS_PROFILES[this.graphicsQuality]?.roadLightStep ?? 2;
-    this.roadLightRange = 760;
+    this.roadLightRange = GRAPHICS_PROFILES[this.graphicsQuality]?.roadLightRange ?? 560;
     this.chunkVisibilityRange = GRAPHICS_PROFILES[this.graphicsQuality]?.chunkRange ?? 1180;
     this.cullableChunks = [];
     this.tunnelRuns = this.routeProfile.tunnels.map((run) => ({ ...run }));
@@ -1096,6 +1097,7 @@ export class HighwayWorld {
       });
     }
     this.roadLights = [];
+    this.activeRoadLights.clear();
     this.createRoute();
     this.createStaticHighway();
     this.rebuildRemodelTargets();
@@ -1347,11 +1349,7 @@ export class HighwayWorld {
       this.environmentScratch.streetlight.set(lampPower > 0.02 ? 0xfff1d8 : 0x665f56);
       this.materials.streetlightGlow.color.lerp(this.environmentScratch.streetlight, smooth);
     }
-    for (const light of this.roadLights) {
-      if (!light.visible) {
-        light.intensity = 0;
-        continue;
-      }
+    for (const light of this.activeRoadLights) {
       const baseIntensity = light.userData.baseIntensity ?? 1;
       const targetIntensity = light.userData.alwaysOn
         ? baseIntensity * (this.ultraGraphics ? 1.34 : 1.12)
@@ -1400,19 +1398,19 @@ export class HighwayWorld {
     }
     const roadLightStep = this.ultraGraphics ? 2 : profile.roadLightStep;
     this.roadLightStep = roadLightStep;
+    this.activeRoadLights.clear();
     for (const light of this.roadLights) {
-      light.userData.qualityAllowed = true;
+      light.userData.qualityAllowed =
+        roadLightStep <= 1 || (light.userData.qualityIndex ?? 0) % roadLightStep === 0;
       light.visible = false;
-      if (!light.visible) {
-        light.intensity = 0;
-      }
+      light.intensity = 0;
     }
-    this.roadLightRange = this.ultraGraphics ? 1080 : this.graphicsQuality >= 2 ? 920 : this.graphicsQuality >= 1 ? 520 : 0;
+    this.roadLightRange = this.ultraGraphics ? 980 : profile.roadLightRange;
     this.chunkVisibilityRange = this.ultraGraphics ? 2600 : profile.chunkRange;
     for (const chunk of this.cullableChunks) {
       chunk.visible = true;
     }
-    const garageShadowSize = this.ultraGraphics ? 512 : this.graphicsQuality >= 2 ? 384 : 0;
+    const garageShadowSize = this.ultraGraphics ? 512 : 0;
     for (const light of this.garageLights) {
       light.castShadow = garageShadowSize > 0;
       if (garageShadowSize > 0 && light.shadow?.mapSize) {
@@ -1652,7 +1650,14 @@ export class HighwayWorld {
       const allowed = Boolean(light.userData.qualityAllowed);
       const lightS = light.userData.s ?? 0;
       const visible = hasRange && allowed && this.loopDistance(focusS, lightS) <= range;
-      light.visible = visible;
+      if (light.visible !== visible) {
+        light.visible = visible;
+      }
+      if (visible) {
+        this.activeRoadLights.add(light);
+        continue;
+      }
+      this.activeRoadLights.delete(light);
       if (!visible) {
         light.intensity = 0;
       }
@@ -2374,7 +2379,10 @@ export class HighwayWorld {
     for (const chunk of this.cullableChunks) {
       const routeLength = chunk.userData.chunkRouteLength ?? this.trackLength;
       const distance = this.loopDistanceOnLength(focusS, chunk.userData.chunkCenterS ?? 0, routeLength);
-      chunk.visible = distance <= baseRange + (chunk.userData.chunkRadius ?? 0);
+      const visible = distance <= baseRange + (chunk.userData.chunkRadius ?? 0);
+      if (chunk.visible !== visible) {
+        chunk.visible = visible;
+      }
     }
   }
 
