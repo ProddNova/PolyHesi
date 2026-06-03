@@ -25,6 +25,7 @@ import { PlayerCar } from "./PlayerCar.js";
 import { createPlayerCarAsset } from "./PlayerCarAsset.js";
 import { RemodelOverlay } from "./RemodelOverlay.js";
 import { TrafficSystem } from "./TrafficSystem.js";
+import { downloadMapDocument, readMapDocumentFile } from "./MapDocument.js";
 import { clamp, damp } from "./utils.js";
 
 const WALKER_EYE_HEIGHT = 1.92;
@@ -2404,7 +2405,19 @@ export class Game {
   setRemodelMode(active) {
     const enabled = Boolean(active && this.settings.noClip);
     this.settings.remodelMode = enabled;
+    // Editor Mode restores the individual editable pieces (and rebuilds the
+    // overlay's targets) before the overlay is shown; Play Mode re-bakes them
+    // into optimized chunks once editing ends.
+    if (enabled) {
+      this.world?.setMapMode?.("editor");
+      this.world?.rebuildRemodelTargets?.();
+    }
     this.remodelOverlay?.setVisible(enabled);
+    // Unbaking recreates the editable meshes, so force the overlay to rebuild its
+    // target list against the fresh objects rather than stale (disposed) ones.
+    if (enabled) {
+      this.remodelOverlay?.refresh?.(null);
+    }
     this.world?.setHitboxTemplatesVisible(enabled);
     this.applyRemodelSnapSettings();
     this.hud?.setRemodelAvailable(this.settings.noClip);
@@ -2420,8 +2433,61 @@ export class Game {
       this.hud?.hideRemodelEditor();
       this.hud?.setRemodelPsxRigVisible(false);
       this.applyActivePlayerCarPreset();
+      // Back to Play Mode: merge the (possibly edited) created pieces into chunks.
+      this.world?.setMapMode?.("play");
     }
     this.hud?.syncBooleanSetting?.("remodelMode");
+  }
+
+  // Admin/dev console helpers (reachable via window.__polyhesi). Export the
+  // current editable map to a downloadable JSON file, or load one back.
+  downloadRemodelMap(filename = "polyhesi-map.json") {
+    const doc = this.world?.exportMapDocument?.();
+    if (!doc) {
+      return false;
+    }
+    downloadMapDocument(doc, filename);
+    this.hud?.flashNotice?.("Map exported", `${doc.stats?.created ?? 0} pieces`);
+    return true;
+  }
+
+  async loadRemodelMapFromFile(file) {
+    if (!file) {
+      return null;
+    }
+    let store;
+    try {
+      store = await readMapDocumentFile(file);
+    } catch (error) {
+      this.hud?.flashNotice?.("Import failed", error?.message ?? "bad file");
+      return null;
+    }
+    return this.applyImportedRemodelMap(store);
+  }
+
+  loadRemodelMapFromText(text) {
+    return this.applyImportedRemodelMap(text);
+  }
+
+  applyImportedRemodelMap(input) {
+    const summary = this.world?.importMapDocument?.(input);
+    if (!summary) {
+      this.hud?.flashNotice?.("Import failed", "invalid map");
+      return null;
+    }
+    // Keep the editor overlay and traffic consistent with the imported layout.
+    if (this.settings.remodelMode) {
+      this.world?.setMapMode?.("editor");
+      this.world?.rebuildRemodelTargets?.();
+      this.remodelOverlay?.refresh?.(null);
+    }
+    const road = this.world?.getNearestRoadInfo?.(this.player.position);
+    this.traffic?.reset?.(this.settings, road?.s ?? 0);
+    if (this.settings.noClip) {
+      this.syncPlayerToNoClip?.();
+    }
+    this.hud?.flashNotice?.("Map imported", `${summary.created} pieces`);
+    return summary;
   }
 
   handleRemodelPointerDown(event) {

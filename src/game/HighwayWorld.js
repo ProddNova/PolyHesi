@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { LANES, REMODEL_STORAGE_KEY, ROAD_WIDTH } from "./config.js";
 import { clamp, makeBox, makeCanvasTexture } from "./utils.js";
+import { bakeBoxPieces } from "./MapBaker.js";
+import { buildMapDocument, parseMapDocument } from "./MapDocument.js";
 
 const ROAD_HALF_WIDTH = ROAD_WIDTH * 0.5;
 const TWO_LANE_LANE_WIDTH = 4.6;
@@ -14,6 +16,8 @@ const CITY_DETAIL_CHUNK_LENGTH = 900;
 const CITY_NEAR_DETAIL_CHUNK_LENGTH = 650;
 const REMODEL_CREATED_GROUP = "RemodelCreatedPieces";
 const REMODEL_HITBOX_GROUP = "RemodelHitboxTemplates";
+// Play Mode runtime output: created pieces merged into chunked static geometry.
+const BAKED_MAP_GROUP = "BakedMapPieces";
 const REMODEL_ROOT_NAMES = new Set([
   "StaticHighwayLoop",
   "FixedRoadsideCityscape",
@@ -351,6 +355,12 @@ export class HighwayWorld {
     this.remodelTargetMap = new Map();
     this.remodelCreatedGroup = null;
     this.remodelHitboxGroup = null;
+    // Editor/Play separation: "editor" keeps individual editable pieces, "play"
+    // shows only baked, merged, chunked runtime geometry. See bakeCreatedPieces().
+    this.mapMode = "editor";
+    this.bakedMapGroup = null;
+    this.bakedChunks = [];
+    this.bakedMapMaterial = null;
     this.environment = null;
     this.environmentScratch = {
       sky: new THREE.Color(),
@@ -390,6 +400,9 @@ export class HighwayWorld {
     this.createSavedRemodelPieces();
     this.rebuildRemodelTargets();
     this.applySavedRemodelOverrides();
+    // The game boots into Play Mode: created pieces start baked into optimized
+    // chunks rather than as individual meshes. Editor Mode unbakes on demand.
+    this.bakeCreatedPieces();
     this.freezeStaticMatrices();
   }
 
@@ -4121,6 +4134,256 @@ export class HighwayWorld {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Editor Mode  <->  Play Mode (bake / unbake)
+  //
+  // Only the user-created pieces are baked. Existing static map geometry is
+  // already instanced + chunked + frozen, and edits to it only rewrite instance
+  // matrices, so it carries no per-piece cost. Created boxes, by contrast, were
+  // one Mesh each — baking merges them by material into chunked static geometry.
+  // Created boxes are visual-only (they register no colliders), so baking changes
+  // nothing about driving physics or collision.
+  // ---------------------------------------------------------------------------
+
+  setMapMode(mode) {
+    if (mode === "editor") {
+      if (this.mapMode !== "editor") {
+        this.unbakeCreatedPieces();
+      }
+    } else if (this.mapMode !== "play") {
+      this.bakeCreatedPieces();
+    }
+    return this.mapMode;
+  }
+
+  isPlayMode() {
+    return this.mapMode === "play";
+  }
+
+  getBakedMapMaterial() {
+    if (!this.bakedMapMaterial) {
+      // Clone the editable-piece material but render per-vertex colours so a whole
+      // chunk of differently-tinted boxes draws with a single material. White base
+      // colour means the vertex colour is the final colour.
+      const material = this.materials.remodelCreated.clone();
+      material.name = "bakedMapPieces";
+      material.vertexColors = true;
+      material.color.set(0xffffff);
+      this.bakedMapMaterial = material;
+    }
+    return this.bakedMapMaterial;
+  }
+
+  // Returns [{ id, label, state }] for the current created pieces, reading live
+  // editable meshes when present (Editor Mode) and falling back to stored state
+  // when they have already been baked away (Play Mode).
+  getCreatedPiecesSnapshot() {
+    if (this.remodelCreatedGroup?.children?.length) {
+      return this.getCreatedRemodelPayload().map((piece) => ({
+        id: piece.id,
+        label: piece.label,
+        state: this.cloneState(piece.state),
+      }));
+    }
+    return this.remodelCreatedPieces.map((piece) => ({
+      id: piece.id,
+      label: piece.label,
+      state: this.cloneState(piece.state ?? piece),
+    }));
+  }
+
+  bakeCreatedPieces() {
+    if (this.bakedMapGroup) {
+      this.mapMode = "play";
+      return;
+    }
+
+    // Snapshot from the live meshes so unsaved Editor Mode edits are reflected.
+    const snapshot = this.getCreatedPiecesSnapshot();
+    this.remodelCreatedPieces = snapshot.map((piece) => ({
+      id: piece.id,
+      label: piece.label,
+      state: this.cloneState(piece.state),
+    }));
+
+    const group = new THREE.Group();
+    group.name = BAKED_MAP_GROUP;
+    group.userData.remodelIgnore = true;
+    this.bakedChunks = [];
+
+    if (snapshot.length) {
+      const chunkSize = CITY_DETAIL_CHUNK_LENGTH;
+      const scratch = new THREE.Vector3();
+      const chunks = bakeBoxPieces(
+        snapshot.map((piece) => piece.state),
+        {
+          material: this.getBakedMapMaterial(),
+          getChunkKey: (piece) => {
+            // Bucket by route arc-length so baked chunks reuse the existing
+            // distance-based culling instead of being one giant mesh.
+            const info = this.getNearestRoadInfo(scratch.set(piece.position.x, 0, piece.position.z));
+            return Math.floor((info?.s ?? 0) / chunkSize);
+          },
+        },
+      );
+
+      for (const chunk of chunks) {
+        const mesh = chunk.mesh;
+        mesh.userData.chunkCenterS = (Number(chunk.key) + 0.5) * chunkSize;
+        mesh.userData.chunkRouteLength = this.trackLength;
+        mesh.userData.chunkRadius = Math.max(160, chunkSize * 0.58);
+        mesh.userData.performanceCull = true;
+        mesh.updateMatrixWorld(true);
+        mesh.matrixAutoUpdate = false;
+        mesh.matrixWorldAutoUpdate = false;
+        group.add(mesh);
+        this.cullableChunks.push(mesh);
+        this.bakedChunks.push(mesh);
+      }
+    }
+
+    this.scene.add(group);
+    this.bakedMapGroup = group;
+
+    // Play Mode keeps no individual created meshes in the scene.
+    this.disposeCreatedRemodelMeshes();
+    this.mapMode = "play";
+  }
+
+  unbakeCreatedPieces() {
+    if (this.bakedMapGroup) {
+      this.scene.remove(this.bakedMapGroup);
+      for (const mesh of this.bakedChunks) {
+        mesh.geometry?.dispose?.();
+      }
+      if (this.bakedChunks.length) {
+        const baked = new Set(this.bakedChunks);
+        this.cullableChunks = this.cullableChunks.filter((chunk) => !baked.has(chunk));
+      }
+      this.bakedChunks = [];
+      this.bakedMapGroup = null;
+    }
+
+    // Restore the individual, editable meshes from stored state.
+    this.disposeCreatedRemodelMeshes();
+    if (this.remodelCreatedGroup) {
+      this.remodelCreatedGroup.visible = true;
+    }
+    this.createSavedRemodelPieces();
+    this.mapMode = "editor";
+  }
+
+  disposeCreatedRemodelMeshes() {
+    if (!this.remodelCreatedGroup) {
+      return;
+    }
+    for (const child of [...this.remodelCreatedGroup.children]) {
+      this.remodelCreatedGroup.remove(child);
+      child.geometry?.dispose?.();
+      if (child.material && child.material !== this.materials.remodelCreated) {
+        child.material.dispose?.();
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Portable JSON map document (export / import)
+  // ---------------------------------------------------------------------------
+
+  collectSavableOverrides() {
+    const targets = {};
+    for (const [id, state] of Object.entries(this.remodelOverrides)) {
+      if (this.remodelTargetMap.has(id) && !id.startsWith("created:") && !id.startsWith("psx:")) {
+        targets[id] = this.cloneState(state);
+      }
+    }
+    return targets;
+  }
+
+  exportMapDocument() {
+    return buildMapDocument({
+      targets: this.collectSavableOverrides(),
+      deleted: [...this.remodelDeletedIds],
+      created: this.getCreatedPiecesSnapshot(),
+      routeProfile: this.getRemodelRouteProfile(),
+    });
+  }
+
+  // Load an editable map from a document/JSON string/store. Rebuilds editable
+  // pieces, re-applies overrides, persists to localStorage, and re-bakes so Play
+  // Mode reflects the imported map. Returns a small summary, or null on failure.
+  importMapDocument(input) {
+    let store;
+    try {
+      store = parseMapDocument(input);
+    } catch {
+      return null;
+    }
+
+    const wasPlayMode = this.mapMode === "play";
+
+    // Reset the editable data from the imported store.
+    this.remodelOverrides = store.targets && typeof store.targets === "object" ? { ...store.targets } : {};
+    this.remodelDeletedIds = new Set(store.deleted);
+    this.remodelCreatedPieces = store.created.map((piece) => ({
+      id: piece.id,
+      label: piece.label,
+      state: this.cloneState(piece.state),
+    }));
+
+    // Drop any current created geometry (baked or editable) before rebuilding.
+    if (this.bakedMapGroup) {
+      this.scene.remove(this.bakedMapGroup);
+      for (const mesh of this.bakedChunks) {
+        mesh.geometry?.dispose?.();
+      }
+      const baked = new Set(this.bakedChunks);
+      this.cullableChunks = this.cullableChunks.filter((chunk) => !baked.has(chunk));
+      this.bakedChunks = [];
+      this.bakedMapGroup = null;
+    }
+    this.disposeCreatedRemodelMeshes();
+    this.mapMode = "editor";
+
+    const importedProfile = this.sanitizeRouteProfile(store.routeProfile);
+    const profileChanged = JSON.stringify(importedProfile) !== JSON.stringify(this.routeProfile);
+    if (store.routeProfile && profileChanged) {
+      this.applyRemodelRouteProfile(importedProfile, { rebuild: true, preserveSpawnSegment: false });
+    }
+
+    this.createSavedRemodelPieces();
+    this.rebuildRemodelTargets();
+    this.applySavedRemodelOverrides();
+
+    // Persist under the existing key so the import survives a reload.
+    try {
+      window.localStorage.setItem(
+        REMODEL_STORAGE_KEY,
+        JSON.stringify({
+          version: 3,
+          savedAt: new Date().toISOString(),
+          targets: this.collectSavableOverrides(),
+          deleted: [...this.remodelDeletedIds],
+          created: this.getCreatedRemodelPayload(),
+          routeProfile: this.getRemodelRouteProfile(),
+        }),
+      );
+    } catch {
+      // Non-fatal: the import still applies in-memory for this session.
+    }
+
+    if (wasPlayMode) {
+      this.bakeCreatedPieces();
+    }
+
+    return {
+      overrides: Object.keys(this.remodelOverrides).length,
+      deleted: this.remodelDeletedIds.size,
+      created: this.remodelCreatedPieces.length,
+      routeChanged: Boolean(store.routeProfile && profileChanged),
+    };
+  }
+
   createHitboxTemplates() {
     if (!this.remodelHitboxGroup) {
       return;
@@ -4521,6 +4784,18 @@ export class HighwayWorld {
   }
 
   getCreatedRemodelPayload() {
+    // In Play Mode the editable meshes have been baked away, so there are no live
+    // children to read; fall back to the stored states instead of wiping them.
+    if (!this.remodelCreatedGroup?.children?.length && this.remodelCreatedPieces.length) {
+      return this.remodelCreatedPieces
+        .filter((piece) => piece?.id && piece?.state)
+        .map((piece) => ({
+          id: piece.id,
+          label: piece.label ?? "Created box",
+          state: this.cloneState(piece.state),
+        }));
+    }
+
     const pieces = [];
     for (const object of this.remodelCreatedGroup?.children ?? []) {
       const id = object.userData?.remodelCreatedId;
