@@ -81,20 +81,20 @@ export class PlayerCar {
 
     const bodyMaterial = new THREE.MeshStandardMaterial({
       color: preset.color,
-      roughness: 0.52,
-      metalness: 0.18,
+      roughness: 0.82,
+      metalness: 0.03,
       flatShading: true,
     });
     const darkMaterial = new THREE.MeshStandardMaterial({
       color: preset.secondaryColor,
-      roughness: 0.34,
-      metalness: 0.25,
+      roughness: 0.7,
+      metalness: 0.04,
       flatShading: true,
     });
     const trimMaterial = new THREE.MeshStandardMaterial({
       color: 0x0c0d0f,
-      roughness: 0.72,
-      metalness: 0.18,
+      roughness: 0.9,
+      metalness: 0,
       flatShading: true,
     });
     const tireMaterial = new THREE.MeshStandardMaterial({
@@ -691,19 +691,19 @@ export class PlayerCar {
     this.bodyRoll = damp(
       this.bodyRoll,
       clamp(
-        -this.steerVisual * 0.021 * speedLean -
-          this.lateralG * 0.018 * speedLean -
-          this.slipAngle * 0.045,
-        -0.072,
-        0.072,
+        -this.steerVisual * 0.012 * speedLean -
+          this.lateralG * 0.0095 * speedLean -
+          this.slipAngle * 0.024,
+        -0.04,
+        0.04,
       ),
-      8.2,
+      6.4,
       dt,
     );
     this.group.position.copy(this.position);
     this.group.rotation.y = this.visualYaw;
     this.group.rotation.x = this.bodyPitch;
-    this.group.rotation.z = this.bodyRoll - clamp(this.yawVelocity, -0.8, 0.8) * 0.012 * speedLean;
+    this.group.rotation.z = this.bodyRoll - clamp(this.yawVelocity, -0.8, 0.8) * 0.006 * speedLean;
   }
 }
 

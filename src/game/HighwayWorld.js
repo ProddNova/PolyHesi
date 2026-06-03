@@ -463,10 +463,10 @@ export class HighwayWorld {
         side: THREE.DoubleSide,
       }),
       asphalt: new THREE.MeshStandardMaterial({
-        color: 0x3b4248,
+        color: 0x363d43,
         map: asphaltTexture,
-        roughness: 0.92,
-        metalness: 0.02,
+        roughness: 1,
+        metalness: 0,
         flatShading: true,
         side: THREE.DoubleSide,
       }),
@@ -489,15 +489,15 @@ export class HighwayWorld {
       rail: new THREE.MeshStandardMaterial({
         color: 0x8f9698,
         map: railTexture,
-        roughness: 0.5,
-        metalness: 0.18,
+        roughness: 0.82,
+        metalness: 0.04,
         flatShading: true,
       }),
       railDark: new THREE.MeshStandardMaterial({
         color: 0x3a3f42,
         map: railDarkTexture,
-        roughness: 0.68,
-        metalness: 0.1,
+        roughness: 0.88,
+        metalness: 0,
         flatShading: true,
       }),
       shutokuBarrier: new THREE.MeshStandardMaterial({
@@ -760,41 +760,62 @@ export class HighwayWorld {
   createAsphaltTexture() {
     const texture = makeCanvasTexture((ctx, canvas) => {
       ctx.imageSmoothingEnabled = false;
-      const palette = ["#2a3035", "#333b42", "#40484f", "#1c2126", "#515960"];
-      const stainPalette = ["#111519", "#20262b", "#586068", "#697078"];
+      // Coarse, high-contrast palette so the surface reads as gritty/rough rather
+      // than a smooth flat tarmac. PSX-era textures leaned on a small set of
+      // strongly separated tones plus heavy per-pixel dithering.
+      const palette = ["#23282d", "#2c333a", "#373f47", "#1a1f24", "#454e56", "#13171b"];
+      const stainPalette = ["#0d1014", "#191e23", "#5a626a", "#737b83", "#0a0d10"];
       const cell = 4;
+      // 4x4 ordered (Bayer) dither matrix, normalised 0..1.
+      const bayer = [
+        0, 8, 2, 10,
+        12, 4, 14, 6,
+        3, 11, 1, 9,
+        15, 7, 13, 5,
+      ];
 
-      ctx.fillStyle = "#2a3035";
+      ctx.fillStyle = "#23282d";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+      // Base grain: pick a palette tone per cell, then nudge it up/down one index
+      // using the Bayer threshold so neighbouring cells stipple together — the
+      // classic dithered asphalt grit.
       for (let y = 0; y < canvas.height; y += cell) {
         for (let x = 0; x < canvas.width; x += cell) {
-          const n = cityNoise(x * 0.071 + y * 0.173 + 91.7);
-          const shade = palette[Math.floor(n * palette.length) % palette.length];
-          ctx.globalAlpha = 0.68 + cityNoise(x * 0.31 + y * 0.19 + 11.4) * 0.3;
-          ctx.fillStyle = shade;
+          const n = cityNoise(x * 0.083 + y * 0.151 + 91.7);
+          const bx = (x / cell) & 3;
+          const by = (y / cell) & 3;
+          const threshold = bayer[by * 4 + bx] / 16;
+          let idx = Math.floor(n * palette.length);
+          if (cityNoise(x * 0.27 + y * 0.21 + 4.6) < threshold) {
+            idx = (idx + 1) % palette.length;
+          }
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = palette[idx % palette.length];
           ctx.fillRect(x, y, cell, cell);
         }
       }
 
-      for (let i = 0; i < 86; i += 1) {
+      // Patchy tar repairs / oil stains in chunky blocks.
+      for (let i = 0; i < 110; i += 1) {
         const seed = i * 19.23;
         const x = Math.floor((cityNoise(seed + 2.1) * canvas.width) / cell) * cell;
         const y = Math.floor((cityNoise(seed + 4.8) * canvas.height) / cell) * cell;
-        const w = (1 + Math.floor(cityNoise(seed + 7.3) * 8)) * cell;
+        const w = (1 + Math.floor(cityNoise(seed + 7.3) * 9)) * cell;
         const h = (1 + Math.floor(cityNoise(seed + 9.6) * 3)) * cell;
-        ctx.globalAlpha = 0.24 + cityNoise(seed + 12.2) * 0.24;
+        ctx.globalAlpha = 0.32 + cityNoise(seed + 12.2) * 0.34;
         ctx.fillStyle = stainPalette[Math.floor(cityNoise(seed + 14.9) * stainPalette.length) % stainPalette.length];
         ctx.fillRect(x, y, w, h);
       }
 
-      ctx.globalAlpha = 0.42;
-      ctx.fillStyle = "#15191d";
-      for (let i = 0; i < 18; i += 1) {
+      // Hairline cracks: jagged dark pixel runs.
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = "#0a0d10";
+      for (let i = 0; i < 26; i += 1) {
         const seed = i * 33.7;
         let x = Math.floor((cityNoise(seed + 1.2) * canvas.width) / 8) * 8;
         let y = Math.floor((cityNoise(seed + 5.4) * canvas.height) / 8) * 8;
-        const steps = 2 + Math.floor(cityNoise(seed + 8.6) * 5);
+        const steps = 3 + Math.floor(cityNoise(seed + 8.6) * 6);
         for (let step = 0; step < steps; step += 1) {
           const length = (1 + Math.floor(cityNoise(seed + step * 3.1 + 11.8) * 4)) * cell;
           ctx.fillRect(x, y, length, cell);
@@ -803,18 +824,20 @@ export class HighwayWorld {
         }
       }
 
-      ctx.globalAlpha = 0.18;
-      ctx.fillStyle = "#a2a39a";
-      for (let i = 0; i < 72; i += 1) {
+      // Bright aggregate speckle (loose gravel catching light).
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = "#b9bab1";
+      for (let i = 0; i < 110; i += 1) {
         const seed = i * 12.91;
         const x = Math.floor((cityNoise(seed + 3.3) * canvas.width) / cell) * cell;
         const y = Math.floor((cityNoise(seed + 6.7) * canvas.height) / cell) * cell;
         ctx.fillRect(x, y, cell, cell);
       }
 
-      ctx.globalAlpha = 0.1;
-      ctx.fillStyle = "#050607";
-      for (let y = 0; y < canvas.height; y += 16) {
+      // Faint scanline banding reinforces the low-fi PSX read.
+      ctx.globalAlpha = 0.12;
+      ctx.fillStyle = "#040506";
+      for (let y = 0; y < canvas.height; y += 12) {
         ctx.fillRect(0, y, canvas.width, cell);
       }
 
@@ -5379,9 +5402,12 @@ export class HighwayWorld {
     let sweptFromRoad = false;
     if ((!road || road.distance >= 22) && player.previousPosition) {
       previousRoad = this.getNearestRoadInfo(player.previousPosition);
+      // Generous recovery window: if the player was anywhere near the road last
+      // frame, keep treating them as "on the road" so a fast lateral move or a
+      // lag-spike (large dt) frame can't tunnel clean through the guardrail.
       if (
         previousRoad &&
-        previousRoad.distance < this.getDriveLimitForFrame(previousRoad, Math.sign(previousRoad.lateral || 1)) + 4
+        previousRoad.distance < this.getDriveLimitForFrame(previousRoad, Math.sign(previousRoad.lateral || 1)) + 16
       ) {
         road = this.projectRoadInfo(previousRoad, p);
         sweptFromRoad = true;
@@ -5397,7 +5423,7 @@ export class HighwayWorld {
       previousRoad = this.getNearestRoadInfo(player.previousPosition);
     }
 
-    if (!inMeet && !inDriveway && road && (road.distance < 42 || sweptFromRoad)) {
+    if (!inMeet && !inDriveway && road && (road.distance < 64 || sweptFromRoad)) {
       const side = Math.sign(road.lateral || 1);
       const limit = this.getDriveLimitForFrame(road, side);
       const over = Math.abs(road.lateral) - limit;
@@ -5435,11 +5461,28 @@ export class HighwayWorld {
         player.slip = Math.max(player.slip ?? 0, result.impactSpeed > 12 ? 0.2 : 0.08);
         player.steerInput *= 0.72;
 
-        const resolvedRoad = this.projectRoadInfo(road, p);
-        const stillOver = Math.abs(resolvedRoad.lateral) - limit;
-        if (stillOver > 0) {
+        // Iterate the push-back so the car is guaranteed to end up inside the
+        // rail even after a deep tunnel/overshoot — a single correction can fall
+        // short when the lateral overshoot was large.
+        for (let pass = 0; pass < 4; pass += 1) {
+          const resolvedRoad = this.projectRoadInfo(road, p);
+          const stillOver = Math.abs(resolvedRoad.lateral) - limit;
+          if (stillOver <= 0.001) {
+            break;
+          }
           p.x -= road.normal.x * side * stillOver;
           p.z -= road.normal.z * side * stillOver;
+        }
+        // Kill any remaining outward lateral velocity so it can't immediately
+        // tunnel back out on the next frame. `normal` points back toward the
+        // road; a negative projection means the car is still heading outward.
+        const inwardSpeed = player.velocity.x * normal.x + player.velocity.z * normal.z;
+        if (inwardSpeed < 0) {
+          player.velocity.x -= normal.x * inwardSpeed;
+          player.velocity.z -= normal.z * inwardSpeed;
+          if (player.syncLocalSpeeds) {
+            player.syncLocalSpeeds();
+          }
         }
       }
     }

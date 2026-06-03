@@ -267,11 +267,13 @@ function measureObject(object) {
 
 function createBodyMaterials(preset) {
   const rig = preset.vehicleRig ?? {};
+  // Higher roughness + near-zero metalness kills the glossy "plastic toy" sheen
+  // and gives the matte, vertex-lit-looking paint of a PSX/PS2 car.
   const body = markDisposableMaterial(new THREE.MeshStandardMaterial({
     name: "psxBodyPaint",
     color: rig.bodyColor ?? preset.color,
-    roughness: 0.56,
-    metalness: 0.18,
+    roughness: 0.82,
+    metalness: 0.03,
     flatShading: true,
   }));
   const glass = markDisposableMaterial(new THREE.MeshStandardMaterial({
@@ -279,15 +281,15 @@ function createBodyMaterials(preset) {
     color: 0x05070a,
     emissive: 0x000000,
     emissiveIntensity: 0,
-    roughness: 0.28,
-    metalness: 0.12,
+    roughness: 0.42,
+    metalness: 0.04,
     flatShading: true,
   }));
   const trim = markDisposableMaterial(new THREE.MeshStandardMaterial({
     name: "psxTrim",
     color: 0x0b0d10,
-    roughness: 0.78,
-    metalness: 0.08,
+    roughness: 0.9,
+    metalness: 0,
     flatShading: true,
   }));
   const headlight = markDisposableMaterial(new THREE.MeshStandardMaterial({
