@@ -238,81 +238,78 @@ canvas {
 .hud-card {
   position: absolute;
   overflow: visible;
-  font-family: "Courier New", ui-monospace, monospace;
-  color: #eaf6ff;
-  text-shadow: 0 0 6px rgba(0, 0, 0, 0.85);
+  font-family: "Chakra Petch", "Courier New", ui-monospace, monospace;
+  color: #f4f8ff;
+  /* soft bloom like the Night Runners readout */
+  text-shadow:
+    0 0 2px rgba(255, 255, 255, 0.55),
+    0 0 10px rgba(190, 220, 255, 0.35),
+    0 2px 3px rgba(0, 0, 0, 0.9);
 }
 
-/* top-left: speed + run/coins, like Night Runners corner telemetry */
+/* top-left: stacked corner telemetry, Night Runners style */
 .hud-card--speed {
-  top: 16px;
-  left: 18px;
+  top: 14px;
+  left: 22px;
   width: min(252px, calc(100vw - 36px));
 }
 
 .hud-card--stats {
   top: 16px;
-  right: 18px;
+  right: 22px;
   display: flex;
-  gap: 10px;
+  gap: 14px;
 }
 
 .brand-lockup {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.32em;
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
-  color: rgba(122, 230, 255, 0.85);
-  text-shadow: 0 0 8px rgba(70, 200, 255, 0.55);
+  color: rgba(244, 248, 255, 0.92);
 }
 
 .brand-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #5cf0ff;
-  box-shadow:
-    0 0 8px rgba(92, 240, 255, 0.95),
-    0 0 16px rgba(92, 240, 255, 0.5);
-  animation: psx-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes psx-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+  width: 6px;
+  height: 10px;
+  border-radius: 1px;
+  background: #57e36a;
+  box-shadow: 0 0 7px rgba(87, 227, 106, 0.9);
 }
 
 .speed-readout {
   display: flex;
   align-items: baseline;
-  gap: 7px;
-  margin-top: 2px;
+  gap: 8px;
+  margin-top: 0;
 }
 
 .speed-readout span {
   color: #ffffff;
-  font-size: clamp(52px, 8vw, 78px);
-  line-height: 0.86;
+  font-size: clamp(56px, 8vw, 82px);
+  line-height: 0.84;
   font-weight: 700;
   font-style: italic;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.01em;
   text-shadow:
-    0 0 10px rgba(92, 240, 255, 0.7),
-    0 0 26px rgba(92, 240, 255, 0.4),
-    2px 2px 0 rgba(0, 0, 0, 0.6);
+    0 0 4px rgba(255, 255, 255, 0.7),
+    0 0 18px rgba(190, 220, 255, 0.45),
+    0 3px 4px rgba(0, 0, 0, 0.9);
 }
 
 .speed-readout small,
 .meter-row span,
 .stat-cell span {
-  color: rgba(150, 220, 245, 0.75);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
+  color: rgba(228, 236, 250, 0.7);
+  font-size: 11px;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -321,8 +318,8 @@ canvas {
   justify-content: space-between;
   align-items: baseline;
   gap: 16px;
-  margin-top: 4px;
-  color: #eaf6ff;
+  margin-top: 2px;
+  color: #f4f8ff;
 }
 
 .meter-row strong,
@@ -332,50 +329,52 @@ canvas {
 }
 
 .meter-row strong {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
-  text-shadow: 0 0 8px rgba(92, 240, 255, 0.45);
 }
 
 .meter-row--coins strong {
   color: #ffd76a;
-  text-shadow: 0 0 8px rgba(255, 200, 70, 0.55);
+  text-shadow:
+    0 0 4px rgba(255, 215, 106, 0.7),
+    0 2px 3px rgba(0, 0, 0, 0.9);
 }
 
-/* top-right: compact neon stat chips */
+/* top-right: minimal stacked readouts (no boxes), NR look */
 .stat-cell {
-  min-width: 70px;
-  border-left: 2px solid rgba(92, 240, 255, 0.7);
-  padding: 1px 0 1px 8px;
-  text-align: left;
+  min-width: 64px;
+  border: 0;
+  background: none;
+  padding: 0;
+  text-align: right;
 }
 
 .stat-cell strong {
   display: block;
-  margin-top: 3px;
+  margin-top: 1px;
   color: #ffffff;
-  font-size: 24px;
+  font-size: 26px;
+  font-weight: 700;
   line-height: 1;
-  text-shadow: 0 0 10px rgba(92, 240, 255, 0.5);
 }
 
-/* overtake / near-miss popup: pushed to the right edge so it never covers
-   the road ahead, slides in from the side, Night Runners magenta accent */
+/* overtake / near-miss popup: anchored to the right edge so it never covers
+   the road ahead, slides in from the side, Night Runners style */
 .near-miss-toast {
   position: absolute;
-  right: 24px;
-  top: 38%;
+  right: 26px;
+  top: 40%;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 1px;
-  padding: 6px 12px;
-  border-right: 3px solid #ff3cf0;
+  gap: 0;
+  padding: 4px 0;
+  font-family: "Chakra Petch", "Courier New", ui-monospace, monospace;
   font-style: italic;
   font-weight: 700;
   text-transform: uppercase;
   text-align: right;
-  transform: translateX(24px);
+  transform: translateX(20px);
   opacity: 0;
   transition:
     opacity 140ms ease,
@@ -388,21 +387,23 @@ canvas {
 }
 
 .near-miss-toast span {
-  color: rgba(255, 150, 240, 0.9);
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  text-shadow: 0 0 8px rgba(255, 60, 240, 0.6);
+  color: rgba(228, 236, 250, 0.85);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.9);
 }
 
 .near-miss-toast strong {
-  color: #ffffff;
-  font-size: 26px;
+  color: #57e36a;
+  font-size: 30px;
   line-height: 1;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   text-shadow:
-    0 0 10px rgba(255, 60, 240, 0.8),
-    0 0 22px rgba(255, 60, 240, 0.45);
+    0 0 5px rgba(87, 227, 106, 0.8),
+    0 0 16px rgba(87, 227, 106, 0.45),
+    0 2px 3px rgba(0, 0, 0, 0.9);
 }
 
 .restart-button {
