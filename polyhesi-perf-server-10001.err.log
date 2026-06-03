@@ -1,0 +1,2 @@
+MONGODB_URI not set. Using in-memory auth/save store for local development only.
+[31mWebSocket server error: Port 24678 is already in use[39m
