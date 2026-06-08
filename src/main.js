@@ -1,5 +1,6 @@
 import { AuthClient } from "./auth/AuthClient.js";
 import { Game } from "./game/Game.js";
+import { parseBakedMap } from "./game/mapformat/MapSchema.js";
 import "./styles.css";
 
 const root = document.querySelector("#game-root");
@@ -51,12 +52,30 @@ function updateSaveStatus(status) {
   saveStatus.dataset.status = status;
 }
 
-function startGame(session) {
+// The shipped game loads one pre-exported, optimized runtime map. It is generated
+// by the dev-only editor (npm run editor) and committed to public/maps/. If it is
+// missing or invalid the game still boots on the default procedural world.
+async function loadRuntimeMap() {
+  try {
+    const response = await fetch("/maps/current-map.json", { cache: "no-cache" });
+    if (!response.ok) {
+      return null;
+    }
+    return parseBakedMap(await response.json());
+  } catch (error) {
+    console.warn("Could not load /maps/current-map.json; using default world.", error);
+    return null;
+  }
+}
+
+async function startGame(session) {
   showSession(session.user);
+  const runtimeMap = await loadRuntimeMap();
   game = new Game(root, {
     authClient: auth,
     session: session.user,
     progress: session.save,
+    runtimeMap,
     onSaveStatus: updateSaveStatus,
   });
   window.__polyhesi = game;

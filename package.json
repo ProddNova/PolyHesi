@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "node server/index.js",
     "client:dev": "vite --host 127.0.0.1",
+    "editor": "vite --host 127.0.0.1 --open /map-editor/app.html",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "start": "node server/index.js"

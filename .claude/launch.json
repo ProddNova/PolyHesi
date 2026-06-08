@@ -6,7 +6,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 10000,
-      "env": { "TEST_PASSWORD": "drive123", "SESSION_SECRET": "devsecret" }
+      "env": { "TEST_PASSWORD": "drive123", "ADMIN_PASSWORD": "admin123", "SESSION_SECRET": "devsecret" }
     }
   ]
 }

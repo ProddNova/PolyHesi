@@ -23,9 +23,9 @@ import { HUD } from "./HUD.js";
 import { InputController } from "./Input.js";
 import { PlayerCar } from "./PlayerCar.js";
 import { createPlayerCarAsset } from "./PlayerCarAsset.js";
-import { RemodelOverlay } from "./RemodelOverlay.js";
 import { TrafficSystem } from "./TrafficSystem.js";
-import { downloadMapDocument, readMapDocumentFile } from "./MapDocument.js";
+// RemodelOverlay + MapDocument are loaded lazily (only when the dev editor is
+// enabled) so the editor and three.js TransformControls never ship in the game.
 import { clamp, damp } from "./utils.js";
 
 const WALKER_EYE_HEIGHT = 1.92;
@@ -83,6 +83,11 @@ export class Game {
     this.authClient = options.authClient ?? null;
     this.session = options.session ?? null;
     this.isAdmin = this.session?.role === "admin";
+    // The shipped game never enables the map editor: it loads a pre-baked runtime
+    // map and never constructs the editor overlay/raycaster. The dev-only editor
+    // entry (map-editor/) constructs Game with editorEnabled:true.
+    this.editorEnabled = Boolean(options.editorEnabled);
+    this.runtimeMap = options.runtimeMap ?? null;
     this.onSaveStatus = options.onSaveStatus ?? (() => {});
     this.progressDirty = false;
     this.progressSaveTimer = null;
@@ -93,6 +98,10 @@ export class Game {
       this.settings.remodelMode = false;
       this.settings.hitboxMode = false;
       this.settings.porschePlayerModel = false;
+    }
+    if (!this.editorEnabled) {
+      // No map editor in the game build, regardless of any saved admin setting.
+      this.settings.remodelMode = false;
     }
     this.clock = new THREE.Clock();
     this.score = 0;
@@ -179,17 +188,75 @@ export class Game {
     this.root.appendChild(this.renderer.domElement);
 
     this.input = new InputController(this.renderer.domElement);
-    this.world = new HighwayWorld(this.scene, this.settings);
+    this.world = new HighwayWorld(this.scene, this.settings, {
+      editable: this.editorEnabled,
+      runtimeMap: this.runtimeMap,
+      sourceStore: options.sourceStore ?? null,
+    });
     this.player = new PlayerCar(this.scene, this.world.getStartPose());
     this.applyActivePlayerCarPreset();
     this.garagePsxRemodelTarget = null;
-    this.createGaragePsxRemodelTarget();
-    this.createTrafficPsxRemodelTargets();
     this.traffic = new TrafficSystem(this.scene, this.world, {
       getVehicleRigForCar: (carId) => this.getVehicleRigForCar(carId),
     });
     this.traffic.prewarm(this.settings);
     this.debugOverlay = new DebugOverlay(this.scene, this.world);
+    // Null in the game build; the dev editor lazily creates it in initEditor().
+    this.remodelOverlay = null;
+    this.hud = new HUD(
+      this.settings,
+      (_settings, changedKey) => this.handleSettingsChanged(changedKey),
+      () => this.requestRestart(),
+      (upgrade) => this.buyUpgrade(upgrade),
+      (carId) => this.handleCarMarket(carId),
+      () => this.closeMarket(),
+      (carId) => this.selectOwnedCar(carId),
+      (upgrade, delta) => this.adjustInstalledUpgrade(upgrade, delta),
+      () => this.closeGarageManager(),
+      () => this.saveDevSettings(),
+      () => this.resetDevSettings(),
+      (state) => this.updateSelectedRemodelTarget(state),
+      () => this.saveRemodelMap(),
+      () => this.resetSelectedRemodelTarget(),
+      (preset) => this.createRemodelTarget(preset),
+      () => this.deleteSelectedRemodelTarget(),
+      () => this.closeRemodelEditor(),
+      () => this.undoRemodel(),
+      () => this.copyRemodelTarget(),
+      () => this.pasteRemodelTarget(),
+      (carId) => this.selectRemodelPsxCar(carId),
+      (state) => this.updateSelectedPsxCarRig(state),
+      () => this.saveSelectedPsxCarRig(),
+      (position) => this.teleportFromMap(position),
+      (profile, options) => this.updateRemodelRouteProfile(profile, options),
+      () => this.saveRemodelMap(),
+      () => this.resetRemodelRouteProfile(),
+    );
+    this.hud.setAdminMode(this.isAdmin);
+    this.hud.setRemodelAvailable(this.settings.noClip);
+    this.setSaveStatus(this.authClient ? "ready" : "");
+
+    this.world.update();
+    this.applyGraphicsQuality();
+    this.traffic.reset(this.settings);
+    this.enterGarageMode(true);
+    this.warmRenderPipeline();
+
+    // Dev editor only: editorReady resolves once the lazy editor overlay is wired,
+    // so the editor app can switch into edit mode without racing the dynamic import.
+    this.editorReady = this.editorEnabled ? this.initEditor() : Promise.resolve();
+
+    window.addEventListener("resize", () => this.resize());
+    window.addEventListener("beforeunload", () => {
+      this.flushProgressSave({ force: true, keepalive: true });
+    });
+  }
+
+  // Dev-only: lazily wire the map editor. The dynamic import keeps RemodelOverlay
+  // and three.js TransformControls out of the game's module graph, so they are
+  // never bundled or activated in the shipped player build.
+  async initEditor() {
+    const { RemodelOverlay } = await import("./editor/RemodelOverlay.js");
     this.remodelOverlay = new RemodelOverlay(
       this.scene,
       this.world,
@@ -238,53 +305,13 @@ export class Game {
       (event) => this.handleRemodelPointerDown(event),
       { capture: true },
     );
-    this.hud = new HUD(
-      this.settings,
-      (_settings, changedKey) => this.handleSettingsChanged(changedKey),
-      () => this.requestRestart(),
-      (upgrade) => this.buyUpgrade(upgrade),
-      (carId) => this.handleCarMarket(carId),
-      () => this.closeMarket(),
-      (carId) => this.selectOwnedCar(carId),
-      (upgrade, delta) => this.adjustInstalledUpgrade(upgrade, delta),
-      () => this.closeGarageManager(),
-      () => this.saveDevSettings(),
-      () => this.resetDevSettings(),
-      (state) => this.updateSelectedRemodelTarget(state),
-      () => this.saveRemodelMap(),
-      () => this.resetSelectedRemodelTarget(),
-      (preset) => this.createRemodelTarget(preset),
-      () => this.deleteSelectedRemodelTarget(),
-      () => this.closeRemodelEditor(),
-      () => this.undoRemodel(),
-      () => this.copyRemodelTarget(),
-      () => this.pasteRemodelTarget(),
-      (carId) => this.selectRemodelPsxCar(carId),
-      (state) => this.updateSelectedPsxCarRig(state),
-      () => this.saveSelectedPsxCarRig(),
-      (position) => this.teleportFromMap(position),
-      (profile, options) => this.updateRemodelRouteProfile(profile, options),
-      () => this.saveRemodelMap(),
-      () => this.resetRemodelRouteProfile(),
-    );
+
+    this.createGaragePsxRemodelTarget();
+    this.createTrafficPsxRemodelTargets();
     this.initializeRemodelPsxCars();
-    this.hud.setAdminMode(this.isAdmin);
-    this.hud.setRemodelAvailable(this.settings.noClip);
     this.setRemodelMode(this.settings.remodelMode);
     this.buildRemodelPsxLineup();
     this.updateRemodelPsxLineupVisibility();
-    this.setSaveStatus(this.authClient ? "ready" : "");
-
-    this.world.update();
-    this.applyGraphicsQuality();
-    this.traffic.reset(this.settings);
-    this.enterGarageMode(true);
-    this.warmRenderPipeline();
-
-    window.addEventListener("resize", () => this.resize());
-    window.addEventListener("beforeunload", () => {
-      this.flushProgressSave({ force: true, keepalive: true });
-    });
   }
 
   start() {
@@ -1855,6 +1882,9 @@ export class Game {
   }
 
   updateRemodelHover() {
+    if (!this.remodelOverlay) {
+      return;
+    }
     if (!this.settings.noClip || !this.settings.remodelMode) {
       this.hud?.setRemodelHover(null);
       return;
@@ -2321,6 +2351,9 @@ export class Game {
   }
 
   toggleRemodelShortcut() {
+    if (!this.editorEnabled) {
+      return;
+    }
     const shouldEnable = !this.settings.noClip || !this.settings.remodelMode;
     if (shouldEnable) {
       this.setNoClipMode(true, { flash: false });
@@ -2403,6 +2436,12 @@ export class Game {
   }
 
   setRemodelMode(active) {
+    if (!this.editorEnabled) {
+      // The map editor is a separate dev-only app; it never activates in the game.
+      this.settings.remodelMode = false;
+      this.hud?.syncBooleanSetting?.("remodelMode");
+      return;
+    }
     const enabled = Boolean(active && this.settings.noClip);
     this.settings.remodelMode = enabled;
     // Editor Mode restores the individual editable pieces (and rebuilds the
@@ -2441,11 +2480,12 @@ export class Game {
 
   // Admin/dev console helpers (reachable via window.__polyhesi). Export the
   // current editable map to a downloadable JSON file, or load one back.
-  downloadRemodelMap(filename = "polyhesi-map.json") {
+  async downloadRemodelMap(filename = "polyhesi-map.json") {
     const doc = this.world?.exportMapDocument?.();
     if (!doc) {
       return false;
     }
+    const { downloadMapDocument } = await import("./mapformat/MapDocument.js");
     downloadMapDocument(doc, filename);
     this.hud?.flashNotice?.("Map exported", `${doc.stats?.created ?? 0} pieces`);
     return true;
@@ -2457,6 +2497,7 @@ export class Game {
     }
     let store;
     try {
+      const { readMapDocumentFile } = await import("./mapformat/MapDocument.js");
       store = await readMapDocumentFile(file);
     } catch (error) {
       this.hud?.flashNotice?.("Import failed", error?.message ?? "bad file");

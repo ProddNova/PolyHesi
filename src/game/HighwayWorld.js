@@ -1,8 +1,9 @@
 import * as THREE from "three";
 import { LANES, REMODEL_STORAGE_KEY, ROAD_WIDTH } from "./config.js";
 import { clamp, makeBox, makeCanvasTexture } from "./utils.js";
-import { bakeBoxPieces } from "./MapBaker.js";
-import { buildMapDocument, parseMapDocument } from "./MapDocument.js";
+import { bakeBoxPieces } from "./mapformat/MapBaker.js";
+import { buildMapDocument, parseMapDocument, MAP_DOCUMENT_VERSION } from "./mapformat/MapDocument.js";
+import { deserializeBakedChunk, buildBakedMapDocument } from "./mapformat/MapBakedSerialize.js";
 
 const ROAD_HALF_WIDTH = ROAD_WIDTH * 0.5;
 const TWO_LANE_LANE_WIDTH = 4.6;
@@ -337,7 +338,7 @@ function hourDistance(hour, target) {
 }
 
 export class HighwayWorld {
-  constructor(scene, settings = {}) {
+  constructor(scene, settings = {}, options = {}) {
     this.scene = scene;
     this.colliders = [];
     this.walkColliders = [];
@@ -346,11 +347,17 @@ export class HighwayWorld {
     this.branchRoutes = [];
     this.random = seededRandom(1247);
     this.garageDoorClosed = true;
-    this.remodelStore = this.loadRemodelStore();
-    this.remodelOverrides = { ...this.remodelStore.targets };
-    this.remodelDeletedIds = new Set(this.remodelStore.deleted);
-    this.remodelCreatedPieces = [...this.remodelStore.created];
-    this.routeProfile = this.sanitizeRouteProfile(this.remodelStore.routeProfile);
+    // The shipped game is read-only: it loads a pre-baked runtime map (route
+    // profile + visual overrides/deletions + pre-baked decorative chunks) and
+    // never instantiates the editor. The dev-only map editor sets editable:true
+    // and supplies an editable source store instead. See src/game/editor/.
+    this.editable = Boolean(options.editable);
+    const initialMap = this.resolveInitialMapData(options);
+    this.remodelOverrides = { ...initialMap.overrides };
+    this.remodelDeletedIds = new Set(initialMap.deleted);
+    this.remodelCreatedPieces = [...initialMap.created];
+    this.decorChunksData = initialMap.decorChunks;
+    this.routeProfile = this.sanitizeRouteProfile(initialMap.routeProfile);
     this.remodelTargets = [];
     this.remodelTargetMap = new Map();
     this.remodelCreatedGroup = null;
@@ -396,14 +403,74 @@ export class HighwayWorld {
     this.remodelHitboxGroup.name = REMODEL_HITBOX_GROUP;
     this.remodelHitboxGroup.visible = false;
     this.scene.add(this.remodelHitboxGroup);
-    this.createHitboxTemplates();
-    this.createSavedRemodelPieces();
-    this.rebuildRemodelTargets();
-    this.applySavedRemodelOverrides();
-    // The game boots into Play Mode: created pieces start baked into optimized
-    // chunks rather than as individual meshes. Editor Mode unbakes on demand.
-    this.bakeCreatedPieces();
+    if (this.editable) {
+      // Editor Mode: individual editable pieces + hitbox templates, baked on demand.
+      this.createHitboxTemplates();
+      this.createSavedRemodelPieces();
+      this.rebuildRemodelTargets();
+      this.applySavedRemodelOverrides();
+      this.bakeCreatedPieces();
+    } else {
+      // Shipped game: resolve override/deletion ids against the generated static
+      // pieces (one-time, cheap) and load the pre-baked decorative chunks. No
+      // editable meshes, no runtime bake.
+      this.rebuildRemodelTargets();
+      this.applySavedRemodelOverrides();
+      this.loadDecorChunks();
+    }
     this.freezeStaticMatrices();
+  }
+
+  // Normalize the constructor's initial map data into a single shape, from either
+  // a baked runtime map (game) or an editable source store (editor). Pure: never
+  // touches localStorage — the editor loads/persists its own working state.
+  resolveInitialMapData({ runtimeMap = null, sourceStore = null } = {}) {
+    if (sourceStore && typeof sourceStore === "object") {
+      return {
+        overrides: sourceStore.targets && typeof sourceStore.targets === "object" ? { ...sourceStore.targets } : {},
+        deleted: Array.isArray(sourceStore.deleted) ? sourceStore.deleted : [],
+        created: Array.isArray(sourceStore.created) ? sourceStore.created : [],
+        routeProfile: sourceStore.routeProfile ?? null,
+        decorChunks: [],
+      };
+    }
+    if (runtimeMap && typeof runtimeMap === "object") {
+      return {
+        overrides: runtimeMap.overrides && typeof runtimeMap.overrides === "object" ? { ...runtimeMap.overrides } : {},
+        deleted: Array.isArray(runtimeMap.deleted) ? runtimeMap.deleted : [],
+        created: [],
+        routeProfile: runtimeMap.routeProfile ?? null,
+        decorChunks: Array.isArray(runtimeMap.decorChunks) ? runtimeMap.decorChunks : [],
+      };
+    }
+    return { overrides: {}, deleted: [], created: [], routeProfile: null, decorChunks: [] };
+  }
+
+  // Build frozen, cullable runtime meshes from the pre-baked decorative chunks
+  // shipped in the runtime map. Replaces bakeCreatedPieces() for the shipped game.
+  loadDecorChunks() {
+    const chunks = this.decorChunksData ?? [];
+    if (!chunks.length) {
+      return;
+    }
+    const material = this.getBakedMapMaterial();
+    const group = new THREE.Group();
+    group.name = BAKED_MAP_GROUP;
+    group.userData.remodelIgnore = true;
+    for (const data of chunks) {
+      const mesh = deserializeBakedChunk(data, material);
+      if (!Number.isFinite(mesh.userData.chunkRouteLength) || mesh.userData.chunkRouteLength <= 0) {
+        mesh.userData.chunkRouteLength = this.trackLength;
+      }
+      mesh.updateMatrixWorld(true);
+      mesh.matrixAutoUpdate = false;
+      mesh.matrixWorldAutoUpdate = false;
+      group.add(mesh);
+      this.cullableChunks.push(mesh);
+      this.bakedChunks.push(mesh);
+    }
+    this.scene.add(group);
+    this.bakedMapGroup = group;
   }
 
   // The static world (58 km of road + city) is thousands of meshes that never
@@ -4307,6 +4374,28 @@ export class HighwayWorld {
       created: this.getCreatedPiecesSnapshot(),
       routeProfile: this.getRemodelRouteProfile(),
     });
+  }
+
+  // Editor-only: produce the optimized baked runtime map the shipped game loads.
+  // Bakes the created pieces into merged, chunked geometry (if not already), then
+  // serializes route profile + visual overrides/deletions + decorative chunks.
+  // Restores editable meshes afterwards so editing can continue.
+  exportBakedRuntimeMap() {
+    const wasPlayMode = this.mapMode === "play";
+    if (!this.bakedMapGroup) {
+      this.bakeCreatedPieces();
+    }
+    const doc = buildBakedMapDocument({
+      routeProfile: this.getRemodelRouteProfile(),
+      overrides: this.collectSavableOverrides(),
+      deleted: [...this.remodelDeletedIds],
+      chunkMeshes: this.bakedChunks,
+      sourceVersion: MAP_DOCUMENT_VERSION,
+    });
+    if (!wasPlayMode) {
+      this.unbakeCreatedPieces();
+    }
+    return doc;
   }
 
   // Load an editable map from a document/JSON string/store. Rebuilds editable
