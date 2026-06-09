@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { LANES, REMODEL_STORAGE_KEY, ROAD_WIDTH } from "./config.js";
 import { clamp, makeBox, makeCanvasTexture } from "./utils.js";
 import { bakeBoxPieces } from "./mapformat/MapBaker.js";
@@ -417,6 +418,7 @@ export class HighwayWorld {
       this.rebuildRemodelTargets();
       this.applySavedRemodelOverrides();
       this.loadDecorChunks();
+      this.mergeStaticDetailMeshes();
     }
     this.freezeStaticMatrices();
   }
@@ -490,6 +492,249 @@ export class HighwayWorld {
         object.matrixAutoUpdate = false;
       });
       root.matrixWorldAutoUpdate = false;
+    }
+  }
+
+  // Shipped-game-only optimization (the editor keeps individual pieces). The
+  // hand-authored dressing — manual buildings, billboards, tunnel modules,
+  // expressway signs, the spawn lot — is built from thousands of small meshes.
+  // Each one is traversed and frustum-tested by the renderer every frame and
+  // becomes its own draw call, which is what makes the game main-thread bound.
+  // None of them ever move in the shipped game, so collapse them into one mesh
+  // per material (optionally per route chunk, so distance culling still works).
+  // Must run AFTER applySavedRemodelOverrides (positions/deletions baked in) and
+  // BEFORE freezeStaticMatrices (the merged output gets frozen with the rest).
+  mergeStaticDetailMeshes() {
+    const highway = this.scene.getObjectByName("StaticHighwayLoop");
+    if (!highway) {
+      return;
+    }
+
+    const removedGeometries = new Set();
+    const jobs = [];
+    const tunnels = highway.getObjectByName("FixedHighwayTunnels");
+    if (tunnels) {
+      // Chunked + distance-culled: tunnels hug the road, so far-away sections
+      // can vanish entirely; the generous radius keeps long tunnels seamless
+      // while driving through them.
+      jobs.push({
+        roots: [tunnels],
+        container: tunnels,
+        label: "Tunnels",
+        chunkLength: CITY_DETAIL_CHUNK_LENGTH,
+        cullRadius: 620,
+      });
+    }
+    const billboards = highway.getObjectByName("JapaneseCityBillboards");
+    if (billboards) {
+      // One mesh per ad material for the whole map: ~7.5k triangles total, so
+      // drawing them all is far cheaper than managing thousands of planes.
+      jobs.push({ roots: [billboards], container: billboards, label: "Billboards" });
+    }
+    const signs = highway.getObjectByName("ShutokuExpresswaySigns");
+    if (signs) {
+      // Not distance-culled: signs are navigation landmarks (gantries are
+      // visible from far away today, keep that).
+      jobs.push({
+        roots: [signs],
+        container: signs,
+        label: "Signs",
+        chunkLength: CITY_DETAIL_CHUNK_LENGTH,
+      });
+    }
+    const cityscape = highway.getObjectByName("FixedRoadsideCityscape");
+    if (cityscape) {
+      // Landmark towers stay always-visible (no distance cull) so the skyline
+      // does not pop; chunking just keeps frustum culling reasonably granular.
+      const buildingRoots = cityscape.children.filter(
+        (child) => child.isGroup && child.name.startsWith("Building_"),
+      );
+      if (buildingRoots.length) {
+        jobs.push({
+          roots: buildingRoots,
+          container: cityscape,
+          label: "ManualBuildings",
+          chunkLength: CITY_DETAIL_CHUNK_LENGTH,
+        });
+      }
+    }
+    const serviceLot = this.scene.getObjectByName("SpawnServiceLot");
+    if (serviceLot) {
+      // The garage door animates (visibility toggle), so it must stay live.
+      jobs.push({
+        roots: [serviceLot],
+        container: serviceLot,
+        label: "SpawnServiceLot",
+        exclude: [this.garageDoor],
+      });
+    }
+
+    for (const job of jobs) {
+      this.mergeStaticMeshJob(job, removedGeometries);
+    }
+    this.disposeOrphanedGeometries(removedGeometries);
+    // Re-resolve targets so nothing keeps references to the merged-away meshes
+    // (merged output carries remodelIgnore and is skipped).
+    this.rebuildRemodelTargets();
+  }
+
+  mergeStaticMeshJob(
+    { roots, container, label, chunkLength = 0, cullRadius = 0, exclude = [] },
+    removedGeometries,
+  ) {
+    const excluded = new Set(exclude.filter(Boolean));
+    const sources = [];
+    const collect = (object) => {
+      if (!object.visible || excluded.has(object)) {
+        return;
+      }
+      if (object.isMesh && !object.isInstancedMesh && this.isMergeableStaticMesh(object)) {
+        sources.push(object);
+      }
+      for (const child of object.children) {
+        collect(child);
+      }
+    };
+    for (const root of roots) {
+      root.updateMatrixWorld(true);
+      collect(root);
+    }
+    if (!sources.length) {
+      return;
+    }
+
+    const scratch = new THREE.Vector3();
+    const buckets = new Map();
+    for (const mesh of sources) {
+      let chunkIndex = 0;
+      if (chunkLength > 0) {
+        const e = mesh.matrixWorld.elements;
+        const info = this.getNearestRoadInfo(scratch.set(e[12], 0, e[14]));
+        const s = (((info?.s ?? 0) % this.trackLength) + this.trackLength) % this.trackLength;
+        chunkIndex = Math.floor(s / chunkLength);
+      }
+      const key = `${mesh.material.uuid}|${mesh.castShadow ? 1 : 0}${mesh.receiveShadow ? 1 : 0}|${mesh.renderOrder}|${chunkIndex}`;
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = { meshes: [], chunkIndex };
+        buckets.set(key, bucket);
+      }
+      bucket.meshes.push(mesh);
+    }
+
+    container.updateMatrixWorld(true);
+    const containerInverse = new THREE.Matrix4().copy(container.matrixWorld).invert();
+    const output = new THREE.Group();
+    output.name = `MergedStaticDetail_${label}`;
+    output.userData.remodelIgnore = true;
+
+    let bucketIndex = 0;
+    for (const bucket of buckets.values()) {
+      if (bucket.meshes.length < 2) {
+        continue; // a lone mesh gains nothing from re-baking; keep the original
+      }
+      const geometries = bucket.meshes.map((mesh) =>
+        mesh.geometry.clone().applyMatrix4(mesh.matrixWorld),
+      );
+      const merged = mergeGeometries(geometries, false);
+      for (const geometry of geometries) {
+        geometry.dispose();
+      }
+      if (!merged) {
+        continue; // attribute mismatch: keep the originals rather than lose them
+      }
+      // Bake into container-local space so the output can live under the same
+      // (possibly transformed) root and be disposed with it on rebuild.
+      merged.applyMatrix4(containerInverse);
+      merged.computeBoundingSphere();
+
+      const first = bucket.meshes[0];
+      const mesh = new THREE.Mesh(merged, first.material);
+      mesh.name = `${output.name}_${bucketIndex++}`;
+      mesh.castShadow = first.castShadow;
+      mesh.receiveShadow = first.receiveShadow;
+      mesh.renderOrder = first.renderOrder;
+      mesh.userData.remodelIgnore = true;
+      if (chunkLength > 0 && cullRadius > 0) {
+        mesh.userData.chunkCenterS = (bucket.chunkIndex + 0.5) * chunkLength;
+        mesh.userData.chunkRouteLength = this.trackLength;
+        mesh.userData.chunkRadius = Math.max(cullRadius, chunkLength * 0.58);
+        mesh.userData.performanceCull = true;
+        this.cullableChunks.push(mesh);
+      }
+      output.add(mesh);
+
+      for (const source of bucket.meshes) {
+        removedGeometries.add(source.geometry);
+        source.removeFromParent();
+      }
+    }
+
+    if (output.children.length) {
+      container.add(output);
+    }
+    for (const root of roots) {
+      this.pruneEmptyStaticGroups(root, excluded);
+      if (root !== container && root.children.length === 0) {
+        root.removeFromParent();
+      }
+    }
+  }
+
+  isMergeableStaticMesh(mesh) {
+    const geometry = mesh.geometry;
+    if (!geometry?.isBufferGeometry || !geometry.index || !mesh.material || Array.isArray(mesh.material)) {
+      return false;
+    }
+    if (geometry.morphAttributes && Object.keys(geometry.morphAttributes).length) {
+      return false;
+    }
+    const attributes = Object.keys(geometry.attributes);
+    return (
+      attributes.length === 3 &&
+      Boolean(geometry.attributes.position && geometry.attributes.normal && geometry.attributes.uv)
+    );
+  }
+
+  pruneEmptyStaticGroups(root, excluded) {
+    let removedAny = true;
+    while (removedAny) {
+      removedAny = false;
+      const empties = [];
+      root.traverse((object) => {
+        if (object === root || excluded.has(object)) {
+          return;
+        }
+        if (object.isMesh || object.isLight || object.isLine || object.isPoints) {
+          return;
+        }
+        if (object.children.length === 0) {
+          empties.push(object);
+        }
+      });
+      for (const empty of empties) {
+        empty.removeFromParent();
+        removedAny = true;
+      }
+    }
+  }
+
+  // Source geometries may be shared (makeBox caches by size), so only dispose
+  // the ones no remaining scene object still renders.
+  disposeOrphanedGeometries(candidates) {
+    if (!candidates.size) {
+      return;
+    }
+    const used = new Set();
+    this.scene.traverse((object) => {
+      if (object.geometry) {
+        used.add(object.geometry);
+      }
+    });
+    for (const geometry of candidates) {
+      if (!used.has(geometry)) {
+        geometry.dispose();
+      }
     }
   }
 
@@ -1216,9 +1461,14 @@ export class HighwayWorld {
     const existing = this.scene.getObjectByName("StaticHighwayLoop");
     if (existing) {
       this.scene.remove(existing);
+      // Evict the removed loop's chunks from the cull list, or every rebuild
+      // leaks the whole previous set into updateChunkVisibility forever.
+      const removed = new Set();
       existing.traverse((object) => {
+        removed.add(object);
         object.geometry?.dispose?.();
       });
+      this.cullableChunks = this.cullableChunks.filter((chunk) => !removed.has(chunk));
     }
     this.roadLightSlots = [];
     for (const light of this.roadLightPool) {
@@ -1229,6 +1479,9 @@ export class HighwayWorld {
     this.createStaticHighway();
     this.rebuildRemodelTargets();
     this.applySavedRemodelOverrides();
+    if (!this.editable) {
+      this.mergeStaticDetailMeshes();
+    }
     this.freezeStaticMatrices();
   }
 
@@ -2748,6 +3001,16 @@ export class HighwayWorld {
     const panels = this.getExpresswaySignPanels(placement, width);
     let firstBoard = null;
 
+    // One shared material for every sign backing: a fresh material per panel
+    // forced a separate draw/material switch per sign and blocked merging.
+    this.signBackingMaterial ??= new THREE.MeshStandardMaterial({
+      color: 0x1f2b28,
+      roughness: 0.62,
+      metalness: 0.05,
+      flatShading: true,
+      name: "expresswaySignBacking",
+    });
+
     for (const panel of panels) {
       const panelX = x + panel.x;
       const backing = this.addLocalBox(
@@ -2755,7 +3018,7 @@ export class HighwayWorld {
         panel.width + 0.26,
         height + 0.22,
         0.14,
-        new THREE.MeshStandardMaterial({ color: 0x1f2b28, roughness: 0.62, metalness: 0.05, flatShading: true }),
+        this.signBackingMaterial,
         panelX,
         y,
         z + 0.03,
